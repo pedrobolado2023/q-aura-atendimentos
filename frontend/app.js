@@ -159,11 +159,16 @@ const appRouter = {
             // Set Meta configurations if they exist
             document.getElementById("webhook-generated-url").innerText = `${API_URL}/api/webhook/${state.tenant_id}`;
 
-            // Show admin only tabs
+            // Show tabs based on roles (RBAC)
             if (state.user.role === "administrator") {
-                document.querySelectorAll(".master-only").forEach(el => el.style.display = "flex");
+                document.querySelectorAll(".admin-only").forEach(el => el.style.display = "flex");
+                document.querySelectorAll(".admin-manager-only").forEach(el => el.style.display = "flex");
+            } else if (state.user.role === "manager") {
+                document.querySelectorAll(".admin-only").forEach(el => el.style.display = "none");
+                document.querySelectorAll(".admin-manager-only").forEach(el => el.style.display = "flex");
             } else {
-                document.querySelectorAll(".master-only").forEach(el => el.style.display = "none");
+                document.querySelectorAll(".admin-only").forEach(el => el.style.display = "none");
+                document.querySelectorAll(".admin-manager-only").forEach(el => el.style.display = "none");
             }
         }
     },
