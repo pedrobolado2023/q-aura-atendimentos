@@ -548,7 +548,7 @@ const appRouter = {
                 const canDelete = !isSelf && !isMainAdminToDelete;
                 
                 const actionButton = canDelete 
-                    ? `<button class="btn btn-secondary btn-sm" onclick="appRouter.deleteTeamUser('${u.id}')" style="border-color: var(--color-danger); color: var(--color-danger); background: transparent;">Excluir</button>`
+                    ? `<button class="btn btn-secondary btn-sm btn-delete-user" data-id="${u.id}" style="border-color: var(--color-danger); color: var(--color-danger); background: transparent;">Excluir</button>`
                     : `<span class="subtitle" style="font-size: 11px;">Restrito</span>`;
                 
                 tr.innerHTML = `
@@ -559,6 +559,14 @@ const appRouter = {
                     <td>${actionButton}</td>
                 `;
                 tableBody.appendChild(tr);
+            });
+
+            // Bind delete buttons dynamically to prevent global window scope issues
+            tableBody.querySelectorAll(".btn-delete-user").forEach(btn => {
+                btn.addEventListener("click", async (e) => {
+                    const userId = e.currentTarget.getAttribute("data-id");
+                    await this.deleteTeamUser(userId);
+                });
             });
         } catch (e) {
             console.error(e);
