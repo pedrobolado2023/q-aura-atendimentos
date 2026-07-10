@@ -100,6 +100,9 @@
                     <a href="#" class="menu-item admin-manager-only" data-target="chatbot-view" onclick="appRouter.selectTab(event)">
                         <i class="fa-solid fa-robot"></i> Robô Chatbot
                     </a>
+                    <a href="#" class="menu-item admin-manager-only" data-target="team-view" onclick="appRouter.selectTab(event)">
+                        <i class="fa-solid fa-users"></i> Gerenciar Equipe
+                    </a>
                     <a href="#" class="menu-item admin-manager-only" data-target="settings-view" onclick="appRouter.selectTab(event)">
                         <i class="fa-solid fa-sliders"></i> Configurações Meta
                     </a>
@@ -317,6 +320,69 @@
                                         <p id="preview-bot-welcome-text" style="margin: 0; white-space: pre-wrap; word-break: break-word;"></p>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5C. GESTÃO DE EQUIPE (USER REGISTRATION & LIST) -->
+                <div id="team-view" class="workspace-view">
+                    <header class="workspace-header">
+                        <h1>Gerenciamento de Equipe</h1>
+                    </header>
+                    
+                    <div class="settings-container" style="display: grid; grid-template-columns: 1fr 1.8fr; gap: 24px;">
+                        <!-- Registration Form -->
+                        <form id="team-create-form" class="settings-card" style="display: flex; flex-direction: column; gap: 20px;">
+                            <h3>Cadastrar Colaborador</h3>
+                            <p class="settings-desc">Adicione novos vendedores (atendentes) ou supervisores à sua equipe.</p>
+                            
+                            <div class="input-group">
+                                <label for="team-name">Nome do Colaborador</label>
+                                <input type="text" id="team-name" required placeholder="Ex: Pedro Silva">
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="team-email">Email Corporativo</label>
+                                <input type="email" id="team-email" required placeholder="Ex: pedro@hotel.com">
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="team-password">Senha de Acesso</label>
+                                <input type="password" id="team-password" required placeholder="Mínimo 6 caracteres">
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="team-role">Cargo / Permissão</label>
+                                <select id="team-role" required style="width: 100%; padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary);">
+                                    <option value="agent">Vendedor (Atendente)</option>
+                                    <option value="manager">Supervisor (Gerente)</option>
+                                </select>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary" id="btn-save-team-user" style="align-self: flex-start;">Cadastrar Usuário</button>
+                        </form>
+
+                        <!-- Users List Table -->
+                        <div class="settings-card" style="display: flex; flex-direction: column; gap: 20px;">
+                            <h3>Colaboradores Ativos</h3>
+                            <p class="settings-desc">Visualize e gerencie os acessos dos funcionários do seu hotel.</p>
+                            
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Nome</th>
+                                            <th>Email</th>
+                                            <th>Cargo</th>
+                                            <th>Status</th>
+                                            <th>Ação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="team-users-list">
+                                        <!-- Dynamically populated -->
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>

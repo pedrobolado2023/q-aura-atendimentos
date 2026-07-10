@@ -30,6 +30,12 @@ class UserCreate(UserBase):
     password: str
     tenant_id: UUID
 
+class EmployeeCreate(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+    role: str # agent, manager
+
 class UserLogin(BaseModel):
     email: EmailStr
     password: str

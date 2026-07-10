@@ -121,6 +121,8 @@ const appRouter = {
             this.loadMetaSettings();
         } else if (targetView === "chatbot-view") {
             this.loadBotConfig();
+        } else if (targetView === "team-view") {
+            this.loadTeamUsers();
         } else if (targetView === "crm-view") {
             // Limpa o cache temporário ao mudar de aba
             tempContacts = [];
@@ -477,6 +479,86 @@ const appRouter = {
             }
         } catch (e) {
             console.error("Erro ao carregar métricas do painel:", e);
+        }
+    },
+
+    async loadTeamUsers() {
+        try {
+            const tableBody = document.getElementById("team-users-list");
+            tableBody.innerHTML = "<tr><td colspan='5' style='padding: 20px; text-align: center;'>Carregando colaboradores...</td></tr>";
+            
+            const users = await api.get("/api/auth/users");
+            tableBody.innerHTML = "";
+            
+            if (users.length === 0) {
+                tableBody.innerHTML = "<tr><td colspan='5' style='padding: 20px; text-align: center;'>Nenhum colaborador ativo.</td></tr>";
+                return;
+            }
+            
+            users.forEach(u => {
+                const tr = document.createElement("tr");
+                
+                // Role translation badge
+                let roleLabel = "";
+                let roleClass = "";
+                if (u.role === "administrator") {
+                    roleLabel = "Administrador";
+                    roleClass = "background: rgba(79, 70, 229, 0.1); color: var(--color-brand);";
+                } else if (u.role === "manager") {
+                    roleLabel = "Supervisor";
+                    roleClass = "background: rgba(2, 132, 199, 0.1); color: var(--color-info);";
+                } else {
+                    roleLabel = "Vendedor";
+                    roleClass = "background: rgba(13, 148, 136, 0.1); color: var(--color-success);";
+                }
+                
+                // Status translation badge
+                let statusLabel = "";
+                let statusColor = "";
+                if (u.status === "online") {
+                    statusLabel = "Online";
+                    statusColor = "var(--color-success)";
+                } else if (u.status === "busy") {
+                    statusLabel = "Ocupado";
+                    statusColor = "var(--color-warning)";
+                } else {
+                    statusLabel = "Offline";
+                    statusColor = "var(--text-muted)";
+                }
+                
+                // Exclude Action Button (disabled for self-deletion)
+                const isSelf = u.id === state.user.id;
+                const isMainAdminToDelete = u.role === "administrator" && state.user.role !== "administrator";
+                const canDelete = !isSelf && !isMainAdminToDelete;
+                
+                const actionButton = canDelete 
+                    ? `<button class="btn btn-secondary btn-sm" onclick="appRouter.deleteTeamUser('${u.id}')" style="border-color: var(--color-danger); color: var(--color-danger); background: transparent;">Excluir</button>`
+                    : `<span class="subtitle" style="font-size: 11px;">Restrito</span>`;
+                
+                tr.innerHTML = `
+                    <td><strong>${u.name}</strong></td>
+                    <td>${u.email}</td>
+                    <td><span class="badge" style="${roleClass} font-weight: 700;">${roleLabel}</span></td>
+                    <td><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600;"><span style="width: 8px; height: 8px; border-radius: 50%; background-color: ${statusColor}; display: inline-block;"></span>${statusLabel}</span></td>
+                    <td>${actionButton}</td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        } catch (e) {
+            console.error(e);
+            document.getElementById("team-users-list").innerHTML = `<tr><td colspan='5' style='padding: 20px; text-align: center; color: var(--color-danger);'>Erro ao carregar colaboradores: ${e.message}</td></tr>`;
+        }
+    },
+
+    async deleteTeamUser(userId) {
+        if (!confirm("Tem certeza que deseja remover este colaborador? O acesso dele será revogado permanentemente.")) return;
+        
+        try {
+            await api.delete(`/api/auth/users/${userId}`);
+            showToast("Colaborador removido com sucesso!", "success");
+            this.loadTeamUsers();
+        } catch (e) {
+            showToast("Erro ao remover colaborador: " + e.message, "error");
         }
     },
 
@@ -1131,6 +1213,52 @@ if (chatbotForm) {
         } finally {
             btn.disabled = false;
             btn.innerText = "Salvar Configurações";
+        }
+    });
+}
+
+// Team Creation Submit
+const teamForm = document.getElementById("team-create-form");
+if (teamForm) {
+    teamForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        
+        const name = document.getElementById("team-name").value.trim();
+        const email = document.getElementById("team-email").value.trim();
+        const password = document.getElementById("team-password").value;
+        const role = document.getElementById("team-role").value;
+        
+        if (password.length < 6) {
+            showToast("A senha precisa ter pelo menos 6 caracteres.", "error");
+            return;
+        }
+        
+        const btn = document.getElementById("btn-save-team-user");
+        btn.disabled = true;
+        btn.innerText = "Cadastrando...";
+        
+        try {
+            await api.post("/api/auth/users", {
+                name,
+                email,
+                password,
+                role
+            });
+            
+            showToast("Colaborador cadastrado com sucesso!", "success");
+            
+            // Clean fields
+            document.getElementById("team-name").value = "";
+            document.getElementById("team-email").value = "";
+            document.getElementById("team-password").value = "";
+            
+            // Reload table
+            appRouter.loadTeamUsers();
+        } catch (err) {
+            showToast("Erro ao cadastrar colaborador: " + err.message, "error");
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "Cadastrar Usuário";
         }
     });
 }

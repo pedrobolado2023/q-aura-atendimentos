@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Tenant, User, MetaCredential
-from app.schemas import TenantCreate, UserCreate, UserLogin, Token, TenantResponse, UserResponse, MetaCredentialCreate, MetaCredentialResponse
+from app.schemas import TenantCreate, UserCreate, UserLogin, Token, TenantResponse, UserResponse, MetaCredentialCreate, MetaCredentialResponse, EmployeeCreate
 from app.auth import get_password_hash, verify_password, create_access_token, get_current_user, get_current_tenant
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -159,4 +159,93 @@ def get_tenants(
         raise HTTPException(status_code=403, detail="Not authorized to access tenant list")
         
     return db.query(Tenant).all()
+
+
+@router.get("/users", response_model=List[UserResponse])
+def get_hotel_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """
+    Returns all registered users (staff) for the current hotel (tenant).
+    Accessible by Administrators and Managers.
+    """
+    if current_user.role not in ["administrator", "manager"]:
+        raise HTTPException(status_code=403, detail="Apenas administradores e supervisores podem acessar a lista de usuários.")
+        
+    return db.query(User).filter(User.tenant_id == current_tenant.id).all()
+
+
+@router.post("/users", response_model=UserResponse)
+def create_hotel_user(
+    payload: EmployeeCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """
+    Creates a new user (agent/manager) for the current hotel (tenant).
+    Accessible by Administrators and Managers.
+    """
+    if current_user.role not in ["administrator", "manager"]:
+        raise HTTPException(status_code=403, detail="Apenas administradores e supervisores podem cadastrar usuários.")
+        
+    # Prevent normal supervisors from registering administrators or other invalid roles
+    if payload.role not in ["agent", "manager"]:
+        raise HTTPException(status_code=400, detail="Cargo inválido. Apenas 'agent' (vendedor) ou 'manager' (supervisor) são permitidos.")
+        
+    # Check if email is already taken
+    db_user = db.query(User).filter(User.email == payload.email).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Este email já está cadastrado.")
+        
+    # Create the user
+    user = User(
+        email=payload.email,
+        password_hash=get_password_hash(payload.password),
+        name=payload.name,
+        tenant_id=current_tenant.id,
+        role=payload.role,
+        status="offline"
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.delete("/users/{user_id}")
+def delete_hotel_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """
+    Deletes a user (staff) from the current hotel (tenant).
+    Accessible by Administrators and Managers.
+    """
+    if current_user.role not in ["administrator", "manager"]:
+        raise HTTPException(status_code=403, detail="Apenas administradores e supervisores podem excluir usuários.")
+        
+    user_to_delete = db.query(User).filter(
+        User.id == user_id,
+        User.tenant_id == current_tenant.id
+    ).first()
+    
+    if not user_to_delete:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+        
+    # Prevent self-deletion
+    if user_to_delete.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Você não pode excluir o seu próprio usuário.")
+        
+    # Prevent manager from deleting an administrator
+    if user_to_delete.role == "administrator" and current_user.role != "administrator":
+        raise HTTPException(status_code=403, detail="Supervisores não podem excluir administradores.")
+        
+    db.delete(user_to_delete)
+    db.commit()
+    return {"message": "Usuário excluído com sucesso"}
 
