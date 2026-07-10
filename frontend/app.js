@@ -10,6 +10,36 @@ const state = {
     ws: null
 };
 
+// --- Toast Notification Helper ---
+function showToast(message, type = "success") {
+    const container = document.getElementById("toast-container");
+    if (!container) return;
+    
+    const toast = document.createElement("div");
+    toast.className = `toast ${type}`;
+    
+    const icon = document.createElement("i");
+    if (type === "success") {
+        icon.className = "fa-solid fa-circle-check";
+    } else {
+        icon.className = "fa-solid fa-circle-exclamation";
+    }
+    
+    const text = document.createElement("span");
+    text.innerText = message;
+    
+    toast.appendChild(icon);
+    toast.appendChild(text);
+    container.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.classList.add("fade-out");
+        setTimeout(() => {
+            toast.remove();
+        }, 300);
+    }, 4000);
+}
+
 // --- API Client ---
 const api = {
     async post(endpoint, data, useAuth = true) {
@@ -237,7 +267,7 @@ const appRouter = {
                     <td><span class="badge">${t.plan_type.toUpperCase()}</span></td>
                     <td><span class="badge" style="background: rgba(16, 185, 129, 0.1); color: var(--color-success)">${t.status.toUpperCase()}</span></td>
                     <td>-</td>
-                    <td><button class="btn btn-secondary btn-sm" onclick="alert('Lógica de suspensão de hotel')">Suspender</button></td>
+                    <td><button class="btn btn-secondary btn-sm" onclick="showToast('Lógica de suspensão de hotel', 'error')">Suspender</button></td>
                 `;
                 tableBody.appendChild(tr);
             });
@@ -311,7 +341,7 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
         appRouter.showMainLayout();
         appRouter.init();
     } catch (err) {
-        alert("Falha no login: " + err.message);
+        showToast("Falha no login: " + err.message, "error");
     }
 });
 
@@ -323,13 +353,13 @@ document.getElementById("onboard-form").addEventListener("submit", async (e) => 
     
     try {
         const tenant = await api.post("/api/auth/onboard", { name, subdomain }, false);
-        alert(`Hotel ${tenant.name} criado com sucesso! Faça seu cadastro de usuário agora.`);
+        showToast(`Hotel ${tenant.name} criado com sucesso! Faça seu cadastro agora.`, "success");
         
         // Save tenant reference and prompt signup
         state.tenant_id = tenant.id;
         appRouter.navigate("login");
     } catch (err) {
-        alert("Erro no onboarding: " + err.message);
+        showToast("Erro no onboarding: " + err.message, "error");
     }
 });
 
@@ -348,9 +378,9 @@ document.getElementById("settings-form").addEventListener("submit", async (e) =>
             verify_token,
             permanent_access_token
         });
-        alert("Credenciais salvas com sucesso!");
+        showToast("Credenciais salvas com sucesso!", "success");
     } catch (err) {
-        alert("Erro ao salvar: " + err.message);
+        showToast("Erro ao salvar: " + err.message, "error");
     }
 });
 
@@ -373,7 +403,7 @@ document.getElementById("chat-input-form").addEventListener("submit", async (e) 
         scroll.appendChild(bubble);
         scroll.scrollTop = scroll.scrollHeight;
     } catch (err) {
-        alert("Erro ao enviar: " + err.message);
+        showToast("Erro ao enviar: " + err.message, "error");
     }
 });
 
