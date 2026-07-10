@@ -168,5 +168,23 @@ class BotConfigUpdate(BaseModel):
     out_of_hours_message: Optional[str] = None
     transfer_keywords: Optional[str] = None
 
+# Dashboard Metrics Schemas
+class DepartmentMetric(BaseModel):
+    name: str
+    count: int
+
+class FunnelStageMetric(BaseModel):
+    stage: str
+    count: int
+    percentage: float
+
+class DashboardMetricsResponse(BaseModel):
+    total_conversations: int
+    bot_resolution_rate: float
+    avg_response_time_seconds: float
+    conversion_rate: float
+    funnel_stages: List[FunnelStageMetric]
+    department_counts: List[DepartmentMetric]
+
 
 

@@ -113,6 +113,8 @@ const appRouter = {
 
         if (targetView === "inbox-view") {
             this.loadConversations();
+        } else if (targetView === "dashboard-view") {
+            this.loadDashboardMetrics();
         } else if (targetView === "admin-view") {
             this.loadAdminTenants();
         } else if (targetView === "settings-view") {
@@ -141,8 +143,9 @@ const appRouter = {
                 this.connectWebSocket();
                 this.updateProfileUI();
                 
-                // Pré-carrega as configurações da Meta
+                // Pré-carrega as configurações da Meta e as Métricas
                 this.loadMetaSettings();
+                this.loadDashboardMetrics();
             } catch (e) {
                 console.error("Erro na autenticação:", e);
                 this.logout();
@@ -435,6 +438,45 @@ const appRouter = {
             }
         } catch (e) {
             console.error("Erro ao carregar configurações do chatbot:", e);
+        }
+    },
+
+    async loadDashboardMetrics() {
+        try {
+            const metrics = await api.get("/api/inbox/dashboard-metrics");
+            
+            // Populate Cards
+            document.getElementById("stat-conversations").innerText = metrics.total_conversations;
+            document.getElementById("stat-bot-resolution").innerText = `${metrics.bot_resolution_rate}%`;
+            document.getElementById("stat-frt").innerText = `${metrics.avg_response_time_seconds}s`;
+            document.getElementById("stat-conversion").innerText = `${metrics.conversion_rate}%`;
+            
+            // Populate Funnel
+            const funnelContainer = document.getElementById("funnel-container-stats");
+            if (funnelContainer && metrics.funnel_stages) {
+                funnelContainer.innerHTML = "";
+                metrics.funnel_stages.forEach((stage, idx) => {
+                    const el = document.createElement("div");
+                    el.className = `funnel-stage stage-${idx + 1}`;
+                    el.style.width = `${Math.max(stage.percentage, 15)}%`;
+                    el.innerHTML = `<span>${stage.stage} (${stage.percentage}%) - ${stage.count} contatos</span>`;
+                    funnelContainer.appendChild(el);
+                });
+            }
+            
+            // Populate Departments
+            const depList = document.getElementById("department-list-stats");
+            if (depList && metrics.department_counts) {
+                depList.innerHTML = "";
+                metrics.department_counts.forEach(dep => {
+                    const el = document.createElement("div");
+                    el.className = "dep-row";
+                    el.innerHTML = `<span>${dep.name}</span><strong>${dep.count}</strong>`;
+                    depList.appendChild(el);
+                });
+            }
+        } catch (e) {
+            console.error("Erro ao carregar métricas do painel:", e);
         }
     },
 
