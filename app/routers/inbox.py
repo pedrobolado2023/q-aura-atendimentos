@@ -1,5 +1,7 @@
+import os
+import shutil
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status, Response, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, Response, BackgroundTasks, UploadFile, File
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -455,6 +457,42 @@ async def send_campaign(
     )
     
     return {"status": "campaign_queued"}
+
+@router.post("/upload-media")
+def upload_media(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """
+    Uploads a media file (image, video, audio) to the server.
+    Saves it to the frontend static uploads folder and returns the relative path.
+    """
+    if current_user.role not in ["administrator", "manager"]:
+        raise HTTPException(status_code=403, detail="Apenas administradores e supervisores podem enviar arquivos.")
+
+    # 1. Resolve target directory path
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    uploads_dir = os.path.join(base_dir, "frontend", "uploads")
+    
+    # Create the directory if it doesn't exist
+    os.makedirs(uploads_dir, exist_ok=True)
+    
+    # 2. Generate a secure, unique filename
+    ext = os.path.splitext(file.filename)[1]
+    import uuid
+    unique_filename = f"{uuid.uuid4().hex}{ext}"
+    file_path = os.path.join(uploads_dir, unique_filename)
+    
+    # 3. Write binary data
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar arquivo de mídia: {str(e)}")
+        
+    # 4. Return URL path
+    return {"url": f"/uploads/{unique_filename}"}
 
 
 

@@ -724,12 +724,18 @@ function syncCampaignPreview() {
     const btnLabel = document.getElementById("campaign-btn-label").value.trim();
     const btnUrl = document.getElementById("campaign-btn-url").value.trim();
     
-    // Exibe ou oculta campo de link de mídia
-    const mediaUrlGroup = document.getElementById("campaign-media-url-group");
-    if (mediaType !== "none") {
-        mediaUrlGroup.style.display = "block";
-    } else {
-        mediaUrlGroup.style.display = "none";
+    // Exibe ou oculta campo de arquivo de mídia
+    const mediaFileGroup = document.getElementById("campaign-media-file-group");
+    if (mediaFileGroup) {
+        if (mediaType !== "none") {
+            mediaFileGroup.style.display = "block";
+        } else {
+            mediaFileGroup.style.display = "none";
+            // Limpa o link de mídia e o input de arquivo caso alterado para nenhum
+            document.getElementById("campaign-media-url").value = "";
+            const fileInputEl = document.getElementById("campaign-media-file");
+            if (fileInputEl) fileInputEl.value = "";
+        }
     }
     
     // Elementos do mockup de celular
@@ -798,11 +804,54 @@ function syncCampaignPreview() {
 const mediaTypeField = document.getElementById("campaign-media-type");
 if (mediaTypeField) {
     mediaTypeField.addEventListener("change", syncCampaignPreview);
-    document.getElementById("campaign-media-url").addEventListener("input", syncCampaignPreview);
     document.getElementById("campaign-body").addEventListener("input", syncCampaignPreview);
     document.getElementById("campaign-button-type").addEventListener("change", syncCampaignPreview);
     document.getElementById("campaign-btn-label").addEventListener("input", syncCampaignPreview);
     document.getElementById("campaign-btn-url").addEventListener("input", syncCampaignPreview);
+    
+    // Ouvinte para upload automático do arquivo de campanha
+    const campaignFileInput = document.getElementById("campaign-media-file");
+    if (campaignFileInput) {
+        campaignFileInput.addEventListener("change", async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            showToast("Enviando arquivo de mídia...", "success");
+            
+            const formData = new FormData();
+            formData.append("file", file);
+            
+            try {
+                const response = await fetch(`${API_URL}/api/inbox/upload-media`, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${state.token}`
+                    },
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.detail || "Erro no servidor ao salvar arquivo");
+                }
+                
+                const res = await response.json();
+                // Gera a URL absoluta para a API da Meta poder baixar a imagem pública
+                const absoluteUrl = `${API_URL}${res.url}`;
+                
+                document.getElementById("campaign-media-url").value = absoluteUrl;
+                showToast("Arquivo de mídia enviado com sucesso!", "success");
+                
+                // Atualiza o mockup de telefone
+                syncCampaignPreview();
+            } catch (err) {
+                showToast("Erro no envio: " + err.message, "error");
+                campaignFileInput.value = "";
+                document.getElementById("campaign-media-url").value = "";
+                syncCampaignPreview();
+            }
+        });
+    }
 }
 
 // Enviar Campanha
@@ -854,6 +903,8 @@ if (dispatchCampaignBtn) {
             document.getElementById("campaign-name").value = "";
             document.getElementById("campaign-media-type").value = "none";
             document.getElementById("campaign-media-url").value = "";
+            const fileInputEl = document.getElementById("campaign-media-file");
+            if (fileInputEl) fileInputEl.value = "";
             document.getElementById("campaign-body").value = "";
             document.getElementById("campaign-button-type").value = "none";
             document.getElementById("campaign-btn-label").value = "";

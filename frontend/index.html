@@ -308,9 +308,10 @@
                                 </select>
                             </div>
                             
-                            <div class="input-group" id="campaign-media-url-group" style="display: none;">
-                                <label for="campaign-media-url">Link URL da Mídia</label>
-                                <input type="text" id="campaign-media-url" placeholder="https://exemplo.com/imagem.png">
+                            <div class="input-group" id="campaign-media-file-group" style="display: none;">
+                                <label for="campaign-media-file">Selecionar Arquivo de Mídia</label>
+                                <input type="file" id="campaign-media-file" style="width: 100%; color: var(--text-main); background: var(--bg-primary); padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);" accept="image/*,video/*,audio/*">
+                                <input type="hidden" id="campaign-media-url">
                             </div>
                             
                             <div class="input-group">

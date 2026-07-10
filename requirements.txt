@@ -8,3 +8,4 @@ python-jose[cryptography]
 passlib[bcrypt]
 httpx
 aiofiles
+python-multipart
