@@ -271,11 +271,17 @@ const appRouter = {
                 
                 if (m.message_type === "image" && m.media_url) {
                     const img = document.createElement("img");
-                    const proxyUrl = `${API_URL}/api/inbox/media/${m.media_url}?token=${state.token}`;
-                    img.src = proxyUrl;
+                    
+                    let imgSrc = m.media_url;
+                    // Se for um ID da Meta, usa o proxy. Se for link do uploader, usa direto.
+                    if (!m.media_url.startsWith("http://") && !m.media_url.startsWith("https://")) {
+                        imgSrc = `${API_URL}/api/inbox/media/${m.media_url}?token=${state.token}`;
+                    }
+                    
+                    img.src = imgSrc;
                     img.alt = "Imagem";
                     img.className = "chat-media-image";
-                    img.onclick = () => window.open(proxyUrl, "_blank");
+                    img.onclick = () => window.open(imgSrc, "_blank");
                     bubble.appendChild(img);
                     
                     if (m.body && m.body !== "[Imagem]") {
@@ -359,11 +365,17 @@ const appRouter = {
                 
                 if (message.message_type === "image" && message.media_url) {
                     const img = document.createElement("img");
-                    const proxyUrl = `${API_URL}/api/inbox/media/${message.media_url}?token=${state.token}`;
-                    img.src = proxyUrl;
+                    
+                    let imgSrc = message.media_url;
+                    // Se for um ID da Meta, usa o proxy. Se for link do uploader, usa direto.
+                    if (!message.media_url.startsWith("http://") && !message.media_url.startsWith("https://")) {
+                        imgSrc = `${API_URL}/api/inbox/media/${message.media_url}?token=${state.token}`;
+                    }
+                    
+                    img.src = imgSrc;
                     img.alt = "Imagem";
                     img.className = "chat-media-image";
-                    img.onclick = () => window.open(proxyUrl, "_blank");
+                    img.onclick = () => window.open(imgSrc, "_blank");
                     bubble.appendChild(img);
                     
                     if (message.body && message.body !== "[Imagem]") {
