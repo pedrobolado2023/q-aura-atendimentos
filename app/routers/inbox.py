@@ -112,3 +112,49 @@ async def send_message(
     db.commit()
     db.refresh(msg)
     return msg
+
+@router.post("/conversations/{conversation_id}/assign", response_model=ConversationResponse)
+def assign_conversation(
+    conversation_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """
+    Assigns the conversation to the currently logged in user and marks it active.
+    """
+    convo = db.query(Conversation).filter(
+        Conversation.id == conversation_id,
+        Conversation.tenant_id == current_tenant.id
+    ).first()
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+        
+    convo.assigned_user_id = current_user.id
+    convo.status = "active"
+    db.commit()
+    db.refresh(convo)
+    return convo
+
+@router.post("/conversations/{conversation_id}/resolve", response_model=ConversationResponse)
+def resolve_conversation(
+    conversation_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """
+    Marks the conversation as resolved.
+    """
+    convo = db.query(Conversation).filter(
+        Conversation.id == conversation_id,
+        Conversation.tenant_id == current_tenant.id
+    ).first()
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+        
+    convo.status = "resolved"
+    db.commit()
+    db.refresh(convo)
+    return convo
+

@@ -237,7 +237,24 @@ const appRouter = {
             messages.forEach(m => {
                 const bubble = document.createElement("div");
                 bubble.className = `message-bubble ${m.sender_type === 'contact' ? 'incoming' : 'outgoing'}`;
-                bubble.innerText = m.body;
+                
+                if (m.message_type === "image" && m.media_url) {
+                    const img = document.createElement("img");
+                    img.src = m.media_url;
+                    img.alt = "Imagem";
+                    img.className = "chat-media-image";
+                    img.onclick = () => window.open(m.media_url, "_blank");
+                    bubble.appendChild(img);
+                    
+                    if (m.body && m.body !== "[Imagem]") {
+                        const caption = document.createElement("div");
+                        caption.innerText = m.body;
+                        caption.style.marginTop = "8px";
+                        bubble.appendChild(caption);
+                    }
+                } else {
+                    bubble.innerText = m.body;
+                }
                 scroll.appendChild(bubble);
             });
             scroll.scrollTop = scroll.scrollHeight;
@@ -307,7 +324,24 @@ const appRouter = {
                 const scroll = document.getElementById("message-scroll");
                 const bubble = document.createElement("div");
                 bubble.className = `message-bubble ${message.sender_type === 'contact' ? 'incoming' : 'outgoing'}`;
-                bubble.innerText = message.body;
+                
+                if (message.message_type === "image" && message.media_url) {
+                    const img = document.createElement("img");
+                    img.src = message.media_url;
+                    img.alt = "Imagem";
+                    img.className = "chat-media-image";
+                    img.onclick = () => window.open(message.media_url, "_blank");
+                    bubble.appendChild(img);
+                    
+                    if (message.body && message.body !== "[Imagem]") {
+                        const caption = document.createElement("div");
+                        caption.innerText = message.body;
+                        caption.style.marginTop = "8px";
+                        bubble.appendChild(caption);
+                    }
+                } else {
+                    bubble.innerText = message.body;
+                }
                 scroll.appendChild(bubble);
                 scroll.scrollTop = scroll.scrollHeight;
             }
@@ -405,6 +439,91 @@ document.getElementById("chat-input-form").addEventListener("submit", async (e) 
     } catch (err) {
         showToast("Erro ao enviar: " + err.message, "error");
     }
+});
+
+// --- Inbox Tab Filter Click Bindings ---
+document.querySelectorAll(".inbox-tabs .tab-btn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+        document.querySelectorAll(".inbox-tabs .tab-btn").forEach(b => b.classList.remove("active"));
+        e.currentTarget.classList.add("active");
+        const status = e.currentTarget.getAttribute("data-status");
+        await appRouter.loadConversations(status);
+    });
+});
+
+// --- Chat Workspace Actions (Transfer / Resolve) ---
+document.getElementById("btn-transfer-chat").addEventListener("click", async () => {
+    if (!state.activeConversationId) return;
+    try {
+        await api.post(`/api/inbox/conversations/${state.activeConversationId}/assign`, {});
+        showToast("Conversa assumida com sucesso!", "success");
+        
+        // Recarrega a fila e limpa a tela de chat ativo
+        await appRouter.loadConversations();
+        document.getElementById("active-chat-area").classList.add("empty");
+        document.getElementById("active-chat-area").querySelector(".no-chat-selected").style.display = "flex";
+        document.getElementById("active-chat-area").querySelector(".chat-wrapper").style.display = "none";
+        document.getElementById("guest-context").style.display = "none";
+    } catch (err) {
+        showToast("Erro ao assumir conversa: " + err.message, "error");
+    }
+});
+
+document.getElementById("btn-resolve-chat").addEventListener("click", async () => {
+    if (!state.activeConversationId) return;
+    try {
+        await api.post(`/api/inbox/conversations/${state.activeConversationId}/resolve`, {});
+        showToast("Conversa resolvida!", "success");
+        
+        // Recarrega a fila e limpa a tela de chat ativo
+        await appRouter.loadConversations();
+        document.getElementById("active-chat-area").classList.add("empty");
+        document.getElementById("active-chat-area").querySelector(".no-chat-selected").style.display = "flex";
+        document.getElementById("active-chat-area").querySelector(".chat-wrapper").style.display = "none";
+        document.getElementById("guest-context").style.display = "none";
+    } catch (err) {
+        showToast("Erro ao resolver conversa: " + err.message, "error");
+    }
+});
+
+// --- PMS Simulator Interactive Actions ---
+document.getElementById("btn-pms-quote").addEventListener("click", () => {
+    const checkinVal = document.getElementById("pms-checkin").value;
+    const checkoutVal = document.getElementById("pms-checkout").value;
+    if (!checkinVal || !checkoutVal) {
+        showToast("Selecione as datas de Check-in e Check-out.", "error");
+        return;
+    }
+    
+    const checkin = new Date(checkinVal);
+    const checkout = new Date(checkoutVal);
+    
+    if (checkout <= checkin) {
+        showToast("Check-out deve ser após o Check-in.", "error");
+        return;
+    }
+    
+    const diffTime = Math.abs(checkout - checkin);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const dailyRate = 450;
+    const total = dailyRate * diffDays;
+    
+    document.getElementById("pms-quote-total").innerText = `R$ ${total.toLocaleString("pt-BR")}`;
+    document.getElementById("pms-quote-result").querySelector("p:nth-child(3)").innerHTML = `<strong>Total:</strong> R$ ${total.toLocaleString("pt-BR")} (${diffDays} diárias)`;
+    document.getElementById("pms-quote-result").style.display = "block";
+});
+
+document.getElementById("btn-pms-send").addEventListener("click", () => {
+    const checkinVal = document.getElementById("pms-checkin").value;
+    const checkoutVal = document.getElementById("pms-checkout").value;
+    const checkinFormatted = checkinVal.split("-").reverse().join("/");
+    const checkoutFormatted = checkoutVal.split("-").reverse().join("/");
+    const totalText = document.getElementById("pms-quote-total").innerText;
+    
+    const msgInput = document.getElementById("chat-message-input");
+    msgInput.value = `Olá! Fiz uma simulação de cotação para o período de ${checkinFormatted} a ${checkoutFormatted}. O valor total fica em ${totalText} para a Suíte Standard. Deseja que eu confirme a sua pré-reserva?`;
+    msgInput.focus();
+    showToast("Texto de cotação copiado para o chat!", "success");
 });
 
 // Start router

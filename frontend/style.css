@@ -924,3 +924,21 @@ body {
     }
 }
 
+/* Media Image styles in Chat bubbles */
+.chat-media-image {
+    max-width: 250px;
+    max-height: 250px;
+    border-radius: var(--radius-sm);
+    object-fit: cover;
+    margin-top: 4px;
+    display: block;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.chat-media-image:hover {
+    filter: brightness(0.85);
+    transform: scale(1.02);
+}
+
+
