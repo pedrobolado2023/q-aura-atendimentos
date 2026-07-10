@@ -1280,5 +1280,5 @@ if (teamForm) {
 }
 
 // Start router
-appRouter.init();
 window.appRouter = appRouter;
+appRouter.init();
