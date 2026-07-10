@@ -83,6 +83,7 @@ class Contact(Base):
     loyalty_level = Column(String(50), default="none")
     pms_id = Column(String(100))
     sales_funnel_stage = Column(String(50), default="lead") # lead, qualified, quotation, reservation_pending, reservation_confirmed, lost
+    avatar_url = Column(String(500))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -98,6 +99,7 @@ class Conversation(Base):
     assigned_department_id = Column(String(36), ForeignKey("qa_departments.id", ondelete="SET NULL"))
     status = Column(String(50), default="waiting") # bot, waiting, active, resolved, archived
     routing_mode = Column(String(50), default="queue") # round_robin, queue, fixed, department
+    unread = Column(Boolean, default=True)
     last_message_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -956,5 +956,28 @@ body {
     background: #e5ddd5 url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png') repeat !important;
 }
 
+/* Chat Inbox UI Enhancements */
+.convo-item.unread h4 {
+    font-weight: 800 !important;
+    color: var(--text-primary);
+}
+
+.unread-dot {
+    width: 8px;
+    height: 8px;
+    background-color: var(--color-primary);
+    border-radius: 50%;
+    display: inline-block;
+    margin-left: 8px;
+    align-self: center;
+    box-shadow: 0 0 6px var(--color-primary);
+}
+
+img.avatar {
+    object-fit: cover;
+    background: transparent;
+}
+
+
 
 

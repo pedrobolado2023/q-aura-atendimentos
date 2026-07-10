@@ -41,6 +41,11 @@ def get_messages(
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
         
+    # Mark conversation as read
+    if convo.unread:
+        convo.unread = False
+        db.commit()
+        
     return db.query(Message).filter(Message.conversation_id == conversation_id).order_by(Message.created_at.asc()).all()
 
 @router.post("/send-message", response_model=MessageResponse)

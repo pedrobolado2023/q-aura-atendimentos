@@ -205,15 +205,40 @@ const appRouter = {
 
             convos.forEach(c => {
                 const item = document.createElement("div");
-                item.className = `convo-item ${state.activeConversationId === c.id ? 'active' : ''}`;
+                item.setAttribute("data-id", c.id);
+                
+                const isUnread = c.unread && state.activeConversationId !== c.id;
+                item.className = `convo-item ${state.activeConversationId === c.id ? 'active' : ''} ${isUnread ? 'unread' : ''}`;
                 item.onclick = () => this.selectConversation(c.id);
                 
                 const contactName = c.contact ? c.contact.name || c.contact.phone_number : "Hóspede";
+                
+                // Avatar image with DiceBear initials fallback
+                const avatarUrl = (c.contact && c.contact.avatar_url)
+                    ? c.contact.avatar_url
+                    : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(contactName)}`;
+                
+                // Status label translation (Aguardando, Em atendimento, Finalizado)
+                let statusLabel = "";
+                if (c.status === "waiting") statusLabel = "Aguardando";
+                else if (c.status === "active") statusLabel = "Em atendimento";
+                else if (c.status === "resolved") statusLabel = "Finalizado";
+                
+                const subtitleText = state.user.role === "administrator"
+                    ? `Status: ${c.status} • Rota: ${c.routing_mode}`
+                    : statusLabel;
+                
                 item.innerHTML = `
-                    <div class="avatar">${contactName.substring(0,2).toUpperCase()}</div>
+                    <img class="avatar" src="${avatarUrl}" alt="${contactName}">
                     <div class="convo-meta">
-                        <h4>${contactName} <span class="convo-time">Hoje</span></h4>
-                        <p>Status: ${c.status} • Rota: ${c.routing_mode}</p>
+                        <h4>
+                            <span style="display: flex; align-items: center;">
+                                ${contactName}
+                                ${isUnread ? '<span class="unread-dot"></span>' : ''}
+                            </span>
+                            <span class="convo-time">Hoje</span>
+                        </h4>
+                        <p>${subtitleText}</p>
                     </div>
                 `;
                 listContainer.appendChild(item);
@@ -225,9 +250,22 @@ const appRouter = {
 
     async selectConversation(convoId) {
         state.activeConversationId = convoId;
-        document.querySelectorAll(".convo-item").forEach(item => item.classList.remove("active"));
+        
+        // Remove unread dots locally on click
+        document.querySelectorAll(".convo-item").forEach(item => {
+            item.classList.remove("active");
+            if (item.getAttribute("data-id") === convoId) {
+                item.classList.add("active");
+                item.classList.remove("unread");
+                const dot = item.querySelector(".unread-dot");
+                if (dot) dot.remove();
+            }
+        });
         
         const convo = state.conversations.find(c => c.id === convoId);
+        if (convo) {
+            convo.unread = false;
+        }
         
         // Show conversation pane
         const activeArea = document.getElementById("active-chat-area");
@@ -238,9 +276,10 @@ const appRouter = {
         // Show guest context panel
         document.getElementById("guest-context").style.display = "block";
 
-        // Update contact details in Right panel
+        // Update contact details in Right panel and Active header
         if (convo && convo.contact) {
-            document.getElementById("active-contact-name").innerText = convo.contact.name || "Hóspede";
+            const contactName = convo.contact.name || convo.contact.phone_number || "Hóspede";
+            document.getElementById("active-contact-name").innerText = contactName;
             document.getElementById("guest-phone").innerText = convo.contact.phone_number;
             document.getElementById("guest-lang").innerText = convo.contact.language === "pt-BR" ? "Português" : convo.contact.language;
             
@@ -257,6 +296,27 @@ const appRouter = {
             };
             const stage = convo.contact.sales_funnel_stage;
             document.getElementById("guest-funnel-stage").innerText = stageLabels[stage] || stage.toUpperCase();
+
+            // Set Avatar image
+            const avatarUrl = convo.contact.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(contactName)}`;
+            const activeAvatar = document.getElementById("active-avatar");
+            if (activeAvatar) {
+                activeAvatar.innerHTML = `<img class="avatar" src="${avatarUrl}" alt="${contactName}">`;
+            }
+            
+            // Toggle Assumir Atendimento vs Transferir button
+            const transferBtn = document.getElementById("btn-transfer-chat");
+            if (transferBtn) {
+                if (convo.status === "waiting") {
+                    transferBtn.innerHTML = `<i class="fa-solid fa-headset"></i> Assumir Atendimento`;
+                    transferBtn.classList.remove("btn-secondary");
+                    transferBtn.classList.add("btn-primary");
+                } else {
+                    transferBtn.innerHTML = `<i class="fa-solid fa-arrow-right-arrow-left"></i> Transferir`;
+                    transferBtn.classList.remove("btn-primary");
+                    transferBtn.classList.add("btn-secondary");
+                }
+            }
         }
 
         // Load Messages

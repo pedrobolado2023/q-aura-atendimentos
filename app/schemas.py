@@ -108,6 +108,7 @@ class ContactResponse(BaseModel):
     language: str
     loyalty_level: str
     sales_funnel_stage: str
+    avatar_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -122,6 +123,7 @@ class ConversationResponse(BaseModel):
     routing_mode: str
     last_message_at: datetime
     created_at: datetime
+    unread: bool
     contact: Optional[ContactResponse] = None
 
     class Config:
