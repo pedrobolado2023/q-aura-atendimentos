@@ -66,8 +66,8 @@ def configure_meta_credentials(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant)
 ):
-    if current_user.role not in ["administrator", "manager"]:
-        raise HTTPException(status_code=403, detail="Not authorized to configure credentials")
+    if current_user.role != "administrator":
+        raise HTTPException(status_code=403, detail="Apenas administradores podem configurar credenciais do WhatsApp.")
         
     # Generate tenant-specific webhook URL
     webhook_url = f"https://api.q-aura.com/api/webhook/{current_tenant.id}"
@@ -122,8 +122,8 @@ def get_meta_credentials(
     """
     Returns Meta credentials for the current tenant.
     """
-    if current_user.role not in ["administrator", "manager"]:
-        raise HTTPException(status_code=403, detail="Not authorized to access credentials")
+    if current_user.role != "administrator":
+        raise HTTPException(status_code=403, detail="Apenas administradores podem acessar credenciais do WhatsApp.")
         
     creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == current_tenant.id).first()
     if not creds:
