@@ -78,7 +78,6 @@ async def receive_webhook(tenant_id: str, request: Request, background_tasks: Ba
         process_webhook_payload,
         tenant_id=tenant_id,
         payload=payload,
-        db=db,
         websocket_broadcast_fn=manager.broadcast_to_tenant
     )
 

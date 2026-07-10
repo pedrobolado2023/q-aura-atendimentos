@@ -3,6 +3,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from app.models import Contact, Conversation, Message, BotConfig, MetaCredential
 from app.config import settings
+from app.database import SessionLocal
 from datetime import datetime
 
 async def send_whatsapp_text(phone_number_id: str, token: str, to_phone: str, body: str) -> Optional[str]:
@@ -33,11 +34,12 @@ async def send_whatsapp_text(phone_number_id: str, token: str, to_phone: str, bo
             print(f"Error sending WhatsApp message: {str(e)}")
     return None
 
-async def process_webhook_payload(tenant_id: str, payload: dict, db: Session, websocket_broadcast_fn) -> bool:
+async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broadcast_fn) -> bool:
     """
     Parses Meta WhatsApp Webhook payload and updates contacts, conversations, messages,
     then broadcasts updates to active agents via WebSocket. Intercepts with Chatbot replies.
     """
+    db = SessionLocal()
     try:
         # Check if this is a message event
         entry_list = payload.get("entry", [])
@@ -225,7 +227,10 @@ async def process_webhook_payload(tenant_id: str, payload: dict, db: Session, we
 
         return True
     except Exception as e:
+        db.rollback()
         import traceback
         traceback.print_exc()
         print(f"Error parsing webhook payload: {e}")
         return False
+    finally:
+        db.close()
