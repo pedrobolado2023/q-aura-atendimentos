@@ -189,12 +189,15 @@ const appRouter = {
     },
 
     // --- Data Loaders ---
-    async loadConversations() {
+    async loadConversations(status) {
         try {
             const listContainer = document.getElementById("convo-list");
             listContainer.innerHTML = "<p class='subtitle' style='padding: 20px;'>Carregando...</p>";
             
-            const convos = await api.get("/api/inbox/conversations");
+            const activeTab = document.querySelector(".inbox-tabs .tab-btn.active");
+            const statusFilter = status || (activeTab ? activeTab.getAttribute("data-status") : "waiting");
+            
+            const convos = await api.get(`/api/inbox/conversations?status_filter=${statusFilter}`);
             state.conversations = convos;
             
             listContainer.innerHTML = "";
@@ -559,18 +562,46 @@ document.querySelectorAll(".inbox-tabs .tab-btn").forEach(btn => {
 // --- Chat Workspace Actions (Transfer / Resolve) ---
 document.getElementById("btn-transfer-chat").addEventListener("click", async () => {
     if (!state.activeConversationId) return;
+    
+    // Identifica se a conversa atual está na fila (aguardando)
+    const convo = state.conversations.find(c => c.id === state.activeConversationId);
+    const isWaiting = convo && convo.status === "waiting";
+    
     try {
         await api.post(`/api/inbox/conversations/${state.activeConversationId}/assign`, {});
-        showToast("Conversa assumida com sucesso!", "success");
         
-        // Recarrega a fila e limpa a tela de chat ativo
-        await appRouter.loadConversations();
-        document.getElementById("active-chat-area").classList.add("empty");
-        document.getElementById("active-chat-area").querySelector(".no-chat-selected").style.display = "flex";
-        document.getElementById("active-chat-area").querySelector(".chat-wrapper").style.display = "none";
-        document.getElementById("guest-context").style.display = "none";
+        if (isWaiting) {
+            showToast("Atendimento assumido! Iniciando conversa...", "success");
+            
+            // 1. Alterna a aba ativa visualmente para "Minhas" (active)
+            document.querySelectorAll(".inbox-tabs .tab-btn").forEach(b => {
+                if (b.getAttribute("data-status") === "active") {
+                    b.classList.add("active");
+                } else {
+                    b.classList.remove("active");
+                }
+            });
+            
+            // 2. Carrega as conversas da aba "Minhas" (active)
+            await appRouter.loadConversations("active");
+            
+            // 3. Mantém a conversa selecionada e aberta na tela
+            await appRouter.selectConversation(state.activeConversationId);
+        } else {
+            showToast("Conversa transferida com sucesso!", "success");
+            
+            // Comportamento original para transferência: limpa a tela e recarrega a aba atual
+            const activeTab = document.querySelector(".inbox-tabs .tab-btn.active");
+            const currentStatus = activeTab ? activeTab.getAttribute("data-status") : "waiting";
+            await appRouter.loadConversations(currentStatus);
+            
+            document.getElementById("active-chat-area").classList.add("empty");
+            document.getElementById("active-chat-area").querySelector(".no-chat-selected").style.display = "flex";
+            document.getElementById("active-chat-area").querySelector(".chat-wrapper").style.display = "none";
+            document.getElementById("guest-context").style.display = "none";
+        }
     } catch (err) {
-        showToast("Erro ao assumir conversa: " + err.message, "error");
+        showToast("Erro ao processar ação: " + err.message, "error");
     }
 });
 

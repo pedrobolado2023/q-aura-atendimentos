@@ -19,11 +19,17 @@ router = APIRouter(prefix="/api/inbox", tags=["inbox"])
 def get_conversations(
     status_filter: Optional[str] = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant)
 ):
     query = db.query(Conversation).filter(Conversation.tenant_id == current_tenant.id)
     if status_filter:
         query = query.filter(Conversation.status == status_filter)
+        
+    # Para atendentes normais (agentes), filtra para exibir apenas as conversas atribuídas a eles na aba Minhas
+    if status_filter == "active" and current_user.role not in ["administrator", "manager"]:
+        query = query.filter(Conversation.assigned_user_id == current_user.id)
+        
     return query.order_by(Conversation.last_message_at.desc()).all()
 
 @router.get("/conversations/{conversation_id}/messages", response_model=List[MessageResponse])
