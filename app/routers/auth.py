@@ -77,12 +77,18 @@ def configure_meta_credentials(
     if db_creds:
         db_creds.phone_number_id = creds_in.phone_number_id
         db_creds.waba_id = creds_in.waba_id
-        db_creds.permanent_access_token = creds_in.permanent_access_token
+        
+        # Só atualiza a senha se não for um placeholder mascarado
+        token = creds_in.permanent_access_token
+        if token and not (token.startswith("••") or "..." in token):
+            db_creds.permanent_access_token = token
+            
         db_creds.verify_token = creds_in.verify_token
         db_creds.webhook_url = webhook_url
         db.commit()
         db.refresh(db_creds)
         return db_creds
+
     
     creds = MetaCredential(
         tenant_id=current_tenant.id,
@@ -96,3 +102,61 @@ def configure_meta_credentials(
     db.commit()
     db.refresh(creds)
     return creds
+
+from typing import List
+from app.schemas import MetaCredentialDetailsResponse
+
+@router.get("/me", response_model=UserResponse)
+def get_me(current_user: User = Depends(get_current_user)):
+    """
+    Returns the currently logged-in user profile.
+    """
+    return current_user
+
+@router.get("/meta-credentials", response_model=MetaCredentialDetailsResponse)
+def get_meta_credentials(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """
+    Returns Meta credentials for the current tenant.
+    """
+    if current_user.role not in ["administrator", "manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized to access credentials")
+        
+    creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == current_tenant.id).first()
+    if not creds:
+        raise HTTPException(status_code=404, detail="Meta credentials not configured yet")
+        
+    # Return masked token for security
+    masked_token = "••••••••"
+    if creds.permanent_access_token:
+        token_len = len(creds.permanent_access_token)
+        if token_len > 8:
+            masked_token = creds.permanent_access_token[:4] + "..." + creds.permanent_access_token[-4:]
+            
+    return MetaCredentialDetailsResponse(
+        id=creds.id,
+        tenant_id=creds.tenant_id,
+        phone_number_id=creds.phone_number_id,
+        waba_id=creds.waba_id,
+        verify_token=creds.verify_token,
+        permanent_access_token=masked_token,
+        webhook_url=creds.webhook_url,
+        created_at=creds.created_at
+    )
+
+@router.get("/tenants", response_model=List[TenantResponse])
+def get_tenants(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns all registered tenants (Hotels). Accessible only by Administrators.
+    """
+    if current_user.role != "administrator":
+        raise HTTPException(status_code=403, detail="Not authorized to access tenant list")
+        
+    return db.query(Tenant).all()
+

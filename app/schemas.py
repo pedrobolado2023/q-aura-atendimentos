@@ -69,6 +69,20 @@ class MetaCredentialResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class MetaCredentialDetailsResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    phone_number_id: str
+    waba_id: str
+    verify_token: str
+    permanent_access_token: str  # Retorna a string mascarada para a UI
+    webhook_url: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # Conversation and Messages
 class MessageResponse(BaseModel):
     id: UUID
@@ -86,6 +100,18 @@ class MessageResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class ContactResponse(BaseModel):
+    id: UUID
+    phone_number: str
+    name: Optional[str]
+    email: Optional[str]
+    language: str
+    loyalty_level: str
+    sales_funnel_stage: str
+
+    class Config:
+        from_attributes = True
+
 class ConversationResponse(BaseModel):
     id: UUID
     tenant_id: UUID
@@ -96,6 +122,8 @@ class ConversationResponse(BaseModel):
     routing_mode: str
     last_message_at: datetime
     created_at: datetime
+    contact: Optional[ContactResponse] = None
 
     class Config:
         from_attributes = True
+

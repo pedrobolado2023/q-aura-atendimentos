@@ -63,14 +63,32 @@ const appRouter = {
             this.loadConversations();
         } else if (targetView === "admin-view") {
             this.loadAdminTenants();
+        } else if (targetView === "settings-view") {
+            this.loadMetaSettings();
         }
     },
 
-    init() {
-        if (state.token && state.user) {
-            this.showMainLayout();
-            this.connectWebSocket();
-            this.updateProfileUI();
+    async init() {
+        if (state.token) {
+            try {
+                // Busca o perfil real do usuário logado
+                const userProfile = await api.get("/api/auth/me");
+                state.user = userProfile;
+                state.tenant_id = userProfile.tenant_id;
+                
+                localStorage.setItem("qa_user", JSON.stringify(state.user));
+                localStorage.setItem("qa_tenant_id", state.tenant_id);
+                
+                this.showMainLayout();
+                this.connectWebSocket();
+                this.updateProfileUI();
+                
+                // Pré-carrega as configurações da Meta
+                this.loadMetaSettings();
+            } catch (e) {
+                console.error("Erro na autenticação:", e);
+                this.logout();
+            }
         } else {
             this.navigate("login");
         }
@@ -128,10 +146,12 @@ const appRouter = {
                 const item = document.createElement("div");
                 item.className = `convo-item ${state.activeConversationId === c.id ? 'active' : ''}`;
                 item.onclick = () => this.selectConversation(c.id);
+                
+                const contactName = c.contact ? c.contact.name || c.contact.phone_number : "Hóspede";
                 item.innerHTML = `
-                    <div class="avatar">${c.contact_id.substring(0,2).toUpperCase()}</div>
+                    <div class="avatar">${contactName.substring(0,2).toUpperCase()}</div>
                     <div class="convo-meta">
-                        <h4>Hóspede <span class="convo-time">Hoje</span></h4>
+                        <h4>${contactName} <span class="convo-time">Hoje</span></h4>
                         <p>Status: ${c.status} • Rota: ${c.routing_mode}</p>
                     </div>
                 `;
@@ -146,6 +166,8 @@ const appRouter = {
         state.activeConversationId = convoId;
         document.querySelectorAll(".convo-item").forEach(item => item.classList.remove("active"));
         
+        const convo = state.conversations.find(c => c.id === convoId);
+        
         // Show conversation pane
         const activeArea = document.getElementById("active-chat-area");
         activeArea.classList.remove("empty");
@@ -154,6 +176,27 @@ const appRouter = {
 
         // Show guest context panel
         document.getElementById("guest-context").style.display = "block";
+
+        // Update contact details in Right panel
+        if (convo && convo.contact) {
+            document.getElementById("active-contact-name").innerText = convo.contact.name || "Hóspede";
+            document.getElementById("guest-phone").innerText = convo.contact.phone_number;
+            document.getElementById("guest-lang").innerText = convo.contact.language === "pt-BR" ? "Português" : convo.contact.language;
+            
+            const loyalty = convo.contact.loyalty_level || "none";
+            document.getElementById("guest-loyalty").innerText = loyalty.charAt(0).toUpperCase() + loyalty.slice(1);
+            
+            const stageLabels = {
+                "lead": "Lead / Novo",
+                "qualified": "Qualificado",
+                "quotation": "Orçamento Enviado",
+                "reservation_pending": "Reserva Pendente",
+                "reservation_confirmed": "Reserva Confirmada",
+                "lost": "Perdido"
+            };
+            const stage = convo.contact.sales_funnel_stage;
+            document.getElementById("guest-funnel-stage").innerText = stageLabels[stage] || stage.toUpperCase();
+        }
 
         // Load Messages
         try {
@@ -175,28 +218,48 @@ const appRouter = {
 
     async loadAdminTenants() {
         try {
-            // Standard simulated data for administrative control
             const tableBody = document.getElementById("tenant-admin-list");
-            tableBody.innerHTML = `
-                <tr>
-                    <td>Resort Costa do Sol</td>
-                    <td>costadosol</td>
-                    <td><span class="badge">Enterprise</span></td>
-                    <td><span class="badge" style="background: rgba(16, 185, 129, 0.1); color: var(--color-success)">Ativo</span></td>
-                    <td>12,450 / 50,000</td>
-                    <td><button class="btn btn-secondary btn-sm">Suspender</button></td>
-                </tr>
-                <tr>
-                    <td>Hotel Fazenda Colonial</td>
-                    <td>fazendacolonial</td>
-                    <td><span class="badge">Pro</span></td>
-                    <td><span class="badge" style="background: rgba(16, 185, 129, 0.1); color: var(--color-success)">Ativo</span></td>
-                    <td>4,120 / 10,000</td>
-                    <td><button class="btn btn-secondary btn-sm">Suspender</button></td>
-                </tr>
-            `;
+            tableBody.innerHTML = "<tr><td colspan='6' style='padding: 20px; text-align: center;'>Carregando...</td></tr>";
+            
+            const tenants = await api.get("/api/auth/tenants");
+            tableBody.innerHTML = "";
+            
+            if (tenants.length === 0) {
+                tableBody.innerHTML = "<tr><td colspan='6' style='padding: 20px; text-align: center;'>Nenhum hotel cadastrado.</td></tr>";
+                return;
+            }
+            
+            tenants.forEach(t => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${t.name}</td>
+                    <td>${t.subdomain}</td>
+                    <td><span class="badge">${t.plan_type.toUpperCase()}</span></td>
+                    <td><span class="badge" style="background: rgba(16, 185, 129, 0.1); color: var(--color-success)">${t.status.toUpperCase()}</span></td>
+                    <td>-</td>
+                    <td><button class="btn btn-secondary btn-sm" onclick="alert('Lógica de suspensão de hotel')">Suspender</button></td>
+                `;
+                tableBody.appendChild(tr);
+            });
         } catch (e) {
             console.error(e);
+            document.getElementById("tenant-admin-list").innerHTML = `<tr><td colspan='6' style='padding: 20px; text-align: center; color: var(--color-danger);'>Erro ao carregar hotéis: ${e.message}</td></tr>`;
+        }
+    },
+
+    async loadMetaSettings() {
+        try {
+            const creds = await api.get("/api/auth/meta-credentials");
+            if (creds) {
+                document.getElementById("phone-number-id").value = creds.phone_number_id || "";
+                document.getElementById("waba-id").value = creds.waba_id || "";
+                document.getElementById("verify-token").value = creds.verify_token || "";
+                document.getElementById("permanent-token").value = creds.permanent_access_token || "";
+                document.getElementById("webhook-generated-url").innerText = creds.webhook_url;
+            }
+        } catch (e) {
+            document.getElementById("webhook-generated-url").innerText = `${API_URL}/api/webhook/${state.tenant_id}`;
+            console.log("Credenciais Meta não encontradas ou não configuradas.");
         }
     },
 
@@ -237,14 +300,12 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
         state.token = tokenRes.access_token;
         localStorage.setItem("qa_token", state.token);
 
-        // Decode basic claims or mock profiles for simplicity
-        // Fetch or simulate user retrieval
-        const mockUser = { name: email.split("@")[0], role: "administrator", email };
-        state.user = mockUser;
-        localStorage.setItem("qa_user", JSON.stringify(mockUser));
+        // Busca perfil real do usuário
+        const userProfile = await api.get("/api/auth/me");
+        state.user = userProfile;
+        state.tenant_id = userProfile.tenant_id;
         
-        // Mock a fixed tenant
-        state.tenant_id = "00000000-0000-0000-0000-000000000000";
+        localStorage.setItem("qa_user", JSON.stringify(state.user));
         localStorage.setItem("qa_tenant_id", state.tenant_id);
 
         appRouter.showMainLayout();
