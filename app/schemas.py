@@ -1,0 +1,101 @@
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional, List
+from datetime import datetime
+from uuid import UUID
+
+# Tenant Schemas
+class TenantBase(BaseModel):
+    name: str
+    subdomain: str
+
+class TenantCreate(TenantBase):
+    pass
+
+class TenantResponse(TenantBase):
+    id: UUID
+    plan_type: str
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# User Schemas
+class UserBase(BaseModel):
+    email: EmailStr
+    name: str
+    role: str
+
+class UserCreate(UserBase):
+    password: str
+    tenant_id: UUID
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class UserResponse(UserBase):
+    id: UUID
+    tenant_id: UUID
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    user_id: Optional[str] = None
+    tenant_id: Optional[str] = None
+
+# Meta Credentials Schemas
+class MetaCredentialCreate(BaseModel):
+    phone_number_id: str
+    waba_id: str
+    permanent_access_token: str
+    verify_token: str
+
+class MetaCredentialResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    phone_number_id: str
+    waba_id: str
+    webhook_url: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Conversation and Messages
+class MessageResponse(BaseModel):
+    id: UUID
+    conversation_id: UUID
+    sender_type: str
+    sender_id: Optional[UUID]
+    message_type: str
+    body: Optional[str]
+    media_url: Optional[str]
+    media_mime_type: Optional[str]
+    status: str
+    internal_note: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class ConversationResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    contact_id: UUID
+    assigned_user_id: Optional[UUID]
+    assigned_department_id: Optional[UUID]
+    status: str
+    routing_mode: str
+    last_message_at: datetime
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

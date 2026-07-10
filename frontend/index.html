@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q-aura Atendimentos - Omnichannel Hospitality SaaS</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- App Container -->
+    <div id="app">
+        <!-- 1. LOGIN VIEW -->
+        <section id="login-view" class="view active">
+            <div class="login-card">
+                <div class="login-header">
+                    <div class="logo-container">
+                        <i class="fa-solid fa-wand-magic-sparkles logo-icon"></i>
+                        <span class="logo-text">Q-aura</span>
+                    </div>
+                    <p class="subtitle">Plataforma Omnicanal para Hotelaria</p>
+                </div>
+                <form id="login-form">
+                    <div class="input-group">
+                        <label for="login-email">E-mail Corporativo</label>
+                        <div class="input-wrapper">
+                            <i class="fa-regular fa-envelope input-icon"></i>
+                            <input type="email" id="login-email" required placeholder="seu@hotel.com">
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label for="login-password">Senha</label>
+                        <div class="input-wrapper">
+                            <i class="fa-regular fa-lock input-icon"></i>
+                            <input type="password" id="login-password" required placeholder="••••••••">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">
+                        Entrar <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </form>
+                <div class="login-footer">
+                    <p>Não possui cadastro? <span class="link-span" onclick="appRouter.navigate('onboard')">Cadastre seu Hotel</span></p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. ONBOARDING VIEW -->
+        <section id="onboard-view" class="view">
+            <div class="login-card">
+                <div class="login-header">
+                    <div class="logo-container">
+                        <i class="fa-solid fa-hotel logo-icon"></i>
+                        <span class="logo-text">Onboarding</span>
+                    </div>
+                    <p class="subtitle">Cadastre seu estabelecimento</p>
+                </div>
+                <form id="onboard-form">
+                    <div class="input-group">
+                        <label for="onboard-name">Nome do Hotel / Pousada</label>
+                        <div class="input-wrapper">
+                            <input type="text" id="onboard-name" required placeholder="Ex: Resort Costa do Sol">
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label for="onboard-subdomain">Subdomínio exclusivo (.q-aura.com)</label>
+                        <div class="input-wrapper">
+                            <input type="text" id="onboard-subdomain" required placeholder="costadosol">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">
+                        Confirmar e Avançar <i class="fa-solid fa-check"></i>
+                    </button>
+                </form>
+                <div class="login-footer">
+                    <p>Já possui conta? <span class="link-span" onclick="appRouter.navigate('login')">Fazer Login</span></p>
+                </div>
+            </div>
+        </section>
+
+        <!-- MAIN LAYOUT (SIDEBAR + CONTENT PANEL) -->
+        <div id="main-layout" class="layout-hidden">
+            <!-- Sidebar Navigation -->
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <i class="fa-solid fa-wand-magic-sparkles logo-icon"></i>
+                    <span class="logo-text">Q-aura</span>
+                </div>
+                <nav class="sidebar-menu">
+                    <a href="#" class="menu-item active" data-target="dashboard-view" onclick="appRouter.selectTab(event)">
+                        <i class="fa-solid fa-chart-pie"></i> Painel Principal
+                    </a>
+                    <a href="#" class="menu-item" data-target="inbox-view" onclick="appRouter.selectTab(event)">
+                        <i class="fa-solid fa-comments"></i> Caixa de Entrada
+                    </a>
+                    <a href="#" class="menu-item" data-target="settings-view" onclick="appRouter.selectTab(event)">
+                        <i class="fa-solid fa-sliders"></i> Configurações Meta
+                    </a>
+                    <a href="#" class="menu-item master-only" data-target="admin-view" onclick="appRouter.selectTab(event)">
+                        <i class="fa-solid fa-user-gear"></i> Painel Master Admin
+                    </a>
+                </nav>
+                <div class="sidebar-footer">
+                    <div class="user-profile">
+                        <div class="avatar" id="user-avatar-char">A</div>
+                        <div class="user-info">
+                            <p class="user-name" id="user-display-name">Atendente</p>
+                            <span class="user-role" id="user-display-role">Agente</span>
+                        </div>
+                    </div>
+                    <button class="btn-logout" onclick="appRouter.logout()">
+                        <i class="fa-solid fa-right-from-bracket"></i> Sair
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main Dynamic Workspace -->
+            <main class="workspace">
+                <!-- 3. DASHBOARD VIEW (Hotel Analytics) -->
+                <div id="dashboard-view" class="workspace-view active">
+                    <header class="workspace-header">
+                        <h1>Indicadores Gerais do Hotel</h1>
+                        <span class="date-badge" id="current-date">Hoje</span>
+                    </header>
+
+                    <!-- Metrics Grid -->
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-icon"><i class="fa-regular fa-comments"></i></div>
+                            <div class="metric-info">
+                                <h3>Total de Conversas</h3>
+                                <p class="metric-value" id="stat-conversations">142</p>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon success"><i class="fa-regular fa-circle-check"></i></div>
+                            <div class="metric-info">
+                                <h3>Resolução por Bot</h3>
+                                <p class="metric-value" id="stat-bot-resolution">76.4%</p>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon warning"><i class="fa-regular fa-clock"></i></div>
+                            <div class="metric-info">
+                                <h3>Primeira Resposta (FRT)</h3>
+                                <p class="metric-value" id="stat-frt">45s</p>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon info"><i class="fa-regular fa-calendar-check"></i></div>
+                            <div class="metric-info">
+                                <h3>Conversão Reservas</h3>
+                                <p class="metric-value" id="stat-conversion">18.2%</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Visual Charts Section (Mocked Grid) -->
+                    <div class="dashboard-details">
+                        <div class="chart-box">
+                            <h3>Canal do Funil de Reservas</h3>
+                            <div class="funnel-container">
+                                <div class="funnel-stage stage-1"><span>Pesquisa (100%)</span></div>
+                                <div class="funnel-stage stage-2"><span>Orçamento Enviado (62%)</span></div>
+                                <div class="funnel-stage stage-3"><span>Checkout Aberto (34%)</span></div>
+                                <div class="funnel-stage stage-4"><span>Confirmada (18%)</span></div>
+                            </div>
+                        </div>
+                        <div class="chart-box">
+                            <h3>Contatos Pendentes por Departamento</h3>
+                            <div class="department-list" id="department-list-stats">
+                                <div class="dep-row"><span>Reservas</span><strong>24</strong></div>
+                                <div class="dep-row"><span>Recepção</span><strong>12</strong></div>
+                                <div class="dep-row"><span>Eventos</span><strong>3</strong></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. SETTINGS VIEW (Meta Credentials Configuration) -->
+                <div id="settings-view" class="workspace-view">
+                    <header class="workspace-header">
+                        <h1>Configuração Meta WhatsApp Cloud API</h1>
+                    </header>
+                    <div class="settings-container">
+                        <form id="settings-form" class="settings-card">
+                            <h3>Credenciais do Aplicativo WhatsApp</h3>
+                            <p class="settings-desc">Insira seus dados do painel do Meta for Developers para habilitar o envio e recebimento de mensagens.</p>
+                            
+                            <div class="input-group">
+                                <label for="phone-number-id">Phone Number ID</label>
+                                <input type="text" id="phone-number-id" required placeholder="Ex: 109827364512">
+                            </div>
+                            <div class="input-group">
+                                <label for="waba-id">WhatsApp Business Account ID (WABA ID)</label>
+                                <input type="text" id="waba-id" required placeholder="Ex: 876352410293">
+                            </div>
+                            <div class="input-group">
+                                <label for="verify-token">Verify Token (Segurança Webhook)</label>
+                                <input type="text" id="verify-token" required placeholder="Sua chave de validação personalizada">
+                            </div>
+                            <div class="input-group">
+                                <label for="permanent-token">Permanent Access Token</label>
+                                <textarea id="permanent-token" required placeholder="EAABw..." rows="3"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Salvar Credenciais</button>
+                        </form>
+
+                        <div class="settings-card info-card">
+                            <h3>Webhook Exclusivo Gerado</h3>
+                            <p>Configure a URL abaixo no painel de Webhooks da Meta para receber as mensagens em tempo real.</p>
+                            <div class="webhook-display">
+                                <code id="webhook-generated-url">https://api.q-aura.com/api/webhook/gerando...</code>
+                                <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('webhook-generated-url').innerText)">Copiar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. MASTER ADMIN VIEW (Platform Control) -->
+                <div id="admin-view" class="workspace-view">
+                    <header class="workspace-header">
+                        <h1>Gerenciamento de Clientes & Assinaturas (Master Panel)</h1>
+                    </header>
+                    <div class="admin-grid">
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Hotel</th>
+                                        <th>Subdomínio</th>
+                                        <th>Plano</th>
+                                        <th>Status</th>
+                                        <th>Mensagens/Mês</th>
+                                        <th>Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tenant-admin-list">
+                                    <!-- Dynamic rows loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 6. INBOX VIEW (Real-time Inbox Interface) -->
+                <div id="inbox-view" class="workspace-view">
+                    <div class="inbox-layout">
+                        <!-- Left Sidebar: Conversations Queue -->
+                        <div class="inbox-sidebar">
+                            <div class="inbox-tabs">
+                                <button class="tab-btn active" data-status="waiting">Fila</button>
+                                <button class="tab-btn" data-status="active">Minhas</button>
+                                <button class="tab-btn" data-status="resolved">Resolvidas</button>
+                            </div>
+                            <div class="conversation-search">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="text" placeholder="Pesquisar conversa...">
+                            </div>
+                            <div class="conversation-list" id="convo-list">
+                                <!-- Loaded dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- Center: Active Conversation Workspace -->
+                        <div class="chat-area empty" id="active-chat-area">
+                            <div class="no-chat-selected">
+                                <i class="fa-regular fa-comments chat-placeholder-icon"></i>
+                                <h3>Nenhuma conversa selecionada</h3>
+                                <p>Selecione um cliente na lista lateral para iniciar o atendimento.</p>
+                            </div>
+                            <!-- Active Chat Structure (Toggled class on selection) -->
+                            <div class="chat-wrapper" style="display: none;">
+                                <div class="chat-header">
+                                    <div class="active-contact-info">
+                                        <div class="avatar" id="active-avatar">H</div>
+                                        <div>
+                                            <h4 id="active-contact-name">Hóspede</h4>
+                                            <span class="status-indicator online" id="active-contact-status">Aguardando Atendente</span>
+                                        </div>
+                                    </div>
+                                    <div class="chat-actions">
+                                        <button class="btn btn-secondary btn-sm" id="btn-transfer-chat"><i class="fa-solid fa-arrow-right-arrow-left"></i> Transferir</button>
+                                        <button class="btn btn-success btn-sm" id="btn-resolve-chat"><i class="fa-solid fa-check"></i> Resolver</button>
+                                    </div>
+                                </div>
+                                <div class="chat-messages" id="message-scroll">
+                                    <!-- Loaded dynamic bubbles -->
+                                </div>
+                                <form id="chat-input-form" class="chat-input-area">
+                                    <input type="text" id="chat-message-input" placeholder="Digite uma mensagem ou digite / para respostas rápidas..." autocomplete="off">
+                                    <button type="submit" class="btn-send"><i class="fa-solid fa-paper-plane"></i></button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Right: Context panel -->
+                        <div class="context-panel" id="guest-context" style="display: none;">
+                            <h3>Ficha do Hóspede</h3>
+                            <div class="context-section">
+                                <div class="info-row"><span>Telefone</span><strong id="guest-phone">+55 11 99999-9999</strong></div>
+                                <div class="info-row"><span>Idioma</span><strong id="guest-lang">Português</strong></div>
+                                <div class="info-row"><span>Fidelidade</span><strong id="guest-loyalty">Gold Member</strong></div>
+                            </div>
+                            <h3>Status do Funil</h3>
+                            <div class="funnel-badge-container">
+                                <span class="badge active" id="guest-funnel-stage">Cotação Pendente</span>
+                            </div>
+                            <h3>Simulador de Cotação PMS</h3>
+                            <div class="pms-simulator">
+                                <div class="input-group">
+                                    <label>Check-in</label>
+                                    <input type="date" value="2026-07-15">
+                                </div>
+                                <div class="input-group">
+                                    <label>Check-out</label>
+                                    <input type="date" value="2026-07-20">
+                                </div>
+                                <button class="btn btn-primary btn-sm btn-block">Consultar Disponibilidade</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
