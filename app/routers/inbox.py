@@ -1,5 +1,6 @@
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
+from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import List, Optional
@@ -157,4 +158,63 @@ def resolve_conversation(
     db.commit()
     db.refresh(convo)
     return convo
+
+@router.get("/media/{media_id}")
+async def get_media(
+    media_id: str,
+    token: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Proxies and downloads media from Meta API using WABA credentials,
+    returning the raw binary stream.
+    Supports authenticating via query parameter 'token' to bypass header requirements for img tags.
+    """
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+        
+    try:
+        # Safely decode the token to retrieve tenant_id
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
+        tenant_id: str = payload.get("tenant_id")
+        if not tenant_id:
+            raise HTTPException(status_code=401, detail="Invalid token claims")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid credentials token")
+        
+    # Get credentials for tenant
+    creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == tenant_id).first()
+    if not creds:
+        raise HTTPException(status_code=400, detail="Meta credentials not configured")
+        
+    headers = {
+        "Authorization": f"Bearer {creds.permanent_access_token}"
+    }
+    
+    meta_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{media_id}"
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            # 1. Fetch metadata to get download URL
+            meta_res = await client.get(meta_url, headers=headers)
+            if meta_res.status_code != 200:
+                raise HTTPException(status_code=meta_res.status_code, detail="Failed to fetch media metadata from Meta")
+                
+            res_data = meta_res.json()
+            download_url = res_data.get("url")
+            mime_type = res_data.get("mime_type", "image/jpeg")
+            
+            if not download_url:
+                raise HTTPException(status_code=404, detail="Media download URL not found in Meta response")
+                
+            # 2. Fetch binary file using the download URL
+            file_res = await client.get(download_url, headers=headers)
+            if file_res.status_code != 200:
+                raise HTTPException(status_code=file_res.status_code, detail="Failed to download media file from Meta")
+                
+            return Response(content=file_res.content, media_type=mime_type)
+            
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f"Bad gateway response from Meta: {str(e)}")
+
 

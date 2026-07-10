@@ -240,10 +240,11 @@ const appRouter = {
                 
                 if (m.message_type === "image" && m.media_url) {
                     const img = document.createElement("img");
-                    img.src = m.media_url;
+                    const proxyUrl = `${API_URL}/api/inbox/media/${m.media_url}?token=${state.token}`;
+                    img.src = proxyUrl;
                     img.alt = "Imagem";
                     img.className = "chat-media-image";
-                    img.onclick = () => window.open(m.media_url, "_blank");
+                    img.onclick = () => window.open(proxyUrl, "_blank");
                     bubble.appendChild(img);
                     
                     if (m.body && m.body !== "[Imagem]") {
@@ -327,10 +328,11 @@ const appRouter = {
                 
                 if (message.message_type === "image" && message.media_url) {
                     const img = document.createElement("img");
-                    img.src = message.media_url;
+                    const proxyUrl = `${API_URL}/api/inbox/media/${message.media_url}?token=${state.token}`;
+                    img.src = proxyUrl;
                     img.alt = "Imagem";
                     img.className = "chat-media-image";
-                    img.onclick = () => window.open(message.media_url, "_blank");
+                    img.onclick = () => window.open(proxyUrl, "_blank");
                     bubble.appendChild(img);
                     
                     if (message.body && message.body !== "[Imagem]") {

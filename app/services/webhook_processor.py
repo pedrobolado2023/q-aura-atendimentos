@@ -113,6 +113,8 @@ async def process_webhook_payload(tenant_id: str, payload: dict, db: Session, we
                         "conversation_id": convo.id,
                         "sender_type": "contact",
                         "body": body_content,
+                        "message_type": msg_type,
+                        "media_url": media_url,
                         "created_at": new_msg.created_at.isoformat() if new_msg.created_at else None
                     }
                     await websocket_broadcast_fn(tenant_id, broadcast_data)
