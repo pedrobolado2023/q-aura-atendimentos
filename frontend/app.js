@@ -575,8 +575,6 @@ const appRouter = {
     },
 
     async deleteTeamUser(userId) {
-        if (!confirm("Tem certeza que deseja remover este colaborador? O acesso dele será revogado permanentemente.")) return;
-        
         try {
             await api.delete(`/api/auth/users/${userId}`);
             showToast("Colaborador removido com sucesso!", "success");
