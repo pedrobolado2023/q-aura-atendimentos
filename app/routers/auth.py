@@ -174,7 +174,10 @@ def get_hotel_users(
     if current_user.role not in ["administrator", "manager"]:
         raise HTTPException(status_code=403, detail="Apenas administradores e supervisores podem acessar a lista de usuários.")
         
-    return db.query(User).filter(User.tenant_id == current_tenant.id).all()
+    query = db.query(User).filter(User.tenant_id == current_tenant.id)
+    if current_user.role == "manager":
+        query = query.filter(User.role != "administrator")
+    return query.all()
 
 
 @router.post("/users", response_model=UserResponse)
