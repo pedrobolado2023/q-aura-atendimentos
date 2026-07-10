@@ -124,6 +124,7 @@ class ConversationResponse(BaseModel):
     last_message_at: datetime
     created_at: datetime
     unread: bool
+    unread_count: int
     contact: Optional[ContactResponse] = None
 
     class Config:

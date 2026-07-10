@@ -96,12 +96,11 @@ async def process_webhook_payload(tenant_id: str, payload: dict, db: Session, we
                         db.commit()
                         db.refresh(contact)
 
-                    # 2. Resolve Conversation (find active/waiting/bot, or create new)
+                    # 2. Resolve Conversation (find the latest conversation for this contact)
                     convo = db.query(Conversation).filter(
                         Conversation.tenant_id == tenant_id,
-                        Conversation.contact_id == contact.id,
-                        Conversation.status.in_(["bot", "waiting", "active"])
-                    ).first()
+                        Conversation.contact_id == contact.id
+                    ).order_by(Conversation.last_message_at.desc()).first()
 
                     # Check if chatbot is active for the tenant
                     bot_config = db.query(BotConfig).filter(BotConfig.tenant_id == tenant_id).first()
@@ -117,6 +116,11 @@ async def process_webhook_payload(tenant_id: str, payload: dict, db: Session, we
                         db.add(convo)
                         db.commit()
                         db.refresh(convo)
+                    else:
+                        # If conversation was resolved, re-open it!
+                        if convo.status == "resolved":
+                            convo.status = "bot" if is_bot_active else "waiting"
+                            convo.assigned_user_id = None # Clear previous assignment so it goes to queue!
 
                     # Check if message already exists
                     existing_msg = db.query(Message).filter(Message.meta_message_id == meta_msg_id).first()
@@ -137,9 +141,10 @@ async def process_webhook_payload(tenant_id: str, payload: dict, db: Session, we
                     )
                     db.add(new_msg)
                     
-                    # Update conversation last message timestamp and mark as unread
+                    # Update conversation last message timestamp and increment unread count
                     convo.last_message_at = datetime.utcnow()
                     convo.unread = True
+                    convo.unread_count = (convo.unread_count or 0) + 1
                     db.commit()
                     db.refresh(new_msg)
 
@@ -152,6 +157,7 @@ async def process_webhook_payload(tenant_id: str, payload: dict, db: Session, we
                         "message_type": msg_type,
                         "media_url": media_url,
                         "unread": True,
+                        "unread_count": convo.unread_count,
                         "created_at": new_msg.created_at.isoformat() if new_msg.created_at else None
                     }
                     await websocket_broadcast_fn(tenant_id, broadcast_data)

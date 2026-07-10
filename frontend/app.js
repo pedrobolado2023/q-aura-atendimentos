@@ -212,7 +212,7 @@ const appRouter = {
                 const item = document.createElement("div");
                 item.setAttribute("data-id", c.id);
                 
-                const isUnread = c.unread && state.activeConversationId !== c.id;
+                const isUnread = c.unread_count && c.unread_count > 0 && state.activeConversationId !== c.id;
                 item.className = `convo-item ${state.activeConversationId === c.id ? 'active' : ''} ${isUnread ? 'unread' : ''}`;
                 item.onclick = () => this.selectConversation(c.id);
                 
@@ -231,13 +231,18 @@ const appRouter = {
                 
                 const subtitleText = statusLabel;
                 
+                // Unread badge with number count
+                const unreadBadge = isUnread
+                    ? `<span class="unread-badge" style="background-color: var(--color-primary); color: white; border-radius: 50%; font-size: 10px; font-weight: 700; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; margin-left: 8px; box-shadow: 0 0 4px var(--color-primary);">${c.unread_count}</span>`
+                    : '';
+                
                 item.innerHTML = `
                     <img class="avatar" src="${avatarUrl}" alt="${contactName}">
                     <div class="convo-meta">
                         <h4>
                             <span style="display: flex; align-items: center;">
                                 ${contactName}
-                                ${isUnread ? '<span class="unread-dot"></span>' : ''}
+                                ${unreadBadge}
                             </span>
                             <span class="convo-time">Hoje</span>
                         </h4>
@@ -260,14 +265,15 @@ const appRouter = {
             if (item.getAttribute("data-id") === convoId) {
                 item.classList.add("active");
                 item.classList.remove("unread");
-                const dot = item.querySelector(".unread-dot");
-                if (dot) dot.remove();
+                const badge = item.querySelector(".unread-badge");
+                if (badge) badge.remove();
             }
         });
         
         const convo = state.conversations.find(c => c.id === convoId);
         if (convo) {
             convo.unread = false;
+            convo.unread_count = 0;
         }
         
         // Show conversation pane

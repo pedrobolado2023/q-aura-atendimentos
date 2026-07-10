@@ -48,8 +48,9 @@ def get_messages(
         raise HTTPException(status_code=404, detail="Conversation not found")
         
     # Mark conversation as read
-    if convo.unread:
+    if convo.unread or (convo.unread_count and convo.unread_count > 0):
         convo.unread = False
+        convo.unread_count = 0
         db.commit()
         
     return db.query(Message).filter(Message.conversation_id == conversation_id).order_by(Message.created_at.asc()).all()
