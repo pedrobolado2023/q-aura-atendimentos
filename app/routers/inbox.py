@@ -65,6 +65,9 @@ async def send_message(
     if not creds:
         raise HTTPException(status_code=400, detail="Meta credentials not configured for this tenant")
 
+    # Prepend agent's name in WhatsApp bold format
+    formatted_body = f"*Atendente {current_user.name}:* {body}"
+
     # 3. Post to Meta API (WhatsApp Cloud API)
     meta_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{creds.phone_number_id}/messages"
     headers = {
@@ -78,7 +81,7 @@ async def send_message(
         "type": "text",
         "text": {
             "preview_url": False,
-            "body": body
+            "body": formatted_body
         }
     }
 
@@ -102,7 +105,7 @@ async def send_message(
         sender_type="agent",
         sender_id=current_user.id,
         message_type="text",
-        body=body,
+        body=formatted_body,
         meta_message_id=meta_message_id,
         status="sent" if meta_message_id else "failed"
     )

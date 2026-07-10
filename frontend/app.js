@@ -40,6 +40,27 @@ function showToast(message, type = "success") {
     }, 4000);
 }
 
+// --- WhatsApp Formatting Helper ---
+function formatMessageBody(body) {
+    if (!body) return "";
+    // Safe escape HTML to prevent XSS
+    let escaped = body
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+        
+    // Replace *bold* with <strong>bold</strong>
+    escaped = escaped.replace(/\*(.*?)\*/g, "<strong>$1</strong>");
+    // Replace _italic_ with <em>italic</em>
+    escaped = escaped.replace(/_(.*?)_/g, "<em>$1</em>");
+    // Replace \n with <br>
+    escaped = escaped.replace(/\n/g, "<br>");
+    
+    return escaped;
+}
+
 // --- API Client ---
 const api = {
     async post(endpoint, data, useAuth = true) {
@@ -249,12 +270,12 @@ const appRouter = {
                     
                     if (m.body && m.body !== "[Imagem]") {
                         const caption = document.createElement("div");
-                        caption.innerText = m.body;
+                        caption.innerHTML = formatMessageBody(m.body);
                         caption.style.marginTop = "8px";
                         bubble.appendChild(caption);
                     }
                 } else {
-                    bubble.innerText = m.body;
+                    bubble.innerHTML = formatMessageBody(m.body);
                 }
                 scroll.appendChild(bubble);
             });
@@ -337,12 +358,12 @@ const appRouter = {
                     
                     if (message.body && message.body !== "[Imagem]") {
                         const caption = document.createElement("div");
-                        caption.innerText = message.body;
+                        caption.innerHTML = formatMessageBody(message.body);
                         caption.style.marginTop = "8px";
                         bubble.appendChild(caption);
                     }
                 } else {
-                    bubble.innerText = message.body;
+                    bubble.innerHTML = formatMessageBody(message.body);
                 }
                 scroll.appendChild(bubble);
                 scroll.scrollTop = scroll.scrollHeight;
