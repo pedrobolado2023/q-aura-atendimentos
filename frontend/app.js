@@ -91,6 +91,22 @@ const api = {
             throw new Error("Erro de conexão");
         }
         return response.json();
+    },
+
+    async delete(endpoint) {
+        const headers = {};
+        if (state.token) {
+            headers["Authorization"] = `Bearer ${state.token}`;
+        }
+        const response = await fetch(`${API_URL}${endpoint}`, {
+            method: "DELETE",
+            headers
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || "Erro ao excluir");
+        }
+        return response.json();
     }
 };
 
