@@ -117,6 +117,8 @@ const appRouter = {
             this.loadAdminTenants();
         } else if (targetView === "settings-view") {
             this.loadMetaSettings();
+        } else if (targetView === "chatbot-view") {
+            this.loadBotConfig();
         } else if (targetView === "crm-view") {
             // Limpa o cache temporário ao mudar de aba
             tempContacts = [];
@@ -406,6 +408,27 @@ const appRouter = {
         } catch (e) {
             document.getElementById("webhook-generated-url").innerText = `${API_URL}/api/webhook/${state.tenant_id}`;
             console.log("Credenciais Meta não encontradas ou não configuradas.");
+        }
+    },
+
+    async loadBotConfig() {
+        try {
+            const config = await api.get("/api/inbox/bot-config");
+            if (config) {
+                document.getElementById("bot-active-toggle").checked = config.is_active;
+                document.getElementById("bot-welcome-msg").value = config.welcome_message || "";
+                document.getElementById("bot-fallback-msg").value = config.fallback_message || "";
+                document.getElementById("bot-out-hours-msg").value = config.out_of_hours_message || "";
+                document.getElementById("bot-transfer-keywords").value = config.transfer_keywords || "";
+                
+                // Sync preview text
+                const previewText = document.getElementById("preview-bot-welcome-text");
+                if (previewText) {
+                    previewText.innerHTML = formatMessageBody(config.welcome_message || "Olá! Bem-vindo ao nosso hotel...");
+                }
+            }
+        } catch (e) {
+            console.error("Erro ao carregar configurações do chatbot:", e);
         }
     },
 
@@ -1016,6 +1039,50 @@ if (dispatchCampaignBtn) {
         } finally {
             dispatchCampaignBtn.disabled = false;
             dispatchCampaignBtn.innerText = "Disparar Campanha para Lista";
+        }
+    });
+}
+
+// Chatbot Config Submit
+const chatbotForm = document.getElementById("chatbot-config-form");
+if (chatbotForm) {
+    const welcomeMsgEl = document.getElementById("bot-welcome-msg");
+    if (welcomeMsgEl) {
+        welcomeMsgEl.addEventListener("input", (e) => {
+            const preview = document.getElementById("preview-bot-welcome-text");
+            if (preview) {
+                preview.innerHTML = formatMessageBody(e.target.value || "Olá! Bem-vindo ao nosso hotel...");
+            }
+        });
+    }
+
+    chatbotForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        
+        const is_active = document.getElementById("bot-active-toggle").checked;
+        const welcome_message = document.getElementById("bot-welcome-msg").value.trim();
+        const fallback_message = document.getElementById("bot-fallback-msg").value.trim();
+        const out_of_hours_message = document.getElementById("bot-out-hours-msg").value.trim();
+        const transfer_keywords = document.getElementById("bot-transfer-keywords").value.trim();
+        
+        const btn = document.getElementById("btn-save-bot-config");
+        btn.disabled = true;
+        btn.innerText = "Salvando...";
+        
+        try {
+            await api.post("/api/inbox/bot-config", {
+                is_active,
+                welcome_message,
+                fallback_message,
+                out_of_hours_message: out_of_hours_message || null,
+                transfer_keywords
+            });
+            showToast("Configurações do Chatbot salvas com sucesso!", "success");
+        } catch (err) {
+            showToast("Erro ao salvar chatbot: " + err.message, "error");
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "Salvar Configurações";
         }
     });
 }

@@ -8,8 +8,8 @@ from uuid import UUID
 from datetime import datetime
 from typing import List, Optional
 from app.database import get_db, SessionLocal
-from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential
-from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest
+from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig
+from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, BotConfigResponse, BotConfigUpdate
 from app.auth import get_current_user, get_current_tenant
 from app.config import settings
 
@@ -504,6 +504,62 @@ def upload_media(
         
     # 4. Return URL path
     return {"url": f"/uploads/{unique_filename}"}
+
+
+@router.get("/bot-config", response_model=BotConfigResponse)
+def get_bot_config(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """
+    Retrieves the Chatbot settings for the current hotel (tenant).
+    Creates default settings if none exist.
+    """
+    if current_user.role not in ["administrator", "manager"]:
+        raise HTTPException(status_code=403, detail="Apenas administradores e supervisores podem acessar as configurações do Bot.")
+        
+    config = db.query(BotConfig).filter(BotConfig.tenant_id == current_tenant.id).first()
+    if not config:
+        config = BotConfig(tenant_id=current_tenant.id)
+        db.add(config)
+        db.commit()
+        db.refresh(config)
+    return config
+
+
+@router.post("/bot-config", response_model=BotConfigResponse)
+def update_bot_config(
+    payload: BotConfigUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """
+    Updates the Chatbot settings for the current hotel (tenant).
+    """
+    if current_user.role not in ["administrator", "manager"]:
+        raise HTTPException(status_code=403, detail="Apenas administradores e supervisores podem alterar as configurações do Bot.")
+        
+    config = db.query(BotConfig).filter(BotConfig.tenant_id == current_tenant.id).first()
+    if not config:
+        config = BotConfig(tenant_id=current_tenant.id)
+        db.add(config)
+        
+    if payload.is_active is not None:
+        config.is_active = payload.is_active
+    if payload.welcome_message is not None:
+        config.welcome_message = payload.welcome_message
+    if payload.fallback_message is not None:
+        config.fallback_message = payload.fallback_message
+    if payload.out_of_hours_message is not None:
+        config.out_of_hours_message = payload.out_of_hours_message
+    if payload.transfer_keywords is not None:
+        config.transfer_keywords = payload.transfer_keywords
+        
+    db.commit()
+    db.refresh(config)
+    return config
 
 
 

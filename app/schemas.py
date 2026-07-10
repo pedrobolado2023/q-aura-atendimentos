@@ -147,4 +147,25 @@ class CampaignSendRequest(BaseModel):
     button_label: Optional[str] = None
     button_url: Optional[str] = None
 
+# Chatbot Config Schemas
+class BotConfigResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    is_active: bool
+    welcome_message: str
+    fallback_message: str
+    out_of_hours_message: str
+    transfer_keywords: str
+
+    class Config:
+        from_attributes = True
+
+class BotConfigUpdate(BaseModel):
+    is_active: Optional[bool] = None
+    welcome_message: Optional[str] = None
+    fallback_message: Optional[str] = None
+    out_of_hours_message: Optional[str] = None
+    transfer_keywords: Optional[str] = None
+
+
 

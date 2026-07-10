@@ -27,6 +27,7 @@ class Tenant(Base):
 
     users = relationship("User", back_populates="tenant", cascade="all, delete-orphan")
     meta_credentials = relationship("MetaCredential", back_populates="tenant", uselist=False, cascade="all, delete-orphan")
+    bot_config = relationship("BotConfig", back_populates="tenant", uselist=False, cascade="all, delete-orphan")
     departments = relationship("Department", back_populates="tenant", cascade="all, delete-orphan")
     contacts = relationship("Contact", back_populates="tenant", cascade="all, delete-orphan")
     conversations = relationship("Conversation", back_populates="tenant", cascade="all, delete-orphan")
@@ -59,6 +60,20 @@ class MetaCredential(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     tenant = relationship("Tenant", back_populates="meta_credentials")
+
+class BotConfig(Base):
+    __tablename__ = "qa_bot_configs"
+    id = Column(String(36), primary_key=True, default=generate_uuid_str)
+    tenant_id = Column(String(36), ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, unique=True)
+    is_active = Column(Boolean, default=True)
+    welcome_message = Column(Text, default="Olá! Seja bem-vindo ao nosso hotel. Como posso ajudar você hoje?")
+    fallback_message = Column(Text, default="Desculpe, não consegui entender. Digite *Atendente* a qualquer momento para falar com um humano.")
+    out_of_hours_message = Column(Text, default="Olá! Nosso horário de atendimento é das 08h às 22h. Deixe sua mensagem que responderemos o mais breve possível.")
+    transfer_keywords = Column(Text, default="atendente,humano,falar,suporte,ajuda")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    tenant = relationship("Tenant", back_populates="bot_config")
 
 class Department(Base):
     __tablename__ = "qa_departments"

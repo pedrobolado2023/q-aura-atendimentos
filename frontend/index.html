@@ -97,6 +97,9 @@
                     <a href="#" class="menu-item admin-manager-only" data-target="crm-view" onclick="appRouter.selectTab(event)">
                         <i class="fa-solid fa-bullhorn"></i> CRM & Marketing
                     </a>
+                    <a href="#" class="menu-item admin-manager-only" data-target="chatbot-view" onclick="appRouter.selectTab(event)">
+                        <i class="fa-solid fa-robot"></i> Robô Chatbot
+                    </a>
                     <a href="#" class="menu-item admin-manager-only" data-target="settings-view" onclick="appRouter.selectTab(event)">
                         <i class="fa-solid fa-sliders"></i> Configurações Meta
                     </a>
@@ -243,6 +246,78 @@
                                     <!-- Dynamic rows loaded here -->
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5A. CHATBOT CONFIG VIEW -->
+                <div id="chatbot-view" class="workspace-view">
+                    <header class="workspace-header">
+                        <h1>Robô de Atendimento & Auto-respostas</h1>
+                    </header>
+                    <div class="settings-container" style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+                        <form id="chatbot-config-form" class="settings-card" style="display: flex; flex-direction: column; gap: 20px;">
+                            <h3>Configuração Geral do Robô</h3>
+                            <p class="settings-desc">Defina as mensagens automáticas iniciais que seus hóspedes receberão quando iniciarem um contato.</p>
+                            
+                            <div class="input-group" style="display: flex; align-items: center; gap: 10px;">
+                                <label for="bot-active-toggle" style="margin-bottom: 0; cursor: pointer; display: flex; align-items: center; gap: 8px; color: var(--text-primary); font-weight: 600;">
+                                    <input type="checkbox" id="bot-active-toggle" style="width: 18px; height: 18px; cursor: pointer;">
+                                    <span>Ativar Robô Chatbot</span>
+                                </label>
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="bot-welcome-msg">Mensagem de Boas-Vindas</label>
+                                <p class="settings-desc" style="margin-top: -6px; margin-bottom: 8px;">Enviada automaticamente na primeira interação do hóspede.</p>
+                                <textarea id="bot-welcome-msg" rows="3" required placeholder="Olá! Bem-vindo ao nosso hotel..."></textarea>
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="bot-fallback-msg">Mensagem de Fallback (Não Entendido)</label>
+                                <p class="settings-desc" style="margin-top: -6px; margin-bottom: 8px;">Enviada caso o robô não entenda ou quando o hóspede enviar mais mensagens na fase do Bot.</p>
+                                <textarea id="bot-fallback-msg" rows="3" required placeholder="Desculpe, não consegui entender..."></textarea>
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="bot-out-hours-msg">Mensagem de Fora de Horário (Opcional)</label>
+                                <p class="settings-desc" style="margin-top: -6px; margin-bottom: 8px;">Enviada caso o hóspede entre em contato fora do horário de atendimento.</p>
+                                <textarea id="bot-out-hours-msg" rows="3" placeholder="Olá! Nosso horário de atendimento é..."></textarea>
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="bot-transfer-keywords">Palavras-chave para Transferir (Separadas por vírgula)</label>
+                                <p class="settings-desc" style="margin-top: -6px; margin-bottom: 8px;">Caso a mensagem do cliente contenha alguma delas, ele será enviado para a fila humana.</p>
+                                <input type="text" id="bot-transfer-keywords" required placeholder="Ex: atendente, falar, humano, ajuda, recepcionista">
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary" id="btn-save-bot-config" style="align-self: flex-start;">Salvar Configurações</button>
+                        </form>
+
+                        <!-- Live Smartphone Bot Preview -->
+                        <div class="settings-card" style="display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--bg-secondary); border: none;">
+                            <h3 style="align-self: flex-start;"><i class="fa-solid fa-robot"></i> Simulador do Bot</h3>
+                            <p class="settings-desc" style="align-self: flex-start; margin-bottom: 20px;">Prévia da mensagem de boas-vindas do Robô.</p>
+                            
+                            <!-- Phone Mockup -->
+                            <div class="phone-mockup" style="position: relative; width: 260px; height: 420px; border: 10px solid #222; border-radius: 32px; background: #e5ddd5; box-shadow: var(--shadow-md); display: flex; flex-direction: column; overflow: hidden; font-family: sans-serif; box-sizing: border-box;">
+                                <!-- Phone Header -->
+                                <div style="height: 32px; background: #075e54; color: white; display: flex; align-items: center; padding: 0 12px; font-size: 10px; font-weight: 600;">
+                                    <i class="fa-solid fa-robot" style="font-size: 10px; color: #128c7e; margin-right: 6px;"></i>
+                                    <span>Assistente Virtual</span>
+                                </div>
+                                <!-- Phone Body -->
+                                <div style="flex: 1; padding: 10px; display: flex; flex-direction: column; justify-content: flex-start; overflow-y: auto;">
+                                    <!-- Customer greeting -->
+                                    <div style="background: #e2f7cb; border-radius: 6px; box-shadow: 0 1px 1px rgba(0,0,0,0.1); padding: 6px; max-width: 85%; align-self: flex-end; font-size: 10px; color: #333; margin-bottom: 8px;">
+                                        Oi, boa tarde!
+                                    </div>
+                                    <!-- Bot Welcome Reply -->
+                                    <div style="background: white; border-radius: 6px; box-shadow: 0 1px 1px rgba(0,0,0,0.1); padding: 6px; max-width: 85%; align-self: flex-start; font-size: 10px; color: #333; line-height: 1.3; margin-bottom: 8px;">
+                                        <p id="preview-bot-welcome-text" style="margin: 0; white-space: pre-wrap; word-break: break-word;"></p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
