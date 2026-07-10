@@ -1,13 +1,13 @@
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response, BackgroundTasks
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 from uuid import UUID
+from datetime import datetime
 from typing import List, Optional
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential
-from app.schemas import ConversationResponse, MessageResponse
-from app.auth import get_current_user, get_current_tenant
+from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest
 from app.config import settings
 
 router = APIRouter(prefix="/api/inbox", tags=["inbox"])
@@ -219,5 +219,241 @@ async def get_media(
             
         except httpx.HTTPError as e:
             raise HTTPException(status_code=502, detail=f"Bad gateway response from Meta: {str(e)}")
+
+# --- CRM & Campaigns Endpoints ---
+
+@router.post("/contacts/bulk")
+def import_contacts_bulk(
+    payload: BulkContactUploadRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """
+    Imports contacts in bulk for the current tenant.
+    """
+    if current_user.role not in ["administrator", "manager"]:
+        raise HTTPException(status_code=403, detail="Apenas administradores e supervisores podem importar contatos.")
+
+    imported_count = 0
+    for c in payload.contacts:
+        # Limpa o telefone para conter apenas dígitos
+        phone = "".join(filter(str.isdigit, c.phone_number))
+        if not phone:
+            continue
+            
+        contact = db.query(Contact).filter(
+            Contact.tenant_id == current_tenant.id,
+            Contact.phone_number == phone
+        ).first()
+        
+        if contact:
+            contact.name = c.name
+        else:
+            contact = Contact(
+                tenant_id=current_tenant.id,
+                phone_number=phone,
+                name=c.name,
+                sales_funnel_stage="lead",
+                loyalty_level="none",
+                language="pt-BR"
+            )
+            db.add(contact)
+        imported_count += 1
+        
+    db.commit()
+    return {"status": "success", "imported": imported_count}
+
+
+async def dispatch_campaign_bulk(
+    tenant_id: UUID,
+    agent_id: UUID,
+    camp: CampaignSendRequest,
+    db_session_factory
+):
+    """
+    Background worker that iterates through all tenant contacts and sends Meta WhatsApp campaigns.
+    """
+    db = db_session_factory()
+    try:
+        creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == tenant_id).first()
+        if not creds:
+            print(f"[Campaign] Credentials not found for tenant {tenant_id}")
+            return
+            
+        contacts = db.query(Contact).filter(Contact.tenant_id == tenant_id).all()
+        if not contacts:
+            print(f"[Campaign] No contacts in database for tenant {tenant_id}")
+            return
+            
+        meta_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{creds.phone_number_id}/messages"
+        headers = {
+            "Authorization": f"Bearer {creds.permanent_access_token}",
+            "Content-Type": "application/json"
+        }
+        
+        async with httpx.AsyncClient() as client:
+            for contact in contacts:
+                # 1. Resolve active conversation
+                convo = db.query(Conversation).filter(
+                    Conversation.tenant_id == tenant_id,
+                    Conversation.contact_id == contact.id,
+                    Conversation.status.in_(["bot", "waiting", "active"])
+                ).first()
+                
+                if not convo:
+                    convo = Conversation(
+                        tenant_id=tenant_id,
+                        contact_id=contact.id,
+                        status="waiting",
+                        routing_mode="queue"
+                    )
+                    db.add(convo)
+                    db.commit()
+                    db.refresh(convo)
+                    
+                # 2. Build Meta Payload
+                payload = {
+                    "messaging_product": "whatsapp",
+                    "recipient_type": "individual",
+                    "to": contact.phone_number
+                }
+                
+                # Check button configuration
+                if camp.button_type == "cta_url" and camp.button_label and camp.button_url:
+                    payload["type"] = "interactive"
+                    payload["interactive"] = {
+                        "type": "cta_url",
+                        "body": {
+                            "text": camp.body
+                        },
+                        "action": {
+                            "name": "cta_url",
+                            "parameters": {
+                                "display_text": camp.button_label,
+                                "url": camp.button_url
+                            }
+                        }
+                    }
+                    if camp.media_type in ["image", "video"] and camp.media_url:
+                        payload["interactive"]["header"] = {
+                            "type": camp.media_type,
+                            camp.media_type: {
+                                "link": camp.media_url
+                            }
+                        }
+                        
+                elif camp.button_type == "quick_reply" and camp.button_label:
+                    payload["type"] = "interactive"
+                    payload["interactive"] = {
+                        "type": "button",
+                        "body": {
+                            "text": camp.body
+                        },
+                        "action": {
+                            "buttons": [
+                                {
+                                    "type": "reply",
+                                    "reply": {
+                                        "id": "campaign_reply_1",
+                                        "title": camp.button_label
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                    if camp.media_type in ["image", "video"] and camp.media_url:
+                        payload["interactive"]["header"] = {
+                            "type": camp.media_type,
+                            camp.media_type: {
+                                "link": camp.media_url
+                            }
+                        }
+                else:
+                    # Media without buttons or plain text
+                    if camp.media_type == "image" and camp.media_url:
+                        payload["type"] = "image"
+                        payload["image"] = {
+                            "link": camp.media_url,
+                            "caption": camp.body
+                        }
+                    elif camp.media_type == "video" and camp.media_url:
+                        payload["type"] = "video"
+                        payload["video"] = {
+                            "link": camp.media_url,
+                            "caption": camp.body
+                        }
+                    elif camp.media_type == "audio" and camp.media_url:
+                        payload["type"] = "audio"
+                        payload["audio"] = {
+                            "link": camp.media_url
+                        }
+                    else:
+                        payload["type"] = "text"
+                        payload["text"] = {
+                            "preview_url": False,
+                            "body": camp.body
+                        }
+                        
+                # 3. Request sending to Meta
+                meta_message_id = None
+                try:
+                    response = await client.post(meta_url, headers=headers, json=payload)
+                    if response.status_code == 200:
+                        res_data = response.json()
+                        meta_message_id = res_data.get("messages", [{}])[0].get("id")
+                except Exception as e:
+                    print(f"[Campaign] Error sending to {contact.phone_number}: {e}")
+                    
+                # 4. Save to Database
+                new_msg = Message(
+                    conversation_id=convo.id,
+                    sender_type="agent",
+                    sender_id=agent_id,
+                    message_type="image" if camp.media_type == "image" else ("video" if camp.media_type == "video" else ("audio" if camp.media_type == "audio" else "text")),
+                    body=camp.body,
+                    media_url=camp.media_url,
+                    meta_message_id=meta_message_id,
+                    status="sent" if meta_message_id else "failed"
+                )
+                db.add(new_msg)
+                convo.last_message_at = datetime.utcnow()
+                db.commit()
+                
+    except Exception as e:
+        print(f"[Campaign] General campaign failure: {e}")
+    finally:
+        db.close()
+
+
+@router.post("/campaigns/send")
+async def send_campaign(
+    camp: CampaignSendRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """
+    Launches a marketing campaign in the background for all tenant contacts.
+    """
+    if current_user.role not in ["administrator", "manager"]:
+        raise HTTPException(status_code=403, detail="Apenas administradores e supervisores podem disparar campanhas.")
+        
+    creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == current_tenant.id).first()
+    if not creds:
+        raise HTTPException(status_code=400, detail="Chaves da API da Meta não configuradas para este hotel.")
+        
+    # Queue campaign dispatch in background
+    background_tasks.add_task(
+        dispatch_campaign_bulk,
+        tenant_id=current_tenant.id,
+        agent_id=current_user.id,
+        camp=camp,
+        db_session_factory=SessionLocal
+    )
+    
+    return {"status": "campaign_queued"}
+
 
 

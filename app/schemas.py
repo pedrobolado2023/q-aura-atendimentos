@@ -127,3 +127,22 @@ class ConversationResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+# CRM & Campaign Schemas
+class BulkContactItem(BaseModel):
+    name: str
+    phone_number: str
+
+class BulkContactUploadRequest(BaseModel):
+    contacts: List[BulkContactItem]
+
+class CampaignSendRequest(BaseModel):
+    name: str
+    media_type: str  # text, image, video, audio
+    media_url: Optional[str] = None
+    body: str
+    button_type: str  # none, cta_url, quick_reply
+    button_label: Optional[str] = None
+    button_url: Optional[str] = None
+
+

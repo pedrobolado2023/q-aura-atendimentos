@@ -94,6 +94,9 @@
                     <a href="#" class="menu-item" data-target="inbox-view" onclick="appRouter.selectTab(event)">
                         <i class="fa-solid fa-comments"></i> Caixa de Entrada
                     </a>
+                    <a href="#" class="menu-item admin-manager-only" data-target="crm-view" onclick="appRouter.selectTab(event)">
+                        <i class="fa-solid fa-bullhorn"></i> CRM & Marketing
+                    </a>
                     <a href="#" class="menu-item admin-manager-only" data-target="settings-view" onclick="appRouter.selectTab(event)">
                         <i class="fa-solid fa-sliders"></i> Configurações Meta
                     </a>
@@ -240,6 +243,148 @@
                                     <!-- Dynamic rows loaded here -->
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5B. CRM & MARKETING VIEW -->
+                <div id="crm-view" class="workspace-view">
+                    <header class="workspace-header">
+                        <h1>CRM & Campanhas de Marketing</h1>
+                    </header>
+                    <div class="crm-grid" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; height: calc(100vh - 120px);">
+                        
+                        <!-- Column 1: Import Contacts -->
+                        <div class="settings-card" style="display: flex; flex-direction: column; height: 100%; box-sizing: border-box;">
+                            <h3><i class="fa-solid fa-file-csv"></i> Importar Lista de Contatos</h3>
+                            <p class="settings-desc">Arraste ou selecione uma planilha de contatos em formato CSV.</p>
+                            
+                            <div class="drag-drop-area" id="contacts-drag-drop" style="border: 2px dashed var(--border-color); padding: 30px 20px; border-radius: var(--radius-md); text-align: center; cursor: pointer; background: var(--bg-primary); transition: var(--transition-smooth); margin-bottom: 16px;">
+                                <i class="fa-solid fa-cloud-arrow-up" style="font-size: 32px; color: var(--color-primary); margin-bottom: 12px;"></i>
+                                <p style="font-size: 13px; font-weight: 500;">Escolha um arquivo CSV</p>
+                                <span style="font-size: 11px; opacity: 0.6;">(Colunas necessárias: Nome, Telefone)</span>
+                                <input type="file" id="contacts-file-input" accept=".csv" style="display: none;">
+                            </div>
+                            
+                            <div style="flex: 1; overflow-y: auto; margin-bottom: 16px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-primary); padding: 8px;">
+                                <h4 style="font-size: 12px; margin-bottom: 6px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Contatos Detectados (<span id="contacts-count">0</span>)</h4>
+                                <div style="overflow-x: auto;">
+                                    <table style="width: 100%; border-collapse: collapse; font-size: 11px;" id="contacts-preview-table">
+                                        <thead>
+                                            <tr style="text-align: left; opacity: 0.6;">
+                                                <th style="padding: 4px;">Nome</th>
+                                                <th style="padding: 4px;">Telefone</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td colspan="2" style="text-align: center; padding: 20px; opacity: 0.5;">Nenhum contato carregado.</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            <button class="btn btn-secondary btn-block" id="btn-save-contacts" disabled>Salvar Contatos no CRM</button>
+                        </div>
+                        
+                        <!-- Column 2: Campaign Builder -->
+                        <div class="settings-card" style="display: flex; flex-direction: column; height: 100%; box-sizing: border-box; overflow-y: auto;">
+                            <h3><i class="fa-solid fa-bullhorn"></i> Criar Disparo de Campanha</h3>
+                            <p class="settings-desc">Configure o conteúdo da mensagem e botões da API do WhatsApp.</p>
+                            
+                            <div class="input-group">
+                                <label for="campaign-name">Nome da Campanha</label>
+                                <input type="text" id="campaign-name" placeholder="Ex: Promoção de Inverno 2026">
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="campaign-media-type">Tipo de Mídia Anexa</label>
+                                <select id="campaign-media-type" style="width: 100%; background: var(--bg-primary); color: var(--text-main); border: 1px solid var(--border-color); padding: 10px; border-radius: var(--radius-sm);">
+                                    <option value="none">Nenhum</option>
+                                    <option value="image">Imagem (Foto)</option>
+                                    <option value="video">Vídeo</option>
+                                    <option value="audio">Áudio (Mensagem de Voz)</option>
+                                </select>
+                            </div>
+                            
+                            <div class="input-group" id="campaign-media-url-group" style="display: none;">
+                                <label for="campaign-media-url">Link URL da Mídia</label>
+                                <input type="text" id="campaign-media-url" placeholder="https://exemplo.com/imagem.png">
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="campaign-body">Mensagem (Corpo de Texto)</label>
+                                <textarea id="campaign-body" rows="5" placeholder="Olá! Temos uma novidade incrível para você..."></textarea>
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="campaign-button-type">Tipo de Botão</label>
+                                <select id="campaign-button-type" style="width: 100%; background: var(--bg-primary); color: var(--text-main); border: 1px solid var(--border-color); padding: 10px; border-radius: var(--radius-sm);">
+                                    <option value="none">Nenhum</option>
+                                    <option value="cta_url">Link de Direcionamento (CTA URL)</option>
+                                    <option value="quick_reply">Resposta Rápida (Quick Reply)</option>
+                                </select>
+                            </div>
+                            
+                            <div id="campaign-button-fields" style="display: none;">
+                                <div class="input-group">
+                                    <label for="campaign-btn-label">Nome do Botão</label>
+                                    <input type="text" id="campaign-btn-label" placeholder="Ex: Reservar Agora">
+                                </div>
+                                <div class="input-group" id="campaign-btn-url-group">
+                                    <label for="campaign-btn-url">Link URL do Botão</label>
+                                    <input type="text" id="campaign-btn-url" placeholder="https://seuhotel.com/reserva">
+                                </div>
+                            </div>
+                            
+                            <button class="btn btn-primary btn-block" style="margin-top: auto;" id="btn-dispatch-campaign">Disparar Campanha para Lista</button>
+                        </div>
+                        
+                        <!-- Column 3: Live Preview (Smartphone Mockup) -->
+                        <div class="settings-card" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; background: var(--bg-secondary); border: none;">
+                            <h3 style="align-self: flex-start;"><i class="fa-brands fa-whatsapp"></i> Visualização da Mensagem</h3>
+                            <p class="settings-desc" style="align-self: flex-start;">Prévia do que o cliente receberá no WhatsApp.</p>
+                            
+                            <!-- Smartphone Mockup Wrapper -->
+                            <div class="phone-mockup" style="position: relative; width: 280px; height: 460px; border: 12px solid #222; border-radius: 36px; background: #e5ddd5; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; overflow: hidden; font-family: sans-serif; box-sizing: border-box;">
+                                <!-- Phone Header -->
+                                <div style="height: 36px; background: #075e54; color: white; display: flex; align-items: center; padding: 0 16px; font-size: 11px; font-weight: 600;">
+                                    <i class="fa-solid fa-circle" style="font-size: 8px; color: #128c7e; margin-right: 8px;"></i>
+                                    <span>Q-aura Atendimento</span>
+                                </div>
+                                
+                                <!-- Phone Body (Chat Area) -->
+                                <div style="flex: 1; padding: 12px; display: flex; flex-direction: column; justify-content: flex-start; overflow-y: auto;">
+                                    
+                                    <!-- Dynamic Whatsapp Bubble Mockup -->
+                                    <div style="background: white; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.15); padding: 8px; max-width: 90%; align-self: flex-start; font-size: 11px; color: #333; line-height: 1.4; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box;">
+                                        <!-- Header Image Preview -->
+                                        <div id="preview-header-media" style="display: none; border-radius: 4px; overflow: hidden; background: #f0f0f0; max-height: 120px; text-align: center;">
+                                            <img id="preview-header-img" style="width: 100%; height: auto; object-fit: cover; display: none;" src="">
+                                            <div id="preview-header-video" style="padding: 20px 0; color: #555; display: none; font-size: 10px;"><i class="fa-solid fa-play-circle" style="font-size: 24px; color: #075e54; margin-bottom: 4px; display: block;"></i> Vídeo Anexo</div>
+                                        </div>
+                                        
+                                        <!-- Audio Message Mockup -->
+                                        <div id="preview-audio-media" style="display: none; align-items: center; gap: 8px; padding: 4px; background: #e2f7cb; border-radius: 4px; margin-bottom: 4px;">
+                                            <i class="fa-solid fa-play" style="color: #075e54; font-size: 14px;"></i>
+                                            <div style="flex: 1; height: 3px; background: #b8e6b8; position: relative;"><div style="width: 30%; height: 100%; background: #075e54;"></div></div>
+                                            <span style="font-size: 9px; opacity: 0.6;">0:15</span>
+                                        </div>
+                                        
+                                        <!-- Text body -->
+                                        <p id="preview-message-body" style="margin: 0; white-space: pre-wrap; word-break: break-word;">Olá! Temos uma novidade incrível para você...</p>
+                                        
+                                        <!-- Interactive Button Mockup -->
+                                        <div id="preview-action-button" style="display: none; border-top: 1px solid #eee; padding-top: 6px; text-align: center; margin-top: 4px;">
+                                            <a href="#" id="preview-btn-anchor" style="color: #00766c; font-weight: 600; text-decoration: none; font-size: 11px; display: flex; align-items: center; justify-content: center; gap: 4px;" target="_blank">
+                                                <i class="fa-solid fa-arrow-up-right-from-square" id="preview-btn-icon" style="font-size: 9px;"></i>
+                                                <span id="preview-btn-text">Reservar Agora</span>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -116,6 +116,10 @@ const appRouter = {
             this.loadAdminTenants();
         } else if (targetView === "settings-view") {
             this.loadMetaSettings();
+        } else if (targetView === "crm-view") {
+            // Limpa o cache temporário ao mudar de aba
+            tempContacts = [];
+            updateContactsPreview();
         }
     },
 
@@ -553,6 +557,315 @@ document.getElementById("btn-pms-send").addEventListener("click", () => {
     msgInput.focus();
     showToast("Texto de cotação copiado para o chat!", "success");
 });
+
+// --- CRM & Marketing Campaign Handler ---
+let tempContacts = [];
+
+const dragDropArea = document.getElementById("contacts-drag-drop");
+const fileInput = document.getElementById("contacts-file-input");
+
+if (dragDropArea && fileInput) {
+    dragDropArea.addEventListener("click", () => fileInput.click());
+
+    dragDropArea.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        dragDropArea.style.borderColor = "var(--color-primary)";
+        dragDropArea.style.background = "rgba(79, 70, 229, 0.05)";
+    });
+
+    dragDropArea.addEventListener("dragleave", () => {
+        dragDropArea.style.borderColor = "var(--border-color)";
+        dragDropArea.style.background = "var(--bg-primary)";
+    });
+
+    dragDropArea.addEventListener("drop", (e) => {
+        e.preventDefault();
+        dragDropArea.style.borderColor = "var(--border-color)";
+        dragDropArea.style.background = "var(--bg-primary)";
+        if (e.dataTransfer.files.length > 0) {
+            handleContactsFile(e.dataTransfer.files[0]);
+        }
+    });
+
+    fileInput.addEventListener("change", (e) => {
+        if (e.target.files.length > 0) {
+            handleContactsFile(e.target.files[0]);
+        }
+    });
+}
+
+function handleContactsFile(file) {
+    if (!file.name.endsWith(".csv")) {
+        showToast("Por favor, envie um arquivo contendo uma planilha CSV.", "error");
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const text = e.target.result;
+        parseCSVContacts(text);
+    };
+    reader.readAsText(file, "UTF-8");
+}
+
+function parseCSVContacts(text) {
+    const lines = text.split(/\r?\n/);
+    if (lines.length <= 1) {
+        showToast("O arquivo CSV está vazio ou não possui contatos.", "error");
+        return;
+    }
+    
+    tempContacts = [];
+    // Tenta detectar colunas pelo cabeçalho
+    const headers = lines[0].split(/[;,]/).map(h => h.trim().toLowerCase());
+    
+    let nameIdx = headers.indexOf("nome");
+    let phoneIdx = headers.indexOf("telefone");
+    
+    // Fallbacks
+    if (nameIdx === -1) nameIdx = 0;
+    if (phoneIdx === -1) phoneIdx = 1;
+    
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        const cols = line.split(/[;,]/).map(c => c.trim().replace(/^["']|["']$/g, ""));
+        if (cols.length <= Math.max(nameIdx, phoneIdx)) continue;
+        
+        const name = cols[nameIdx] || "Hóspede";
+        const phone = cols[phoneIdx] || "";
+        
+        if (phone) {
+            tempContacts.push({ name, phone_number: phone });
+        }
+    }
+    
+    updateContactsPreview();
+}
+
+function updateContactsPreview() {
+    const tbody = document.querySelector("#contacts-preview-table tbody");
+    const countEl = document.getElementById("contacts-count");
+    const saveBtn = document.getElementById("btn-save-contacts");
+    
+    if (!tbody || !countEl || !saveBtn) return;
+    
+    tbody.innerHTML = "";
+    countEl.innerText = tempContacts.length;
+    
+    if (tempContacts.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="2" style="text-align: center; padding: 20px; opacity: 0.5;">Nenhum contato carregado.</td></tr>`;
+        saveBtn.disabled = true;
+        saveBtn.classList.remove("btn-primary");
+        saveBtn.classList.add("btn-secondary");
+        return;
+    }
+    
+    // Exibir prévia dos primeiros 20
+    const previewList = tempContacts.slice(0, 20);
+    previewList.forEach(c => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td style="padding: 6px; border-bottom: 1px solid var(--border-color);">${c.name}</td>
+            <td style="padding: 6px; border-bottom: 1px solid var(--border-color);">${c.phone_number}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+    
+    if (tempContacts.length > 20) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td colspan="2" style="text-align: center; padding: 6px; opacity: 0.6; font-style: italic;">...e mais ${tempContacts.length - 20} contatos.</td>
+        `;
+        tbody.appendChild(tr);
+    }
+    
+    saveBtn.disabled = false;
+    saveBtn.classList.remove("btn-secondary");
+    saveBtn.classList.add("btn-primary");
+}
+
+// Bulk Save
+const saveContactsBtn = document.getElementById("btn-save-contacts");
+if (saveContactsBtn) {
+    saveContactsBtn.addEventListener("click", async () => {
+        if (tempContacts.length === 0) return;
+        
+        saveContactsBtn.disabled = true;
+        saveContactsBtn.innerText = "Salvando contatos...";
+        
+        try {
+            const res = await api.post("/api/inbox/contacts/bulk", { contacts: tempContacts });
+            showToast(`${res.imported} contatos importados com sucesso!`, "success");
+            
+            // Limpa o cache
+            tempContacts = [];
+            updateContactsPreview();
+        } catch (err) {
+            showToast("Erro ao importar contatos: " + err.message, "error");
+        } finally {
+            saveContactsBtn.disabled = false;
+            saveContactsBtn.innerText = "Salvar Contatos no CRM";
+        }
+    });
+}
+
+// --- Live Preview Synchronizer ---
+function syncCampaignPreview() {
+    const mediaTypeSelect = document.getElementById("campaign-media-type");
+    if (!mediaTypeSelect) return; // Prevent run on separate views
+    
+    const mediaType = mediaTypeSelect.value;
+    const mediaUrl = document.getElementById("campaign-media-url").value.trim();
+    const body = document.getElementById("campaign-body").value;
+    const buttonType = document.getElementById("campaign-button-type").value;
+    const btnLabel = document.getElementById("campaign-btn-label").value.trim();
+    const btnUrl = document.getElementById("campaign-btn-url").value.trim();
+    
+    // Exibe ou oculta campo de link de mídia
+    const mediaUrlGroup = document.getElementById("campaign-media-url-group");
+    if (mediaType !== "none") {
+        mediaUrlGroup.style.display = "block";
+    } else {
+        mediaUrlGroup.style.display = "none";
+    }
+    
+    // Elementos do mockup de celular
+    const headerMedia = document.getElementById("preview-header-media");
+    const previewImg = document.getElementById("preview-header-img");
+    const previewVideo = document.getElementById("preview-header-video");
+    const previewAudio = document.getElementById("preview-audio-media");
+    
+    headerMedia.style.display = "none";
+    previewImg.style.display = "none";
+    previewVideo.style.display = "none";
+    previewAudio.style.display = "none";
+    
+    if (mediaType === "image") {
+        headerMedia.style.display = "block";
+        previewImg.style.display = "block";
+        previewImg.src = mediaUrl || "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400";
+    } else if (mediaType === "video") {
+        headerMedia.style.display = "block";
+        previewVideo.style.display = "block";
+    } else if (mediaType === "audio") {
+        previewAudio.style.display = "flex";
+    }
+    
+    // Texto do corpo
+    const previewBody = document.getElementById("preview-message-body");
+    previewBody.innerHTML = formatMessageBody(body || "Olá! Temos uma novidade incrível para você...");
+    
+    // Controles de Botões
+    const btnFields = document.getElementById("campaign-button-fields");
+    const btnUrlGroup = document.getElementById("campaign-btn-url-group");
+    
+    if (buttonType !== "none") {
+        btnFields.style.display = "block";
+        if (buttonType === "cta_url") {
+            btnUrlGroup.style.display = "block";
+        } else {
+            btnUrlGroup.style.display = "none";
+        }
+    } else {
+        btnFields.style.display = "none";
+    }
+    
+    // Visualização do Botão
+    const previewBtn = document.getElementById("preview-action-button");
+    const previewBtnAnchor = document.getElementById("preview-btn-anchor");
+    const previewBtnText = document.getElementById("preview-btn-text");
+    const previewBtnIcon = document.getElementById("preview-btn-icon");
+    
+    if (buttonType !== "none" && btnLabel) {
+        previewBtn.style.display = "block";
+        previewBtnText.innerText = btnLabel;
+        if (buttonType === "cta_url") {
+            previewBtnAnchor.href = btnUrl || "#";
+            previewBtnIcon.style.display = "inline-block";
+        } else {
+            previewBtnAnchor.href = "#";
+            previewBtnIcon.style.display = "none";
+        }
+    } else {
+        previewBtn.style.display = "none";
+    }
+}
+
+// Vincula ouvintes
+const mediaTypeField = document.getElementById("campaign-media-type");
+if (mediaTypeField) {
+    mediaTypeField.addEventListener("change", syncCampaignPreview);
+    document.getElementById("campaign-media-url").addEventListener("input", syncCampaignPreview);
+    document.getElementById("campaign-body").addEventListener("input", syncCampaignPreview);
+    document.getElementById("campaign-button-type").addEventListener("change", syncCampaignPreview);
+    document.getElementById("campaign-btn-label").addEventListener("input", syncCampaignPreview);
+    document.getElementById("campaign-btn-url").addEventListener("input", syncCampaignPreview);
+}
+
+// Enviar Campanha
+const dispatchCampaignBtn = document.getElementById("btn-dispatch-campaign");
+if (dispatchCampaignBtn) {
+    dispatchCampaignBtn.addEventListener("click", async () => {
+        const name = document.getElementById("campaign-name").value.trim();
+        const mediaType = document.getElementById("campaign-media-type").value;
+        const mediaUrl = document.getElementById("campaign-media-url").value.trim();
+        const body = document.getElementById("campaign-body").value.trim();
+        const buttonType = document.getElementById("campaign-button-type").value;
+        const btnLabel = document.getElementById("campaign-btn-label").value.trim();
+        const btnUrl = document.getElementById("campaign-btn-url").value.trim();
+        
+        if (!name) {
+            showToast("Por favor, informe o nome da campanha.", "error");
+            return;
+        }
+        if (!body) {
+            showToast("Por favor, escreva a mensagem da campanha.", "error");
+            return;
+        }
+        if (buttonType !== "none" && !btnLabel) {
+            showToast("Por favor, informe o texto do botão.", "error");
+            return;
+        }
+        if (buttonType === "cta_url" && !btnUrl) {
+            showToast("Por favor, insira a URL do link do botão.", "error");
+            return;
+        }
+        
+        dispatchCampaignBtn.disabled = true;
+        dispatchCampaignBtn.innerText = "Agendando disparos...";
+        
+        try {
+            await api.post("/api/inbox/campaigns/send", {
+                name,
+                media_type: mediaType,
+                media_url: mediaType !== "none" ? mediaUrl : null,
+                body,
+                button_type: buttonType,
+                button_label: buttonType !== "none" ? btnLabel : null,
+                button_url: buttonType === "cta_url" ? btnUrl : null
+            });
+            
+            showToast("Disparo de campanha iniciado em segundo plano com sucesso!", "success");
+            
+            // Limpa o formulário
+            document.getElementById("campaign-name").value = "";
+            document.getElementById("campaign-media-type").value = "none";
+            document.getElementById("campaign-media-url").value = "";
+            document.getElementById("campaign-body").value = "";
+            document.getElementById("campaign-button-type").value = "none";
+            document.getElementById("campaign-btn-label").value = "";
+            document.getElementById("campaign-btn-url").value = "";
+            syncCampaignPreview();
+        } catch (err) {
+            showToast("Erro ao disparar campanha: " + err.message, "error");
+        } finally {
+            dispatchCampaignBtn.disabled = false;
+            dispatchCampaignBtn.innerText = "Disparar Campanha para Lista";
+        }
+    });
+}
 
 // Start router
 appRouter.init();

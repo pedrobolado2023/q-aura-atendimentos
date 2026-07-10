@@ -941,4 +941,20 @@ body {
     transform: scale(1.02);
 }
 
+/* CRM Page Styles */
+.drag-drop-area:hover {
+    border-color: var(--color-primary) !important;
+    background: rgba(79, 70, 229, 0.04) !important;
+}
+
+#contacts-preview-table tr:hover {
+    background: var(--bg-secondary);
+}
+
+.phone-mockup {
+    border-color: #222 !important;
+    background: #e5ddd5 url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png') repeat !important;
+}
+
+
 
