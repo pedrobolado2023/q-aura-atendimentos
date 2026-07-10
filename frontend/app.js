@@ -1,5 +1,6 @@
 // Q-aura Front-end App logic (Client router & API client)
 const API_URL = window.location.port === "3000" ? "http://localhost:8000" : window.location.origin;
+let tempContacts = [];
 
 const state = {
     token: localStorage.getItem("qa_token") || null,
@@ -559,7 +560,7 @@ document.getElementById("btn-pms-send").addEventListener("click", () => {
 });
 
 // --- CRM & Marketing Campaign Handler ---
-let tempContacts = [];
+tempContacts = [];
 
 const dragDropArea = document.getElementById("contacts-drag-drop");
 const fileInput = document.getElementById("contacts-file-input");

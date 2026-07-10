@@ -8,6 +8,7 @@ from typing import List, Optional
 from app.database import get_db, SessionLocal
 from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential
 from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest
+from app.auth import get_current_user, get_current_tenant
 from app.config import settings
 
 router = APIRouter(prefix="/api/inbox", tags=["inbox"])
