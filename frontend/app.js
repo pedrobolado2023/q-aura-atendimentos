@@ -227,9 +227,7 @@ const appRouter = {
                 else if (c.status === "active") statusLabel = "Em atendimento";
                 else if (c.status === "resolved") statusLabel = "Finalizado";
                 
-                const subtitleText = state.user.role === "administrator"
-                    ? `Status: ${c.status} • Rota: ${c.routing_mode}`
-                    : statusLabel;
+                const subtitleText = statusLabel;
                 
                 item.innerHTML = `
                     <img class="avatar" src="${avatarUrl}" alt="${contactName}">
