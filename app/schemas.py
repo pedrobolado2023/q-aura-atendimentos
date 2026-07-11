@@ -2,8 +2,36 @@ from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
+from decimal import Decimal
 
-# Tenant Schemas
+# ─── Plan Schemas ────────────────────────────────────────────────────────────
+class PlanBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    price_monthly: Optional[Decimal] = 0
+    modules: Optional[List[str]] = []
+    max_users: Optional[int] = 5
+    is_active: Optional[bool] = True
+
+class PlanCreate(PlanBase):
+    pass
+
+class PlanUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price_monthly: Optional[Decimal] = None
+    modules: Optional[List[str]] = None
+    max_users: Optional[int] = None
+    is_active: Optional[bool] = None
+
+class PlanResponse(PlanBase):
+    id: UUID
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# ─── Tenant Schemas ───────────────────────────────────────────────────────────
 class TenantBase(BaseModel):
     name: str
     subdomain: str
@@ -16,6 +44,47 @@ class TenantResponse(TenantBase):
     plan_type: str
     status: str
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# ─── Superadmin Tenant Registration ──────────────────────────────────────────
+class SuperadminTenantCreate(BaseModel):
+    name: str
+    subdomain: str
+    cnpj: Optional[str] = None
+    segment: Optional[str] = "hotel"
+    plan_id: Optional[str] = None
+    max_users: Optional[int] = 5
+    # Admin user for this company
+    admin_name: str
+    admin_email: EmailStr
+    admin_password: str
+
+class SuperadminTenantUpdate(BaseModel):
+    name: Optional[str] = None
+    cnpj: Optional[str] = None
+    segment: Optional[str] = None
+    plan_id: Optional[str] = None
+    status: Optional[str] = None
+    max_users: Optional[int] = None
+    custom_modules: Optional[List[str]] = None
+    logo_url: Optional[str] = None
+
+class TenantDetailResponse(BaseModel):
+    id: UUID
+    name: str
+    subdomain: str
+    cnpj: Optional[str]
+    segment: Optional[str]
+    plan_type: str
+    status: str
+    max_users: Optional[int]
+    custom_modules: Optional[List[str]]
+    logo_url: Optional[str]
+    created_at: datetime
+    plan: Optional[PlanResponse] = None
+    enabled_modules: Optional[List[str]] = []
 
     class Config:
         from_attributes = True

@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q-aura SaaS - Painel Superadmin</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=1.1.5">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Custom enhancements for Superadmin views */
+        .module-checkbox-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 10px;
+            margin-top: 8px;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        .module-checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            color: #334155;
+        }
+        .module-checkbox-item input {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 8px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-active { background-color: #dcfce7; color: #15803d; }
+        .badge-suspended { background-color: #fee2e2; color: #b91c1c; }
+        .badge-trial { background-color: #fef9c3; color: #a16207; }
+        .badge-blue { background-color: #dbeafe; color: #1d4ed8; }
+        .badge-purple { background-color: #f3e8ff; color: #7e22ce; }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.4);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+            border: 1px solid #e2e8f0;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.25rem;
+            color: #0f172a;
+        }
+        .btn-close {
+            background: none;
+            border: none;
+            font-size: 1.25rem;
+            color: #64748b;
+            cursor: pointer;
+        }
+        .actions-cell {
+            display: flex;
+            gap: 8px;
+        }
+        .btn-xs {
+            padding: 4px 8px;
+            font-size: 0.75rem;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- 1. LOGIN VIEW -->
+        <section id="login-view" class="view active">
+            <div class="login-card">
+                <div class="login-header">
+                    <div class="logo-container">
+                        <i class="fa-solid fa-wand-magic-sparkles logo-icon"></i>
+                        <span class="logo-text">Q-aura SaaS</span>
+                    </div>
+                    <p class="subtitle">Painel de Administração Global</p>
+                </div>
+                <form id="login-form">
+                    <div class="input-group">
+                        <label for="login-email">E-mail do Superadmin</label>
+                        <div class="input-wrapper">
+                            <i class="fa-regular fa-envelope input-icon"></i>
+                            <input type="email" id="login-email" required placeholder="superadmin@qaura.com">
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label for="login-password">Senha</label>
+                        <div class="input-wrapper">
+                            <i class="fa-regular fa-lock input-icon"></i>
+                            <input type="password" id="login-password" required placeholder="••••••••">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">
+                        Entrar no Painel <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- MAIN LAYOUT (SIDEBAR + CONTENT PANEL) -->
+        <div id="main-layout" class="layout-hidden">
+            <!-- Sidebar Navigation -->
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <i class="fa-solid fa-wand-magic-sparkles logo-icon"></i>
+                    <span class="logo-text">Q-aura SaaS</span>
+                </div>
+                <nav class="sidebar-menu">
+                    <a href="#" class="menu-item active" data-target="dashboard-view" onclick="superadminRouter.selectTab(event)">
+                        <i class="fa-solid fa-chart-line"></i> Dashboard Global
+                    </a>
+                    <a href="#" class="menu-item" data-target="tenants-view" onclick="superadminRouter.selectTab(event)">
+                        <i class="fa-solid fa-hotel"></i> Gerenciar Empresas
+                    </a>
+                    <a href="#" class="menu-item" data-target="plans-view" onclick="superadminRouter.selectTab(event)">
+                        <i class="fa-solid fa-tags"></i> Planos SaaS
+                    </a>
+                </nav>
+                <div class="sidebar-footer">
+                    <div class="user-profile">
+                        <div class="avatar" style="background-color: #4f46e5; color: white;">SA</div>
+                        <div class="user-info">
+                            <p class="user-name" id="user-display-name">Superadmin</p>
+                            <span class="user-role" style="color: #6366f1;">Global Admin</span>
+                        </div>
+                    </div>
+                    <button class="btn-logout" onclick="superadminRouter.logout()">
+                        <i class="fa-solid fa-right-from-bracket"></i> Sair
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main Dynamic Workspace -->
+            <main class="workspace">
+                <!-- 2. DASHBOARD VIEW (Global SaaS Stats) -->
+                <div id="dashboard-view" class="workspace-view active">
+                    <header class="workspace-header">
+                        <h1>Métricas Gerais da Plataforma</h1>
+                        <span class="date-badge">Visão Global</span>
+                    </header>
+
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-icon"><i class="fa-solid fa-hotel"></i></div>
+                            <div class="metric-info">
+                                <h3>Total de Clientes</h3>
+                                <p class="metric-value" id="stat-total-tenants">0</p>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon success"><i class="fa-regular fa-circle-check"></i></div>
+                            <div class="metric-info">
+                                <h3>Empresas Ativas</h3>
+                                <p class="metric-value" id="stat-active-tenants">0</p>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon danger"><i class="fa-regular fa-circle-xmark"></i></div>
+                            <div class="metric-info">
+                                <h3>Empresas Suspensas</h3>
+                                <p class="metric-value" id="stat-suspended-tenants">0</p>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon info"><i class="fa-solid fa-users"></i></div>
+                            <div class="metric-info">
+                                <h3>Usuários Totais</h3>
+                                <p class="metric-value" id="stat-total-users">0</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Trial and Plans Quick View -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px;">
+                        <div class="card" style="padding: 24px; background: white; border-radius: 12px; border: 1px solid #e2e8f0;">
+                            <h2 style="margin-top:0; font-size: 1.1rem; color: #0f172a; margin-bottom: 16px;">Contas em Período de Testes</h2>
+                            <p style="color: #64748b; font-size: 0.875rem;">Total de empresas em trial gratuito no momento:</p>
+                            <p class="metric-value" id="stat-trial-tenants" style="font-size: 2.25rem; font-weight: 700; color: #4f46e5; margin: 8px 0;">0</p>
+                        </div>
+                        <div class="card" style="padding: 24px; background: white; border-radius: 12px; border: 1px solid #e2e8f0;">
+                            <h2 style="margin-top:0; font-size: 1.1rem; color: #0f172a; margin-bottom: 16px;">Configuração de Planos</h2>
+                            <p style="color: #64748b; font-size: 0.875rem;">Total de planos SaaS cadastrados na plataforma:</p>
+                            <p class="metric-value" id="stat-total-plans" style="font-size: 2.25rem; font-weight: 700; color: #10b981; margin: 8px 0;">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. TENANTS VIEW (Companies management) -->
+                <div id="tenants-view" class="workspace-view">
+                    <header class="workspace-header">
+                        <div>
+                            <h1>Empresas Clientes</h1>
+                            <p class="subtitle" style="color: #64748b; font-size: 0.875rem; margin: 4px 0 0 0;">Cadastre e gerencie a contratação de cada empresa</p>
+                        </div>
+                        <button class="btn btn-primary" onclick="superadminRouter.openNewTenantModal()">
+                            <i class="fa-solid fa-plus"></i> Nova Empresa
+                        </button>
+                    </header>
+
+                    <div class="card" style="background: white; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; margin-top: 16px;">
+                        <table class="table" style="width: 100%; border-collapse: collapse; text-align: left;">
+                            <thead>
+                                <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                                    <th style="padding: 16px 24px; font-weight: 600; color: #475569; font-size: 0.875rem;">Empresa</th>
+                                    <th style="padding: 16px 24px; font-weight: 600; color: #475569; font-size: 0.875rem;">Subdomínio</th>
+                                    <th style="padding: 16px 24px; font-weight: 600; color: #475569; font-size: 0.875rem;">CNPJ</th>
+                                    <th style="padding: 16px 24px; font-weight: 600; color: #475569; font-size: 0.875rem;">Plano</th>
+                                    <th style="padding: 16px 24px; font-weight: 600; color: #475569; font-size: 0.875rem;">Status</th>
+                                    <th style="padding: 16px 24px; font-weight: 600; color: #475569; font-size: 0.875rem;">Criado em</th>
+                                    <th style="padding: 16px 24px; font-weight: 600; color: #475569; font-size: 0.875rem;">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tenants-table-body">
+                                <tr>
+                                    <td colspan="7" style="padding: 32px; text-align: center; color: #64748b;">
+                                        <i class="fa-solid fa-spinner fa-spin" style="margin-right: 8px;"></i> Carregando empresas...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 4. PLANS VIEW (Plans management) -->
+                <div id="plans-view" class="workspace-view">
+                    <header class="workspace-header">
+                        <div>
+                            <h1>Planos de Contratação</h1>
+                            <p class="subtitle" style="color: #64748b; font-size: 0.875rem; margin: 4px 0 0 0;">Defina preços, limites e recursos de cada plano</p>
+                        </div>
+                        <button class="btn btn-primary" onclick="superadminRouter.openNewPlanModal()">
+                            <i class="fa-solid fa-plus"></i> Novo Plano
+                        </button>
+                    </header>
+
+                    <div class="card" style="background: white; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; margin-top: 16px;">
+                        <table class="table" style="width: 100%; border-collapse: collapse; text-align: left;">
+                            <thead>
+                                <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                                    <th style="padding: 16px 24px; font-weight: 600; color: #475569; font-size: 0.875rem;">Nome do Plano</th>
+                                    <th style="padding: 16px 24px; font-weight: 600; color: #475569; font-size: 0.875rem;">Preço Mensal</th>
+                                    <th style="padding: 16px 24px; font-weight: 600; color: #475569; font-size: 0.875rem;">Limite Usuários</th>
+                                    <th style="padding: 16px 24px; font-weight: 600; color: #475569; font-size: 0.875rem;">Módulos Inclusos</th>
+                                    <th style="padding: 16px 24px; font-weight: 600; color: #475569; font-size: 0.875rem;">Status</th>
+                                    <th style="padding: 16px 24px; font-weight: 600; color: #475569; font-size: 0.875rem;">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="plans-table-body">
+                                <tr>
+                                    <td colspan="6" style="padding: 32px; text-align: center; color: #64748b;">
+                                        <i class="fa-solid fa-spinner fa-spin" style="margin-right: 8px;"></i> Carregando planos...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- 5. TOAST CONTAINER FOR NOTIFICATIONS -->
+    <div id="toast-container"></div>
+
+    <!-- ─── MODALS ──────────────────────────────────────────────────────────── -->
+
+    <!-- Tenant Modal (Add/Edit) -->
+    <div class="modal" id="tenant-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="tenant-modal-title">Cadastrar Nova Empresa</h2>
+                <button class="btn-close" onclick="superadminRouter.closeTenantModal()">&times;</button>
+            </div>
+            <form id="tenant-form">
+                <input type="hidden" id="tenant-modal-id">
+                
+                <h3 style="font-size: 1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px; color: #475569;">Dados da Empresa</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="input-group">
+                        <label for="tenant-form-name">Nome da Empresa</label>
+                        <input type="text" id="tenant-form-name" required placeholder="Ex: Hotel Atlântico">
+                    </div>
+                    <div class="input-group">
+                        <label for="tenant-form-subdomain">Subdomínio (exclusivo)</label>
+                        <input type="text" id="tenant-form-subdomain" required placeholder="hotelatlantico">
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="input-group">
+                        <label for="tenant-form-cnpj">CNPJ (opcional)</label>
+                        <input type="text" id="tenant-form-cnpj" placeholder="00.000.000/0000-00">
+                    </div>
+                    <div class="input-group">
+                        <label for="tenant-form-segment">Segmento</label>
+                        <select id="tenant-form-segment">
+                            <option value="hotel">Hotel / Pousada</option>
+                            <option value="clinic">Clínica / Saúde</option>
+                            <option value="realestate">Imobiliária</option>
+                            <option value="retail">Varejo / Loja</option>
+                            <option value="other">Outros</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="input-group">
+                        <label for="tenant-form-plan">Plano de Contratação</label>
+                        <select id="tenant-form-plan" required>
+                            <option value="">Selecione um plano...</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="tenant-form-max-users">Limite de Usuários</label>
+                        <input type="number" id="tenant-form-max-users" value="5" min="1">
+                    </div>
+                </div>
+
+                <div class="input-group" id="tenant-form-status-group" style="display: none;">
+                    <label for="tenant-form-status">Status da Conta</label>
+                    <select id="tenant-form-status">
+                        <option value="active">Ativa</option>
+                        <option value="trial">Período de Testes (Trial)</option>
+                        <option value="suspended">Suspensa</option>
+                    </select>
+                </div>
+
+                <!-- Custom Override Modules -->
+                <div class="input-group" style="margin-top: 12px;">
+                    <label>Módulos Adicionais (Override Manual)</label>
+                    <p style="font-size:0.75rem; color:#64748b; margin: 2px 0 8px 0;">Habilite recursos extras além do que o plano já cobre</p>
+                    <div class="module-checkbox-grid">
+                        <label class="module-checkbox-item">
+                            <input type="checkbox" name="custom_modules" value="inbox">
+                            <span>Caixa de Entrada</span>
+                        </label>
+                        <label class="module-checkbox-item">
+                            <input type="checkbox" name="custom_modules" value="chatbot">
+                            <span>Robô Chatbot</span>
+                        </label>
+                        <label class="module-checkbox-item">
+                            <input type="checkbox" name="custom_modules" value="crm">
+                            <span>CRM & Marketing</span>
+                        </label>
+                        <label class="module-checkbox-item">
+                            <input type="checkbox" name="custom_modules" value="team">
+                            <span>Gerenciar Equipe</span>
+                        </label>
+                        <label class="module-checkbox-item">
+                            <input type="checkbox" name="custom_modules" value="dashboard">
+                            <span>Métricas/Painel</span>
+                        </label>
+                        <label class="module-checkbox-item">
+                            <input type="checkbox" name="custom_modules" value="meta_settings">
+                            <span>Configurações Meta</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Admin Credentials: Only for NEW tenants -->
+                <div id="tenant-form-admin-section">
+                    <h3 style="font-size: 1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-top: 24px; margin-bottom: 16px; color: #475569;">Usuário Administrador Principal</h3>
+                    <div class="input-group">
+                        <label for="tenant-form-admin-name">Nome do Admin</label>
+                        <input type="text" id="tenant-form-admin-name" placeholder="Ex: Pedro Henrique">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div class="input-group">
+                            <label for="tenant-form-admin-email">E-mail do Admin</label>
+                            <input type="email" id="tenant-form-admin-email" placeholder="admin@empresa.com">
+                        </div>
+                        <div class="input-group">
+                            <label for="tenant-form-admin-password">Senha Provisória</label>
+                            <input type="password" id="tenant-form-admin-password" placeholder="Min 6 caracteres">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                    <button type="button" class="btn btn-secondary" onclick="superadminRouter.closeTenantModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar Empresa</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Plan Modal (Add/Edit) -->
+    <div class="modal" id="plan-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="plan-modal-title">Cadastrar Novo Plano</h2>
+                <button class="btn-close" onclick="superadminRouter.closePlanModal()">&times;</button>
+            </div>
+            <form id="plan-form">
+                <input type="hidden" id="plan-modal-id">
+                
+                <div class="input-group">
+                    <label for="plan-form-name">Nome do Plano</label>
+                    <input type="text" id="plan-form-name" required placeholder="Ex: Pro, Básico, Enterprise">
+                </div>
+                
+                <div class="input-group">
+                    <label for="plan-form-desc">Descrição</label>
+                    <textarea id="plan-form-desc" style="width: 100%; min-height: 60px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;" placeholder="Ex: Recomendado para hotéis de médio porte"></textarea>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="input-group">
+                        <label for="plan-form-price">Preço Mensal (R$)</label>
+                        <input type="number" id="plan-form-price" required step="0.01" value="0.00">
+                    </div>
+                    <div class="input-group">
+                        <label for="plan-form-users">Limite de Usuários Incluídos</label>
+                        <input type="number" id="plan-form-users" required value="5" min="1">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Módulos Habilitados neste Plano</label>
+                    <div class="module-checkbox-grid">
+                        <label class="module-checkbox-item">
+                            <input type="checkbox" name="plan_modules" value="inbox">
+                            <span>Caixa de Entrada</span>
+                        </label>
+                        <label class="module-checkbox-item">
+                            <input type="checkbox" name="plan_modules" value="chatbot">
+                            <span>Robô Chatbot</span>
+                        </label>
+                        <label class="module-checkbox-item">
+                            <input type="checkbox" name="plan_modules" value="crm">
+                            <span>CRM & Marketing</span>
+                        </label>
+                        <label class="module-checkbox-item">
+                            <input type="checkbox" name="plan_modules" value="team">
+                            <span>Gerenciar Equipe</span>
+                        </label>
+                        <label class="module-checkbox-item">
+                            <input type="checkbox" name="plan_modules" value="dashboard">
+                            <span>Métricas/Painel</span>
+                        </label>
+                        <label class="module-checkbox-item">
+                            <input type="checkbox" name="plan_modules" value="meta_settings">
+                            <span>Configurações Meta</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                    <button type="button" class="btn btn-secondary" onclick="superadminRouter.closePlanModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar Plano</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Script routing -->
+    <script src="superadmin.js?v=1.1.5"></script>
+</body>
+</html>

@@ -49,9 +49,42 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     return user
 
 def get_current_tenant(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Tenant:
+    if current_user.role == "superadmin":
+        # Superadmin doesn't belong to any tenant, but should be allowed
+        return None
+        
     tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
     if tenant.status == "suspended":
         raise HTTPException(status_code=403, detail="Tenant subscription suspended")
     return tenant
+
+def get_enabled_modules(tenant: Tenant) -> list[str]:
+    if not tenant:
+        return []
+    # If no plan is associated, return all modules for legacy compatibility
+    if not tenant.plan_id:
+        return ["inbox", "chatbot", "dashboard", "crm", "team", "meta_settings"]
+        
+    base_modules = list(tenant.plan.modules or []) if tenant.plan else []
+    custom = list(tenant.custom_modules or [])
+    return list(set(base_modules + custom))
+
+class ModuleRequired:
+    def __init__(self, module_name: str):
+        self.module_name = module_name
+        
+    def __call__(self, tenant: Tenant = Depends(get_current_tenant)) -> Tenant:
+        if not tenant:
+            # Superadmin has access to everything
+            return None
+            
+        enabled = get_enabled_modules(tenant)
+        if self.module_name not in enabled:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"O recurso '{self.module_name}' não está ativo no plano da sua empresa."
+            )
+        return tenant
+

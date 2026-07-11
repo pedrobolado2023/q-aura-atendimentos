@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Tenant, User, MetaCredential
+from app.models import Tenant, User, MetaCredential, Plan
 from app.schemas import TenantCreate, UserCreate, UserLogin, Token, TenantResponse, UserResponse, MetaCredentialCreate, MetaCredentialResponse, EmployeeCreate
-from app.auth import get_password_hash, verify_password, create_access_token, get_current_user, get_current_tenant
+from app.auth import get_password_hash, verify_password, create_access_token, get_current_user, get_current_tenant, ModuleRequired
+from typing import List
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -55,8 +56,10 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
     
     if not verify_password(user_credentials.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Credentials")
-        
-    access_token = create_access_token(data={"sub": str(user.id), "tenant_id": str(user.tenant_id)})
+
+    # Superadmin has no tenant_id
+    token_data = {"sub": str(user.id), "tenant_id": str(user.tenant_id) if user.tenant_id else ""}
+    access_token = create_access_token(data=token_data)
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/meta-credentials", response_model=MetaCredentialResponse)
@@ -64,7 +67,7 @@ def configure_meta_credentials(
     creds_in: MetaCredentialCreate, 
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant)
+    current_tenant: Tenant = Depends(ModuleRequired("meta_settings"))
 ):
     if current_user.role != "administrator":
         raise HTTPException(status_code=403, detail="Apenas administradores podem configurar credenciais do WhatsApp.")
@@ -103,21 +106,68 @@ def configure_meta_credentials(
     db.refresh(creds)
     return creds
 
-from typing import List
+
 from app.schemas import MetaCredentialDetailsResponse
 
-@router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)):
+
+@router.get("/me")
+def get_me(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
-    Returns the currently logged-in user profile.
+    Returns the currently logged-in user profile, including enabled_modules for the tenant.
+    Superadmin gets a special response with all-access flag.
     """
-    return current_user
+    # Superadmin: no tenant, full access
+    if current_user.role == "superadmin":
+        return {
+            "id": current_user.id,
+            "email": current_user.email,
+            "name": current_user.name,
+            "role": current_user.role,
+            "tenant_id": None,
+            "status": current_user.status,
+            "created_at": current_user.created_at,
+            "enabled_modules": ["superadmin"],
+            "tenant": None,
+        }
+
+    # Regular user: fetch tenant and compute enabled modules
+    tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+    enabled_modules = []
+    if tenant:
+        if tenant.status == "suspended":
+            raise HTTPException(status_code=403, detail="Conta suspensa. Entre em contato com o suporte.")
+        base_modules = list(tenant.plan.modules or []) if tenant.plan else []
+        custom = list(tenant.custom_modules or [])
+        enabled_modules = list(set(base_modules + custom))
+        # If no plan is set, give full access (legacy tenants)
+        if not tenant.plan_id:
+            enabled_modules = ["inbox", "chatbot", "dashboard", "crm", "team", "meta_settings"]
+
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "name": current_user.name,
+        "role": current_user.role,
+        "tenant_id": current_user.tenant_id,
+        "status": current_user.status,
+        "created_at": current_user.created_at,
+        "enabled_modules": enabled_modules,
+        "tenant": {
+            "id": tenant.id if tenant else None,
+            "name": tenant.name if tenant else None,
+            "status": tenant.status if tenant else None,
+            "plan_type": tenant.plan_type if tenant else None,
+        } if tenant else None,
+    }
 
 @router.get("/meta-credentials", response_model=MetaCredentialDetailsResponse)
 def get_meta_credentials(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant)
+    current_tenant: Tenant = Depends(ModuleRequired("meta_settings"))
 ):
     """
     Returns Meta credentials for the current tenant.
@@ -165,7 +215,7 @@ def get_tenants(
 def get_hotel_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant)
+    current_tenant: Tenant = Depends(ModuleRequired("team"))
 ):
     """
     Returns all registered users (staff) for the current hotel (tenant).
@@ -185,7 +235,7 @@ def create_hotel_user(
     payload: EmployeeCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant)
+    current_tenant: Tenant = Depends(ModuleRequired("team"))
 ):
     """
     Creates a new user (agent/manager) for the current hotel (tenant).
@@ -223,7 +273,7 @@ def delete_hotel_user(
     user_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant)
+    current_tenant: Tenant = Depends(ModuleRequired("team"))
 ):
     """
     Deletes a user (staff) from the current hotel (tenant).

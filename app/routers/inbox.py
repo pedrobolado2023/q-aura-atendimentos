@@ -10,7 +10,7 @@ from typing import List, Optional
 from app.database import get_db, SessionLocal
 from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig, Department
 from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric
-from app.auth import get_current_user, get_current_tenant
+from app.auth import get_current_user, get_current_tenant, ModuleRequired
 from app.config import settings
 
 router = APIRouter(prefix="/api/inbox", tags=["inbox"])
@@ -20,7 +20,7 @@ def get_conversations(
     status_filter: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant)
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
     query = db.query(Conversation).filter(Conversation.tenant_id == current_tenant.id)
     if status_filter:
@@ -37,7 +37,7 @@ def get_messages(
     conversation_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant)
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
     # Verify conversation belongs to tenant
     convo = db.query(Conversation).filter(
@@ -61,7 +61,7 @@ async def send_message(
     body: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant)
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
     # 1. Verify conversation
     convo = db.query(Conversation).filter(
@@ -137,7 +137,7 @@ def assign_conversation(
     conversation_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant)
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
     """
     Assigns the conversation to the currently logged in user and marks it active.
@@ -160,7 +160,7 @@ def resolve_conversation(
     conversation_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant)
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
     """
     Marks the conversation as resolved.
@@ -199,6 +199,14 @@ async def get_media(
             raise HTTPException(status_code=401, detail="Invalid token claims")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid credentials token")
+
+    # Verify if tenant has inbox module enabled
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if tenant:
+        from app.auth import get_enabled_modules
+        enabled = get_enabled_modules(tenant)
+        if "inbox" not in enabled:
+            raise HTTPException(status_code=403, detail="Módulo de Inbox desativado no plano de contratação.")
         
     # Get credentials for tenant
     creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == tenant_id).first()
@@ -242,7 +250,7 @@ def import_contacts_bulk(
     payload: BulkContactUploadRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant)
+    current_tenant: Tenant = Depends(ModuleRequired("crm"))
 ):
     """
     Imports contacts in bulk for the current tenant.
@@ -447,7 +455,7 @@ async def send_campaign(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant)
+    current_tenant: Tenant = Depends(ModuleRequired("crm"))
 ):
     """
     Launches a marketing campaign in the background for all tenant contacts.
@@ -474,7 +482,7 @@ async def send_campaign(
 def upload_media(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant)
+    current_tenant: Tenant = Depends(ModuleRequired("crm"))
 ):
     """
     Uploads a media file (image, video, audio) to the server.
@@ -511,7 +519,7 @@ def upload_media(
 def get_bot_config(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant)
+    current_tenant: Tenant = Depends(ModuleRequired("chatbot"))
 ):
     """
     Retrieves the Chatbot settings for the current hotel (tenant).
@@ -534,7 +542,7 @@ def update_bot_config(
     payload: BotConfigUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant)
+    current_tenant: Tenant = Depends(ModuleRequired("chatbot"))
 ):
     """
     Updates the Chatbot settings for the current hotel (tenant).
@@ -567,7 +575,7 @@ def update_bot_config(
 def get_dashboard_metrics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant)
+    current_tenant: Tenant = Depends(ModuleRequired("dashboard"))
 ):
     """
     Calculates live dashboard metrics from the database for the current tenant.

@@ -180,6 +180,12 @@ const appRouter = {
 
     updateProfileUI() {
         if (state.user) {
+            // Redirect superadmin to their dedicated panel
+            if (state.user.role === "superadmin") {
+                window.location.href = "superadmin.html";
+                return;
+            }
+
             document.getElementById("user-display-name").innerText = state.user.name;
             document.getElementById("user-display-role").innerText = state.user.role.toUpperCase();
             document.getElementById("user-avatar-char").innerText = state.user.name.charAt(0).toUpperCase();
@@ -187,7 +193,7 @@ const appRouter = {
             // Set Meta configurations if they exist
             document.getElementById("webhook-generated-url").innerText = `${API_URL}/api/webhook/${state.tenant_id}`;
 
-            // Show tabs based on roles (RBAC)
+            // 1. Role-based visibility (RBAC)
             if (state.user.role === "administrator") {
                 document.querySelectorAll(".admin-only").forEach(el => el.style.display = "flex");
                 document.querySelectorAll(".admin-manager-only").forEach(el => el.style.display = "flex");
@@ -198,6 +204,16 @@ const appRouter = {
                 document.querySelectorAll(".admin-only").forEach(el => el.style.display = "none");
                 document.querySelectorAll(".admin-manager-only").forEach(el => el.style.display = "none");
             }
+
+            // 2. Module-based visibility (SaaS Plans)
+            const enabledModules = state.user.enabled_modules || [];
+            document.querySelectorAll(".sidebar-menu .menu-item[data-module]").forEach(el => {
+                const moduleName = el.getAttribute("data-module");
+                // If module is not enabled for this company, hide the link
+                if (!enabledModules.includes(moduleName)) {
+                    el.style.display = "none";
+                }
+            });
         }
     },
 

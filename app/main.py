@@ -2,7 +2,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
-from app.routers import auth, webhook, inbox
+from app.routers import auth, webhook, inbox, superadmin
 from app.services.websocket_manager import manager
 
 app = FastAPI(
@@ -34,6 +34,7 @@ async def websocket_endpoint(websocket: WebSocket, tenant_id: str):
 app.include_router(auth.router)
 app.include_router(webhook.router)
 app.include_router(inbox.router)
+app.include_router(superadmin.router)
 
 # Mount frontend static files at root
 frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")

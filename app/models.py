@@ -1,11 +1,31 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, DateTime, Boolean, Text, JSON, Table, Integer
+from sqlalchemy import Column, String, ForeignKey, DateTime, Boolean, Text, JSON, Table, Integer, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from app.database import Base
+from app.database import Base, db_url
+
+# Dynamic type selection for local sqlite and production postgresql
+if db_url.startswith("sqlite"):
+    ArrayType = JSON
+else:
+    from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
+    ArrayType = PG_ARRAY(String)
 
 def generate_uuid_str():
     return str(uuid.uuid4())
+
+class Plan(Base):
+    __tablename__ = "qa_plans"
+    id = Column(String(36), primary_key=True, default=generate_uuid_str)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+    price_monthly = Column(Numeric(10, 2), default=0)
+    modules = Column(ArrayType, default=[])
+    max_users = Column(Integer, default=5)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    tenants = relationship("Tenant", back_populates="plan")
 
 # Association Table for User-Department (Many-to-Many)
 qa_agents_departments = Table(
@@ -20,11 +40,19 @@ class Tenant(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid_str)
     name = Column(String(255), nullable=False)
     subdomain = Column(String(100), unique=True, nullable=False, index=True)
-    plan_type = Column(String(50), default="free")
-    status = Column(String(50), default="active")
+    plan_type = Column(String(50), default="free")  # kept for backward compat
+    plan_id = Column(String(36), ForeignKey("qa_plans.id", ondelete="SET NULL"), nullable=True)
+    cnpj = Column(String(20))
+    segment = Column(String(100), default="hotel")
+    status = Column(String(50), default="active")  # active, suspended, trial
+    trial_ends_at = Column(DateTime(timezone=True))
+    custom_modules = Column(ArrayType, default=[])
+    logo_url = Column(Text)
+    max_users = Column(Integer, default=5)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    plan = relationship("Plan", back_populates="tenants")
     users = relationship("User", back_populates="tenant", cascade="all, delete-orphan")
     meta_credentials = relationship("MetaCredential", back_populates="tenant", uselist=False, cascade="all, delete-orphan")
     bot_config = relationship("BotConfig", back_populates="tenant", uselist=False, cascade="all, delete-orphan")
@@ -35,7 +63,7 @@ class Tenant(Base):
 class User(Base):
     __tablename__ = "qa_users"
     id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    tenant_id = Column(String(36), ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id = Column(String(36), ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=True, index=True)
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     name = Column(String(255), nullable=False)
