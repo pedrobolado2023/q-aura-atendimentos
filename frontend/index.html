@@ -106,9 +106,7 @@
                     <a href="#" class="menu-item admin-only" data-target="settings-view" data-module="meta_settings" onclick="appRouter.selectTab(event)">
                         <i class="fa-solid fa-sliders"></i> Configurações Meta
                     </a>
-                    <a href="#" class="menu-item admin-only" data-target="admin-view" onclick="appRouter.selectTab(event)">
-                        <i class="fa-solid fa-user-gear"></i> Painel Master Admin
-                    </a>
+
                 </nav>
                 <div class="sidebar-footer">
                     <div class="user-profile">
@@ -227,31 +225,7 @@
                     </div>
                 </div>
 
-                <!-- 5. MASTER ADMIN VIEW (Platform Control) -->
-                <div id="admin-view" class="workspace-view">
-                    <header class="workspace-header">
-                        <h1>Gerenciamento de Clientes & Assinaturas (Master Panel)</h1>
-                    </header>
-                    <div class="admin-grid">
-                        <div class="table-container">
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Hotel</th>
-                                        <th>Subdomínio</th>
-                                        <th>Plano</th>
-                                        <th>Status</th>
-                                        <th>Mensagens/Mês</th>
-                                        <th>Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tenant-admin-list">
-                                    <!-- Dynamic rows loaded here -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
+
 
                 <!-- 5A. CHATBOT CONFIG VIEW -->
                 <div id="chatbot-view" class="workspace-view">

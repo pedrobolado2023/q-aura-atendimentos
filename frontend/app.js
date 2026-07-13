@@ -131,8 +131,7 @@ const appRouter = {
             this.loadConversations();
         } else if (targetView === "dashboard-view") {
             this.loadDashboardMetrics();
-        } else if (targetView === "admin-view") {
-            this.loadAdminTenants();
+
         } else if (targetView === "settings-view") {
             this.loadMetaSettings();
         } else if (targetView === "chatbot-view") {
@@ -407,36 +406,7 @@ const appRouter = {
         }
     },
 
-    async loadAdminTenants() {
-        try {
-            const tableBody = document.getElementById("tenant-admin-list");
-            tableBody.innerHTML = "<tr><td colspan='6' style='padding: 20px; text-align: center;'>Carregando...</td></tr>";
-            
-            const tenants = await api.get("/api/auth/tenants");
-            tableBody.innerHTML = "";
-            
-            if (tenants.length === 0) {
-                tableBody.innerHTML = "<tr><td colspan='6' style='padding: 20px; text-align: center;'>Nenhum hotel cadastrado.</td></tr>";
-                return;
-            }
-            
-            tenants.forEach(t => {
-                const tr = document.createElement("tr");
-                tr.innerHTML = `
-                    <td>${t.name}</td>
-                    <td>${t.subdomain}</td>
-                    <td><span class="badge">${t.plan_type.toUpperCase()}</span></td>
-                    <td><span class="badge" style="background: rgba(16, 185, 129, 0.1); color: var(--color-success)">${t.status.toUpperCase()}</span></td>
-                    <td>-</td>
-                    <td><button class="btn btn-secondary btn-sm" onclick="showToast('Lógica de suspensão de hotel', 'error')">Suspender</button></td>
-                `;
-                tableBody.appendChild(tr);
-            });
-        } catch (e) {
-            console.error(e);
-            document.getElementById("tenant-admin-list").innerHTML = `<tr><td colspan='6' style='padding: 20px; text-align: center; color: var(--color-danger);'>Erro ao carregar hotéis: ${e.message}</td></tr>`;
-        }
-    },
+
 
     async loadMetaSettings() {
         try {

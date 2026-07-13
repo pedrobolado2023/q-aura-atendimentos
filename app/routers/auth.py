@@ -197,18 +197,6 @@ def get_meta_credentials(
         created_at=creds.created_at
     )
 
-@router.get("/tenants", response_model=List[TenantResponse])
-def get_tenants(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Returns all registered tenants (Hotels). Accessible only by Administrators.
-    """
-    if current_user.role != "administrator":
-        raise HTTPException(status_code=403, detail="Not authorized to access tenant list")
-        
-    return db.query(Tenant).all()
 
 
 @router.get("/users", response_model=List[UserResponse])
