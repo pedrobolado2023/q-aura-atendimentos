@@ -57,6 +57,11 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
     if not verify_password(user_credentials.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Credentials")
 
+    # Silent hash upgrade for legacy SHA-256 passwords
+    if not user.password_hash.startswith("$2"):
+        user.password_hash = get_password_hash(user_credentials.password)
+        db.commit()
+
     # Superadmin has no tenant_id
     token_data = {"sub": str(user.id), "tenant_id": str(user.tenant_id) if user.tenant_id else ""}
     access_token = create_access_token(data=token_data)

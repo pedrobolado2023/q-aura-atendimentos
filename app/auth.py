@@ -9,15 +9,26 @@ from app.config import settings
 from app.database import get_db
 from app.models import User, Tenant
 
+from passlib.context import CryptContext
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    # Basic SHA256 hashing for compatibility
-    return get_password_hash(plain_password) == hashed_password
+    # If the hash starts with a bcrypt marker, verify it using passlib
+    if hashed_password.startswith("$2"):
+        try:
+            return pwd_context.verify(plain_password, hashed_password)
+        except Exception:
+            return False
+    # Fallback for legacy SHA-256 passwords
+    legacy_hash = hashlib.sha256(plain_password.encode('utf-8')).hexdigest()
+    return legacy_hash == hashed_password
 
 def get_password_hash(password: str) -> str:
-    # Use standard hashlib SHA256 encoding
-    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+    # Use secure Bcrypt hashing for new/updated passwords
+    return pwd_context.hash(password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
