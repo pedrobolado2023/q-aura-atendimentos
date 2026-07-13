@@ -1532,7 +1532,26 @@ function selectQuickReply(item) {
     chatInput.focus();
 }
 
+// Download CSV Template click handler
+const downloadCsvBtn = document.getElementById("download-csv-template");
+if (downloadCsvBtn) {
+    downloadCsvBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const csvContent = "Nome,Telefone\nJoão da Silva,5511999999999\nMaria Souza,5511988888888\n";
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", "modelo_contatos.csv");
+        link.style.visibility = "hidden";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+}
+
 
 // Start router
 window.appRouter = appRouter;
 appRouter.init();
+
