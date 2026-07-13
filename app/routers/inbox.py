@@ -342,6 +342,29 @@ async def resolve_conversation(
     db.refresh(convo)
     return convo
 
+@router.post("/conversations/{conversation_id}/toggle-flag", response_model=ConversationResponse)
+def toggle_flag_conversation(
+    conversation_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    """
+    Toggles the is_flagged status of a conversation.
+    """
+    convo = db.query(Conversation).filter(
+        Conversation.id == conversation_id,
+        Conversation.tenant_id == current_tenant.id
+    ).first()
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+        
+    convo.is_flagged = not convo.is_flagged
+    db.commit()
+    db.refresh(convo)
+    return convo
+
+
 @router.get("/media/{media_id}")
 async def get_media(
     media_id: str,

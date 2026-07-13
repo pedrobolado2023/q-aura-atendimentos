@@ -285,6 +285,10 @@ const appRouter = {
                 const unreadBadge = isUnread
                     ? `<span class="unread-badge" style="background-color: var(--color-primary); color: white; border-radius: 50%; font-size: 10px; font-weight: 700; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; margin-left: 8px; box-shadow: 0 0 4px var(--color-primary);">${c.unread_count}</span>`
                     : '';
+
+                const flagIcon = c.is_flagged
+                    ? `<i class="fa-solid fa-flag" style="color: #fbbf24; margin-left: 6px; font-size: 11px;" title="Cliente Flegado"></i>`
+                    : '';
                 
                 item.innerHTML = `
                     <img class="avatar" src="${avatarUrl}" alt="${contactName}">
@@ -292,6 +296,7 @@ const appRouter = {
                         <h4>
                             <span style="display: flex; align-items: center;">
                                 ${contactName}
+                                ${flagIcon}
                                 ${unreadBadge}
                             </span>
                             <span class="convo-time">Hoje</span>
@@ -361,6 +366,18 @@ const appRouter = {
             const activeAvatar = document.getElementById("active-avatar");
             if (activeAvatar) {
                 activeAvatar.innerHTML = `<img class="avatar" src="${avatarUrl}" alt="${contactName}">`;
+            }
+
+            // Update flag toggle icon color in header
+            const flagToggle = document.getElementById("chat-flag-toggle");
+            if (flagToggle) {
+                if (convo.is_flagged) {
+                    flagToggle.style.color = "#fbbf24"; // Gold / starred
+                    flagToggle.title = "Remover Flag";
+                } else {
+                    flagToggle.style.color = "var(--text-muted)";
+                    flagToggle.title = "Flegar Cliente";
+                }
             }
             
             // Toggle Assumir Atendimento vs Transferir button
@@ -843,45 +860,56 @@ document.getElementById("btn-resolve-chat").addEventListener("click", async () =
     }
 });
 
-// --- PMS Simulator Interactive Actions ---
-document.getElementById("btn-pms-quote").addEventListener("click", () => {
-    const checkinVal = document.getElementById("pms-checkin").value;
-    const checkoutVal = document.getElementById("pms-checkout").value;
-    if (!checkinVal || !checkoutVal) {
-        showToast("Selecione as datas de Check-in e Check-out.", "error");
-        return;
-    }
-    
-    const checkin = new Date(checkinVal);
-    const checkout = new Date(checkoutVal);
-    
-    if (checkout <= checkin) {
-        showToast("Check-out deve ser após o Check-in.", "error");
-        return;
-    }
-    
-    const diffTime = Math.abs(checkout - checkin);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    const dailyRate = 450;
-    const total = dailyRate * diffDays;
-    
-    document.getElementById("pms-quote-total").innerText = `R$ ${total.toLocaleString("pt-BR")}`;
-    document.getElementById("pms-quote-result").querySelector("p:nth-child(3)").innerHTML = `<strong>Total:</strong> R$ ${total.toLocaleString("pt-BR")} (${diffDays} diárias)`;
-    document.getElementById("pms-quote-result").style.display = "block";
-});
-
-document.getElementById("btn-pms-send").addEventListener("click", () => {
-    const checkinVal = document.getElementById("pms-checkin").value;
-    const checkoutVal = document.getElementById("pms-checkout").value;
-    const checkinFormatted = checkinVal.split("-").reverse().join("/");
-    const checkoutFormatted = checkoutVal.split("-").reverse().join("/");
-    const totalText = document.getElementById("pms-quote-total").innerText;
-    
-    const msgInput = document.getElementById("chat-message-input");
-    msgInput.value = `Olá! Fiz uma simulação de cotação para o período de ${checkinFormatted} a ${checkoutFormatted}. O valor total fica em ${totalText} para a Suíte Standard. Deseja que eu confirme a sua pré-reserva?`;
-    msgInput.focus();
-    showToast("Texto de cotação copiado para o chat!", "success");
-});
+// --- Client Flagging (Flegar Cliente) Action ---
+const flagToggleBtn = document.getElementById("chat-flag-toggle");
+if (flagToggleBtn) {
+    flagToggleBtn.addEventListener("click", async () => {
+        if (!state.activeConversationId) return;
+        
+        try {
+            const updatedConvo = await api.post(`/api/inbox/conversations/${state.activeConversationId}/toggle-flag`);
+            showToast(updatedConvo.is_flagged ? "Cliente flegado com sucesso!" : "Flag removida!", "success");
+            
+            // Update state and active conversation
+            const cachedConvo = state.conversations.find(c => c.id === state.activeConversationId);
+            if (cachedConvo) {
+                cachedConvo.is_flagged = updatedConvo.is_flagged;
+            }
+            
+            // Toggle color in header
+            if (updatedConvo.is_flagged) {
+                flagToggleBtn.style.color = "#fbbf24";
+                flagToggleBtn.title = "Remover Flag";
+            } else {
+                flagToggleBtn.style.color = "var(--text-muted)";
+                flagToggleBtn.title = "Flegar Cliente";
+            }
+            
+            // Rerender the specific item in the conversation list without reloading everything
+            const convoItem = document.querySelector(`.convo-item[data-id="${state.activeConversationId}"]`);
+            if (convoItem) {
+                const nameSpan = convoItem.querySelector("h4 span");
+                if (nameSpan) {
+                    // Remove old flag icon if exists
+                    const oldFlag = nameSpan.querySelector(".fa-flag");
+                    if (oldFlag) oldFlag.remove();
+                    
+                    if (updatedConvo.is_flagged) {
+                        const flagEl = document.createElement("i");
+                        flagEl.className = "fa-solid fa-flag";
+                        flagEl.style.color = "#fbbf24";
+                        flagEl.style.marginLeft = "6px";
+                        flagEl.style.fontSize = "11px";
+                        flagEl.title = "Cliente Flegado";
+                        nameSpan.appendChild(flagEl);
+                    }
+                }
+            }
+        } catch (err) {
+            showToast("Erro ao flegar cliente: " + err.message, "error");
+        }
+    });
+}
 
 // --- CRM & Marketing Campaign Handler ---
 tempContacts = [];

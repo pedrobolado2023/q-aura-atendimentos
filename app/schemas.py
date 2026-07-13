@@ -196,6 +196,7 @@ class ConversationResponse(BaseModel):
     assigned_department_id: Optional[UUID]
     status: str
     routing_mode: str
+    is_flagged: bool
     last_message_at: datetime
     created_at: datetime
     unread: bool

@@ -652,7 +652,10 @@
                                     <div class="active-contact-info">
                                         <div class="avatar" id="active-avatar">H</div>
                                         <div>
-                                            <h4 id="active-contact-name">Hóspede</h4>
+                                            <h4 style="display: flex; align-items: center; gap: 8px; margin: 0;">
+                                                <span id="active-contact-name">Hóspede</span>
+                                                <i class="fa-solid fa-flag" id="chat-flag-toggle" style="cursor: pointer; font-size: 14px; color: var(--text-muted); transition: color 0.2s;" title="Flegar Cliente"></i>
+                                            </h4>
                                             <span class="status-indicator online" id="active-contact-status">Aguardando Atendente</span>
                                         </div>
                                     </div>
@@ -684,25 +687,6 @@
                             <h3>Status do Funil</h3>
                             <div class="funnel-badge-container">
                                 <span class="badge active" id="guest-funnel-stage">Cotação Pendente</span>
-                            </div>
-                            <h3>Simulador de Cotação PMS</h3>
-                            <div class="pms-simulator">
-                                <div class="input-group">
-                                    <label>Check-in</label>
-                                    <input type="date" id="pms-checkin" value="2026-07-15">
-                                </div>
-                                <div class="input-group">
-                                    <label>Check-out</label>
-                                    <input type="date" id="pms-checkout" value="2026-07-20">
-                                </div>
-                                <button class="btn btn-primary btn-sm btn-block" id="btn-pms-quote">Consultar Disponibilidade</button>
-                                
-                                <div id="pms-quote-result" style="display: none; margin-top: 12px; padding: 12px; background: var(--bg-primary); border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 12px;">
-                                    <p style="color: var(--color-success); font-weight: 700; margin-bottom: 6px;"><i class="fa-solid fa-circle-check"></i> Quartos Disponíveis!</p>
-                                    <p style="margin-bottom: 2px;"><strong>Suíte Standard:</strong> R$ 450/diária</p>
-                                    <p style="margin-bottom: 8px;"><strong>Total:</strong> <span id="pms-quote-total">R$ 2.250</span></p>
-                                    <button class="btn btn-secondary btn-sm btn-block" id="btn-pms-send" style="width: 100%; font-size: 11px;"><i class="fa-solid fa-copy"></i> Copiar Cotação no Chat</button>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -740,6 +724,6 @@
     </div>
 
     <div id="toast-container" class="toast-container"></div>
-    <script src="app.js?v=1.2.8"></script>
+    <script src="app.js?v=1.2.9"></script>
 </body>
 </html>
