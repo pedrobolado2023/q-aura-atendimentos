@@ -1552,7 +1552,6 @@ if (downloadCsvBtn) {
 }
 
 
-}
 
 // --- CRM Campaign Reports Handler ---
 appRouter.loadCampaigns = async function() {
