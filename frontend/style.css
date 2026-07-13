@@ -1110,19 +1110,26 @@ img.avatar {
     }
 }
 
-/* Hide context panel earlier to avoid squishing the chat area */
-@media (max-width: 1250px) {
+/* Keep all panels visible, but scale down widths to keep chat roomy */
+@media (max-width: 1300px) {
     .inbox-layout {
-        grid-template-columns: 260px 1fr;
-    }
-    .context-panel {
-        display: none !important; /* Hide Guest Context panel on right to keep chat roomy */
+        grid-template-columns: 250px 1fr 250px !important;
     }
 }
 
+@media (max-width: 950px) {
+    .inbox-layout {
+        grid-template-columns: 200px 1fr 200px !important;
+    }
+}
+
+/* Only hide context panel on very small mobile/tablet screens */
 @media (max-width: 768px) {
     .inbox-layout {
-        grid-template-columns: 180px 1fr;
+        grid-template-columns: 180px 1fr !important;
+    }
+    .context-panel {
+        display: none !important;
     }
     .chat-messages {
         padding: 12px;
@@ -1144,4 +1151,5 @@ img.avatar {
         padding: 16px !important;
     }
 }
+
 
