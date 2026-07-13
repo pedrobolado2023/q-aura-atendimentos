@@ -796,7 +796,7 @@ def get_quick_messages(
     for qm in quick_msgs:
         results.append(
             QuickMessageResponse(
-                id=UUID(qm.id),
+                id=qm.id,
                 shortcut=qm.shortcut,
                 body=qm.body,
                 is_global=(qm.user_id is None),
@@ -853,7 +853,7 @@ def create_quick_message(
     db.refresh(db_quick)
 
     return QuickMessageResponse(
-        id=UUID(db_quick.id),
+        id=db_quick.id,
         shortcut=db_quick.shortcut,
         body=db_quick.body,
         is_global=is_global,
