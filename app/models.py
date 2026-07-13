@@ -178,3 +178,16 @@ class WebhookEvent(Base):
     processed = Column(Boolean, default=False)
     error_log = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class QuickMessage(Base):
+    __tablename__ = "qa_quick_messages"
+    id = Column(String(36), primary_key=True, default=generate_uuid_str)
+    tenant_id = Column(String(36), ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("qa_users.id", ondelete="CASCADE"), nullable=True, index=True)
+    shortcut = Column(String(50), nullable=False)
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    tenant = relationship("Tenant")
+    user = relationship("User")
+

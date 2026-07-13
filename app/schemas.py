@@ -268,5 +268,23 @@ class StartConversationRequest(BaseModel):
     name: Optional[str] = None
 
 
+# Quick Message Schemas
+class QuickMessageCreate(BaseModel):
+    shortcut: str
+    body: str
+    is_global: Optional[bool] = False
+
+class QuickMessageResponse(BaseModel):
+    id: UUID
+    shortcut: str
+    body: str
+    is_global: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+
 
 

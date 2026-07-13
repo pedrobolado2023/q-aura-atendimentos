@@ -4,6 +4,10 @@ from fastapi.staticfiles import StaticFiles
 import os
 from app.routers import auth, webhook, inbox, superadmin
 from app.services.websocket_manager import manager
+from app.database import Base, engine
+
+# Ensure database tables exist
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Q-aura Atendimentos API",

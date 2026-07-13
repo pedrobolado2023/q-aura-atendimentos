@@ -222,6 +222,46 @@
                                 <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('webhook-generated-url').innerText)">Copiar</button>
                             </div>
                         </div>
+
+                        <!-- Quick Messages (Respostas Rápidas) Editor -->
+                        <div class="settings-card" style="grid-column: span 2;">
+                            <h3><i class="fa-solid fa-bolt"></i> Respostas Rápidas (/atalho)</h3>
+                            <p class="settings-desc">Cadastre mensagens pré-definidas para responder clientes rapidamente. Digite <strong>/</strong> no chat para usá-las.</p>
+                            
+                            <form id="quick-message-form" style="display: grid; grid-template-columns: 1fr 2fr auto; gap: 16px; margin-bottom: 24px; align-items: flex-end;">
+                                <div class="input-group" style="margin-bottom: 0;">
+                                    <label for="quick-shortcut">Atalho (sem a barra)</label>
+                                    <input type="text" id="quick-shortcut" required placeholder="Ex: ola">
+                                </div>
+                                <div class="input-group" style="margin-bottom: 0;">
+                                    <label for="quick-body">Mensagem de Resposta</label>
+                                    <input type="text" id="quick-body" required placeholder="Ex: Olá! Como posso te ajudar hoje?">
+                                </div>
+                                <div style="display: flex; gap: 12px; align-items: center; height: 44px; margin-top: 10px;">
+                                    <label id="quick-global-label" style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text-primary);">
+                                        <input type="checkbox" id="quick-is-global" style="width: 16px; height: 16px; cursor: pointer;">
+                                        <span>Global</span>
+                                    </label>
+                                    <button type="submit" class="btn btn-primary" style="padding: 10px 20px;">Adicionar</button>
+                                </div>
+                            </form>
+
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Atalho</th>
+                                            <th>Mensagem</th>
+                                            <th>Tipo</th>
+                                            <th>Ação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="quick-messages-list">
+                                        <!-- Loaded dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -554,7 +594,9 @@
                                 <div class="chat-messages" id="message-scroll">
                                     <!-- Loaded dynamic bubbles -->
                                 </div>
-                                <form id="chat-input-form" class="chat-input-area">
+                                <form id="chat-input-form" class="chat-input-area" style="position: relative;">
+                                    <!-- Autocomplete Dropdown Menu -->
+                                    <div id="quick-replies-dropdown" class="quick-replies-dropdown" style="display: none;"></div>
                                     <input type="text" id="chat-message-input" placeholder="Digite uma mensagem ou digite / para respostas rápidas..." autocomplete="off">
                                     <button type="submit" class="btn-send"><i class="fa-solid fa-paper-plane"></i></button>
                                 </form>

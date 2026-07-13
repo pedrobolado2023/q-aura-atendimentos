@@ -8,8 +8,8 @@ from uuid import UUID
 from datetime import datetime
 from typing import List, Optional
 from app.database import get_db, SessionLocal
-from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig, Department
-from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, StartConversationRequest
+from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig, Department, QuickMessage
+from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, StartConversationRequest, QuickMessageCreate, QuickMessageResponse
 from app.auth import get_current_user, get_current_tenant, ModuleRequired
 from app.config import settings
 
@@ -772,6 +772,125 @@ def get_dashboard_metrics(
         funnel_stages=funnel,
         department_counts=dep_metrics
     )
+
+
+# --- Quick Messages Endpoints ---
+@router.get("/quick-messages", response_model=List[QuickMessageResponse])
+def get_quick_messages(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    """
+    Retrieve all quick messages for the tenant:
+    - Global quick messages (where user_id is NULL)
+    - Personal quick messages for the current logged-in user
+    """
+    quick_msgs = db.query(QuickMessage).filter(
+        QuickMessage.tenant_id == current_tenant.id
+    ).filter(
+        (QuickMessage.user_id == None) | (QuickMessage.user_id == current_user.id)
+    ).all()
+
+    results = []
+    for qm in quick_msgs:
+        results.append(
+            QuickMessageResponse(
+                id=UUID(qm.id),
+                shortcut=qm.shortcut,
+                body=qm.body,
+                is_global=(qm.user_id is None),
+                created_at=qm.created_at
+            )
+        )
+    return results
+
+@router.post("/quick-messages", response_model=QuickMessageResponse)
+def create_quick_message(
+    payload: QuickMessageCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    """
+    Create a quick message.
+    - If user is an agent, is_global is ignored and set to False (personal).
+    - If user is manager or admin, they can set is_global = True.
+    """
+    is_global = payload.is_global
+    if current_user.role not in ["administrator", "manager"]:
+        is_global = False
+
+    # Remove "/" prefix from shortcut if present
+    shortcut = payload.shortcut.strip().lstrip("/")
+    if not shortcut:
+        raise HTTPException(status_code=400, detail="O atalho não pode ser vazio")
+
+    # Check if a message with this shortcut already exists for this scope
+    existing = db.query(QuickMessage).filter(
+        QuickMessage.tenant_id == current_tenant.id,
+        QuickMessage.shortcut == shortcut
+    )
+    if is_global:
+        existing = existing.filter(QuickMessage.user_id == None).first()
+    else:
+        existing = existing.filter(QuickMessage.user_id == current_user.id).first()
+
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Já existe uma resposta rápida com o atalho '/{shortcut}' nesse escopo."
+        )
+
+    db_quick = QuickMessage(
+        tenant_id=current_tenant.id,
+        user_id=None if is_global else current_user.id,
+        shortcut=shortcut,
+        body=payload.body
+    )
+    db.add(db_quick)
+    db.commit()
+    db.refresh(db_quick)
+
+    return QuickMessageResponse(
+        id=UUID(db_quick.id),
+        shortcut=db_quick.shortcut,
+        body=db_quick.body,
+        is_global=is_global,
+        created_at=db_quick.created_at
+    )
+
+@router.delete("/quick-messages/{qm_id}")
+def delete_quick_message(
+    qm_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    """
+    Delete a quick message.
+    - Agents can only delete their own personal messages.
+    - Managers/Admins can delete both their own personal and global messages.
+    """
+    qm = db.query(QuickMessage).filter(
+        QuickMessage.id == str(qm_id),
+        QuickMessage.tenant_id == current_tenant.id
+    ).first()
+
+    if not qm:
+        raise HTTPException(status_code=404, detail="Resposta rápida não encontrada")
+
+    if qm.user_id is None:
+        if current_user.role not in ["administrator", "manager"]:
+            raise HTTPException(status_code=403, detail="Apenas administradores e supervisores podem deletar respostas rápidas globais.")
+    else:
+        if qm.user_id != current_user.id and current_user.role not in ["administrator", "manager"]:
+            raise HTTPException(status_code=403, detail="Você não tem permissão para deletar essa resposta rápida.")
+
+    db.delete(qm)
+    db.commit()
+    return {"status": "success", "detail": "Resposta rápida removida com sucesso"}
+
 
 
 

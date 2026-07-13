@@ -129,11 +129,13 @@ const appRouter = {
 
         if (targetView === "inbox-view") {
             this.loadConversations();
+            this.loadQuickMessages();
         } else if (targetView === "dashboard-view") {
             this.loadDashboardMetrics();
 
         } else if (targetView === "settings-view") {
             this.loadMetaSettings();
+            this.loadQuickMessages();
         } else if (targetView === "chatbot-view") {
             this.loadBotConfig();
         } else if (targetView === "team-view") {
@@ -160,8 +162,9 @@ const appRouter = {
                 this.connectWebSocket();
                 this.updateProfileUI();
                 
-                // Pré-carrega as configurações da Meta e as Métricas
+                // Pré-carrega as configurações da Meta, as Respostas Rápidas e as Métricas
                 this.loadMetaSettings();
+                this.loadQuickMessages();
                 this.loadDashboardMetrics();
             } catch (e) {
                 console.error("Erro na autenticação:", e);
@@ -213,6 +216,16 @@ const appRouter = {
                     el.style.display = "none";
                 }
             });
+
+            // Quick message global option visibility
+            const globalLabel = document.getElementById("quick-global-label");
+            if (globalLabel) {
+                if (state.user.role === "administrator" || state.user.role === "manager") {
+                    globalLabel.style.display = "flex";
+                } else {
+                    globalLabel.style.display = "none";
+                }
+            }
         }
     },
 
@@ -567,6 +580,56 @@ const appRouter = {
             this.loadTeamUsers();
         } catch (e) {
             showToast("Erro ao remover colaborador: " + e.message, "error");
+        }
+    },
+
+    async loadQuickMessages() {
+        try {
+            const listEl = document.getElementById("quick-messages-list");
+            if (!listEl) return;
+            listEl.innerHTML = "<tr><td colspan='4' style='padding: 10px; text-align: center;'>Carregando...</td></tr>";
+
+            const quickMsgs = await api.get("/api/inbox/quick-messages");
+            state.quickMessages = quickMsgs;
+
+            listEl.innerHTML = "";
+            if (quickMsgs.length === 0) {
+                listEl.innerHTML = "<tr><td colspan='4' style='padding: 20px; text-align: center; opacity: 0.5;'>Nenhuma resposta rápida cadastrada.</td></tr>";
+                return;
+            }
+
+            quickMsgs.forEach(qm => {
+                const tr = document.createElement("tr");
+                const typeLabel = qm.is_global ? "Global" : "Pessoal";
+                const typeClass = qm.is_global ? "scope-badge global" : "scope-badge personal";
+
+                tr.innerHTML = `
+                    <td><strong>/${qm.shortcut}</strong></td>
+                    <td style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${qm.body}</td>
+                    <td><span class="${typeClass}" style="font-weight: 700; font-size: 11px;">${typeLabel}</span></td>
+                    <td><button class="btn btn-secondary btn-sm btn-delete-quick" data-id="${qm.id}" style="border-color: var(--color-danger); color: var(--color-danger); background: transparent; padding: 6px 12px; font-size: 11px;">Excluir</button></td>
+                `;
+                listEl.appendChild(tr);
+            });
+
+            // Bind click to delete buttons
+            listEl.querySelectorAll(".btn-delete-quick").forEach(btn => {
+                btn.addEventListener("click", async (e) => {
+                    const id = e.currentTarget.getAttribute("data-id");
+                    if (confirm("Deseja realmente excluir esta resposta rápida?")) {
+                        try {
+                            await api.delete(`/api/inbox/quick-messages/${id}`);
+                            showToast("Resposta rápida excluída!", "success");
+                            this.loadQuickMessages();
+                        } catch (err) {
+                            showToast("Erro ao excluir: " + err.message, "error");
+                        }
+                    }
+                });
+            });
+
+        } catch (e) {
+            console.error(e);
         }
     },
 
@@ -1344,6 +1407,131 @@ if (startChatForm) {
             submitBtn.innerText = originalText;
         }
     });
+}
+
+// Quick Message Editor Form Submit
+const quickForm = document.getElementById("quick-message-form");
+if (quickForm) {
+    quickForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const shortcut = document.getElementById("quick-shortcut").value.trim();
+        const body = document.getElementById("quick-body").value.trim();
+        const is_global = document.getElementById("quick-is-global").checked;
+
+        const btn = quickForm.querySelector("button[type='submit']");
+        btn.disabled = true;
+        btn.innerText = "Salvando...";
+
+        try {
+            await api.post("/api/inbox/quick-messages", { shortcut, body, is_global });
+            showToast("Resposta rápida cadastrada!", "success");
+            document.getElementById("quick-shortcut").value = "";
+            document.getElementById("quick-body").value = "";
+            document.getElementById("quick-is-global").checked = false;
+            appRouter.loadQuickMessages();
+        } catch (err) {
+            showToast("Erro ao salvar: " + err.message, "error");
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "Adicionar";
+        }
+    });
+}
+
+// Autocomplete Dropdown Logic for Quick Replies (/)
+const chatInput = document.getElementById("chat-message-input");
+const qmDropdown = document.getElementById("quick-replies-dropdown");
+let selectedQuickIndex = -1;
+let filteredQuickReplies = [];
+
+if (chatInput && qmDropdown) {
+    chatInput.addEventListener("keydown", (e) => {
+        if (qmDropdown.style.display === "flex") {
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                selectedQuickIndex = (selectedQuickIndex + 1) % filteredQuickReplies.length;
+                updateDropdownSelection();
+            } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                selectedQuickIndex = (selectedQuickIndex - 1 + filteredQuickReplies.length) % filteredQuickReplies.length;
+                updateDropdownSelection();
+            } else if (e.key === "Enter") {
+                if (selectedQuickIndex >= 0 && selectedQuickIndex < filteredQuickReplies.length) {
+                    e.preventDefault();
+                    selectQuickReply(filteredQuickReplies[selectedQuickIndex]);
+                }
+            } else if (e.key === "Escape") {
+                qmDropdown.style.display = "none";
+            }
+        }
+    });
+
+    chatInput.addEventListener("input", (e) => {
+        const val = e.target.value;
+        const lastSlashIdx = val.lastIndexOf("/");
+        
+        if (lastSlashIdx !== -1 && (lastSlashIdx === val.length - 1 || val.substring(lastSlashIdx).indexOf(" ") === -1)) {
+            const search = val.substring(lastSlashIdx + 1).toLowerCase();
+            const list = state.quickMessages || [];
+            filteredQuickReplies = list.filter(qm => qm.shortcut.toLowerCase().includes(search));
+            
+            if (filteredQuickReplies.length > 0) {
+                renderDropdown(filteredQuickReplies);
+            } else {
+                qmDropdown.style.display = "none";
+            }
+        } else {
+            qmDropdown.style.display = "none";
+        }
+    });
+
+    document.addEventListener("click", (e) => {
+        if (e.target !== chatInput && e.target !== qmDropdown && !qmDropdown.contains(e.target)) {
+            qmDropdown.style.display = "none";
+        }
+    });
+}
+
+function renderDropdown(items) {
+    qmDropdown.innerHTML = "";
+    qmDropdown.style.display = "flex";
+    selectedQuickIndex = 0;
+    
+    items.forEach((item, idx) => {
+        const div = document.createElement("div");
+        div.className = `quick-reply-item ${idx === 0 ? 'selected' : ''}`;
+        div.innerHTML = `
+            <span class="shortcut-badge">/${item.shortcut}</span>
+            <span class="message-preview">${item.body}</span>
+            <span class="scope-badge ${item.is_global ? 'global' : 'personal'}">${item.is_global ? 'global' : 'pessoal'}</span>
+        `;
+        div.onclick = () => selectQuickReply(item);
+        qmDropdown.appendChild(div);
+    });
+}
+
+function updateDropdownSelection() {
+    const items = qmDropdown.querySelectorAll(".quick-reply-item");
+    items.forEach((item, idx) => {
+        if (idx === selectedQuickIndex) {
+            item.classList.add("selected");
+            item.scrollIntoView({ block: "nearest" });
+        } else {
+            item.classList.remove("selected");
+        }
+    });
+}
+
+function selectQuickReply(item) {
+    const val = chatInput.value;
+    const lastSlashIdx = val.lastIndexOf("/");
+    if (lastSlashIdx !== -1) {
+        chatInput.value = val.substring(0, lastSlashIdx) + item.body;
+    } else {
+        chatInput.value = item.body;
+    }
+    qmDropdown.style.display = "none";
+    chatInput.focus();
 }
 
 
