@@ -1063,7 +1063,7 @@ img.avatar {
    ========================================== */
 
 /* 1. Main Sidebar collapse at medium screens & high zoom */
-@media (max-width: 1200px) {
+@media (max-width: 1300px) {
     .sidebar {
         width: 76px !important;
         min-width: 76px !important;
@@ -1110,7 +1110,8 @@ img.avatar {
     }
 }
 
-@media (max-width: 1100px) {
+/* Hide context panel earlier to avoid squishing the chat area */
+@media (max-width: 1250px) {
     .inbox-layout {
         grid-template-columns: 260px 1fr;
     }
@@ -1121,7 +1122,7 @@ img.avatar {
 
 @media (max-width: 768px) {
     .inbox-layout {
-        grid-template-columns: 200px 1fr;
+        grid-template-columns: 180px 1fr;
     }
     .chat-messages {
         padding: 12px;
