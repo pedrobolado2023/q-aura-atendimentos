@@ -1271,6 +1271,82 @@ if (teamForm) {
     });
 }
 
+// --- Start Chat Modal Event Listeners & Form Submit ---
+const startChatModal = document.getElementById("start-chat-modal");
+const openStartChatModalBtn = document.getElementById("btn-open-start-chat-modal");
+const closeStartChatModalBtn = document.getElementById("btn-close-start-chat-modal");
+const startChatForm = document.getElementById("start-chat-form");
+
+if (openStartChatModalBtn && startChatModal) {
+    openStartChatModalBtn.addEventListener("click", () => {
+        startChatModal.style.display = "flex";
+        document.getElementById("start-chat-phone").focus();
+    });
+}
+
+if (closeStartChatModalBtn && startChatModal) {
+    closeStartChatModalBtn.addEventListener("click", () => {
+        startChatModal.style.display = "none";
+        startChatForm.reset();
+    });
+}
+
+if (startChatModal) {
+    startChatModal.addEventListener("click", (e) => {
+        if (e.target === startChatModal) {
+            startChatModal.style.display = "none";
+            startChatForm.reset();
+        }
+    });
+}
+
+if (startChatForm) {
+    startChatForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        
+        const phone = document.getElementById("start-chat-phone").value.trim();
+        const name = document.getElementById("start-chat-name").value.trim();
+        const body = document.getElementById("start-chat-body").value.trim();
+        
+        const submitBtn = startChatForm.querySelector("button[type='submit']");
+        const originalText = submitBtn.innerText;
+        submitBtn.disabled = true;
+        submitBtn.innerText = "Iniciando...";
+        
+        try {
+            const messageRes = await api.post("/api/inbox/start-conversation", {
+                phone_number: phone,
+                body: body,
+                name: name || null
+            });
+            
+            showToast("Conversa iniciada com sucesso!", "success");
+            startChatModal.style.display = "none";
+            startChatForm.reset();
+            
+            // Switch tab to "Minhas" (active) to show the new conversation
+            const minhasTab = document.querySelector(".inbox-tabs button[data-status='active']");
+            if (minhasTab) {
+                document.querySelectorAll(".inbox-tabs .tab-btn").forEach(b => b.classList.remove("active"));
+                minhasTab.classList.add("active");
+            }
+            
+            // Reload conversations list and select the conversation
+            await appRouter.loadConversations("active");
+            
+            if (messageRes && messageRes.conversation_id) {
+                appRouter.selectConversation(messageRes.conversation_id);
+            }
+        } catch (err) {
+            showToast("Erro ao iniciar conversa: " + err.message, "error");
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerText = originalText;
+        }
+    });
+}
+
+
 // Start router
 window.appRouter = appRouter;
 appRouter.init();

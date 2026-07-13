@@ -262,4 +262,11 @@ class DashboardMetricsResponse(BaseModel):
     department_counts: List[DepartmentMetric]
 
 
+class StartConversationRequest(BaseModel):
+    phone_number: str
+    body: str
+    name: Optional[str] = None
+
+
+
 

@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import List, Optional
 from app.database import get_db, SessionLocal
 from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig, Department
-from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric
+from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, StartConversationRequest
 from app.auth import get_current_user, get_current_tenant, ModuleRequired
 from app.config import settings
 
@@ -131,6 +131,120 @@ async def send_message(
     db.commit()
     db.refresh(msg)
     return msg
+
+
+@router.post("/start-conversation", response_model=MessageResponse)
+async def start_conversation(
+    payload: StartConversationRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    # 1. Clean and validate phone number
+    cleaned_phone = "".join(c for c in payload.phone_number if c.isdigit())
+    if not cleaned_phone:
+        raise HTTPException(status_code=400, detail="Número de telefone inválido.")
+
+    # 2. Get/Create contact
+    contact = db.query(Contact).filter(
+        Contact.phone_number == cleaned_phone,
+        Contact.tenant_id == current_tenant.id
+    ).first()
+
+    if not contact:
+        contact_name = payload.name if payload.name else f"Hóspede {cleaned_phone[-4:]}"
+        contact = Contact(
+            tenant_id=current_tenant.id,
+            phone_number=cleaned_phone,
+            name=contact_name,
+            language="pt-BR",
+            sales_funnel_stage="lead"
+        )
+        db.add(contact)
+        db.flush()
+
+    # 3. Get/Create conversation
+    convo = db.query(Conversation).filter(
+        Conversation.contact_id == contact.id,
+        Conversation.tenant_id == current_tenant.id
+    ).first()
+
+    if not convo:
+        convo = Conversation(
+            tenant_id=current_tenant.id,
+            contact_id=contact.id,
+            assigned_user_id=current_user.id,
+            status="active",
+            unread=False,
+            unread_count=0
+        )
+        db.add(convo)
+        db.flush()
+    else:
+        convo.status = "active"
+        convo.assigned_user_id = current_user.id
+        convo.unread = False
+        convo.unread_count = 0
+
+    # 4. Get Meta Credentials
+    creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == current_tenant.id).first()
+    if not creds:
+        raise HTTPException(status_code=400, detail="Meta credentials not configured for this tenant")
+
+    # Format body
+    formatted_body = f"*Atendente {current_user.name}:* {payload.body}"
+
+    # 5. Send message via Meta Cloud API
+    meta_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{creds.phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {creds.permanent_access_token}",
+        "Content-Type": "application/json"
+    }
+    meta_payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": contact.phone_number,
+        "type": "text",
+        "text": {
+            "preview_url": False,
+            "body": formatted_body
+        }
+    }
+
+    meta_message_id = None
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(meta_url, headers=headers, json=meta_payload)
+            if response.status_code == 200:
+                res_data = response.json()
+                meta_message_id = res_data.get("messages", [{}])[0].get("id")
+            else:
+                err_data = response.json()
+                error_msg = err_data.get("error", {}).get("message", "Erro desconhecido da API da Meta")
+                raise HTTPException(status_code=400, detail=f"Erro Meta: {error_msg}")
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=500, detail=f"Erro de conexão com a Meta: {str(e)}")
+
+    # 6. Save message
+    msg = Message(
+        conversation_id=convo.id,
+        sender_type="agent",
+        sender_id=current_user.id,
+        message_type="text",
+        body=formatted_body,
+        meta_message_id=meta_message_id,
+        status="sent" if meta_message_id else "failed"
+    )
+    db.add(msg)
+
+    # Update last message timestamp
+    from sqlalchemy.sql import func
+    convo.last_message_at = func.now()
+    db.commit()
+    db.refresh(msg)
+
+    return msg
+
 
 @router.post("/conversations/{conversation_id}/assign", response_model=ConversationResponse)
 def assign_conversation(
