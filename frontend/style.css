@@ -517,6 +517,21 @@ body {
     gap: 20px;
 }
 
+.team-settings-container {
+    display: grid;
+    grid-template-columns: 1fr 1.8fr;
+    gap: 20px;
+}
+
+.crm-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 24px;
+    height: auto;
+    min-height: calc(100vh - 120px);
+}
+
+
 .settings-card {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
@@ -1151,5 +1166,19 @@ img.avatar {
         padding: 16px !important;
     }
 }
+
+/* General Workspace Responsive Layouts */
+@media (max-width: 1024px) {
+    .settings-container {
+        grid-template-columns: 1fr !important;
+    }
+    .team-settings-container {
+        grid-template-columns: 1fr !important;
+    }
+    .dashboard-details {
+        grid-template-columns: 1fr !important;
+    }
+}
+
 
 
