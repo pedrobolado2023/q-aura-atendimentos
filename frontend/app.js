@@ -286,8 +286,14 @@ const appRouter = {
                     ? `<span class="unread-badge" style="background-color: var(--color-primary); color: white; border-radius: 50%; font-size: 10px; font-weight: 700; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; margin-left: 8px; box-shadow: 0 0 4px var(--color-primary);">${c.unread_count}</span>`
                     : '';
 
-                const flagIcon = c.is_flagged
-                    ? `<i class="fa-solid fa-flag" style="color: #fbbf24; margin-left: 6px; font-size: 11px;" title="Cliente Flegado"></i>`
+                let flagColor = "transparent";
+                if (c.flag_type === "red") flagColor = "#ef4444";
+                else if (c.flag_type === "yellow") flagColor = "#fbbf24";
+                else if (c.flag_type === "blue") flagColor = "#3b82f6";
+                else if (c.flag_type === "green") flagColor = "#10b981";
+
+                const flagIcon = c.flag_type && c.flag_type !== "none"
+                    ? `<i class="fa-solid fa-flag" style="color: ${flagColor}; margin-left: 6px; font-size: 11px;" title="Cliente Flegado"></i>`
                     : '';
                 
                 item.innerHTML = `
@@ -371,13 +377,14 @@ const appRouter = {
             // Update flag toggle icon color in header
             const flagToggle = document.getElementById("chat-flag-toggle");
             if (flagToggle) {
-                if (convo.is_flagged) {
-                    flagToggle.style.color = "#fbbf24"; // Gold / starred
-                    flagToggle.title = "Remover Flag";
-                } else {
-                    flagToggle.style.color = "var(--text-muted)";
-                    flagToggle.title = "Flegar Cliente";
-                }
+                let color = "var(--text-muted)";
+                if (convo.flag_type === "red") color = "#ef4444";
+                else if (convo.flag_type === "yellow") color = "#fbbf24";
+                else if (convo.flag_type === "blue") color = "#3b82f6";
+                else if (convo.flag_type === "green") color = "#10b981";
+
+                flagToggle.style.color = color;
+                flagToggle.title = convo.flag_type && convo.flag_type !== "none" ? `Flag: ${convo.flag_type.toUpperCase()}` : "Flegar Cliente";
             }
             
             // Toggle Assumir Atendimento vs Transferir button
@@ -862,52 +869,77 @@ document.getElementById("btn-resolve-chat").addEventListener("click", async () =
 
 // --- Client Flagging (Flegar Cliente) Action ---
 const flagToggleBtn = document.getElementById("chat-flag-toggle");
-if (flagToggleBtn) {
-    flagToggleBtn.addEventListener("click", async () => {
-        if (!state.activeConversationId) return;
-        
-        try {
-            const updatedConvo = await api.post(`/api/inbox/conversations/${state.activeConversationId}/toggle-flag`);
-            showToast(updatedConvo.is_flagged ? "Cliente flegado com sucesso!" : "Flag removida!", "success");
-            
-            // Update state and active conversation
-            const cachedConvo = state.conversations.find(c => c.id === state.activeConversationId);
-            if (cachedConvo) {
-                cachedConvo.is_flagged = updatedConvo.is_flagged;
-            }
-            
-            // Toggle color in header
-            if (updatedConvo.is_flagged) {
-                flagToggleBtn.style.color = "#fbbf24";
-                flagToggleBtn.title = "Remover Flag";
-            } else {
-                flagToggleBtn.style.color = "var(--text-muted)";
-                flagToggleBtn.title = "Flegar Cliente";
-            }
-            
-            // Rerender the specific item in the conversation list without reloading everything
-            const convoItem = document.querySelector(`.convo-item[data-id="${state.activeConversationId}"]`);
-            if (convoItem) {
-                const nameSpan = convoItem.querySelector("h4 span");
-                if (nameSpan) {
-                    // Remove old flag icon if exists
-                    const oldFlag = nameSpan.querySelector(".fa-flag");
-                    if (oldFlag) oldFlag.remove();
-                    
-                    if (updatedConvo.is_flagged) {
-                        const flagEl = document.createElement("i");
-                        flagEl.className = "fa-solid fa-flag";
-                        flagEl.style.color = "#fbbf24";
-                        flagEl.style.marginLeft = "6px";
-                        flagEl.style.fontSize = "11px";
-                        flagEl.title = "Cliente Flegado";
-                        nameSpan.appendChild(flagEl);
+const flagSelectorMenu = document.getElementById("flag-selector-menu");
+
+if (flagToggleBtn && flagSelectorMenu) {
+    // Show/hide menu on flag click
+    flagToggleBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const isHidden = flagSelectorMenu.style.display === "none";
+        flagSelectorMenu.style.display = isHidden ? "flex" : "none";
+    });
+
+    // Close menu when clicking anywhere else
+    document.addEventListener("click", () => {
+        flagSelectorMenu.style.display = "none";
+    });
+
+    // Handle flag options clicks
+    flagSelectorMenu.querySelectorAll("i").forEach(opt => {
+        opt.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            flagSelectorMenu.style.display = "none";
+
+            if (!state.activeConversationId) return;
+
+            const selectedFlag = opt.getAttribute("data-flag");
+
+            try {
+                const updatedConvo = await api.post(`/api/inbox/conversations/${state.activeConversationId}/set-flag?flag_type=${selectedFlag}`);
+                
+                // Update state cache
+                const cachedConvo = state.conversations.find(c => c.id === state.activeConversationId);
+                if (cachedConvo) {
+                    cachedConvo.is_flagged = updatedConvo.is_flagged;
+                    cachedConvo.flag_type = updatedConvo.flag_type;
+                }
+
+                // Update active chat header flag color
+                let headerColor = "var(--text-muted)";
+                if (updatedConvo.flag_type === "red") headerColor = "#ef4444";
+                else if (updatedConvo.flag_type === "yellow") headerColor = "#fbbf24";
+                else if (updatedConvo.flag_type === "blue") headerColor = "#3b82f6";
+                else if (updatedConvo.flag_type === "green") headerColor = "#10b981";
+
+                flagToggleBtn.style.color = headerColor;
+                flagToggleBtn.title = updatedConvo.flag_type !== "none" ? `Flag: ${updatedConvo.flag_type.toUpperCase()}` : "Flegar Cliente";
+
+                showToast(updatedConvo.flag_type !== "none" ? `Cliente flegado com sucesso!` : "Flag removida!", "success");
+
+                // Update conversation list item
+                const convoItem = document.querySelector(`.convo-item[data-id="${state.activeConversationId}"]`);
+                if (convoItem) {
+                    const nameSpan = convoItem.querySelector("h4 span");
+                    if (nameSpan) {
+                        const oldFlag = nameSpan.querySelector(".fa-flag");
+                        if (oldFlag) oldFlag.remove();
+
+                        if (updatedConvo.flag_type !== "none") {
+                            const flagEl = document.createElement("i");
+                            flagEl.className = "fa-solid fa-flag";
+                            flagEl.style.color = headerColor;
+                            flagEl.style.marginLeft = "6px";
+                            flagEl.style.fontSize = "11px";
+                            flagEl.title = `Flag: ${updatedConvo.flag_type.toUpperCase()}`;
+                            nameSpan.appendChild(flagEl);
+                        }
                     }
                 }
+
+            } catch (err) {
+                showToast("Erro ao flegar cliente: " + err.message, "error");
             }
-        } catch (err) {
-            showToast("Erro ao flegar cliente: " + err.message, "error");
-        }
+        });
     });
 }
 

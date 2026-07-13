@@ -145,6 +145,7 @@ class Conversation(Base):
     unread = Column(Boolean, default=True)
     unread_count = Column(Integer, default=0)
     is_flagged = Column(Boolean, default=False)
+    flag_type = Column(String(20), default="none")
     last_message_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

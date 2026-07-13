@@ -197,6 +197,7 @@ class ConversationResponse(BaseModel):
     status: str
     routing_mode: str
     is_flagged: bool
+    flag_type: str
     last_message_at: datetime
     created_at: datetime
     unread: bool

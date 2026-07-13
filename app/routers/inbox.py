@@ -364,6 +364,34 @@ def toggle_flag_conversation(
     db.refresh(convo)
     return convo
 
+@router.post("/conversations/{conversation_id}/set-flag", response_model=ConversationResponse)
+def set_flag_conversation(
+    conversation_id: UUID,
+    flag_type: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    """
+    Sets the flag_type of a conversation. Supported types: none, red, yellow, blue, green.
+    """
+    convo = db.query(Conversation).filter(
+        Conversation.id == conversation_id,
+        Conversation.tenant_id == current_tenant.id
+    ).first()
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+        
+    if flag_type not in ["none", "red", "yellow", "blue", "green"]:
+        raise HTTPException(status_code=400, detail="Invalid flag type")
+        
+    convo.flag_type = flag_type
+    convo.is_flagged = (flag_type != "none")
+    db.commit()
+    db.refresh(convo)
+    return convo
+
+
 
 @router.get("/media/{media_id}")
 async def get_media(
@@ -510,8 +538,18 @@ async def dispatch_campaign_bulk(
         }
         
         sent_count = 0
+        sent_phones = set()
         async with httpx.AsyncClient() as client:
             for contact in contacts:
+                # Clean phone number to digits to prevent duplicates in different formats
+                clean_phone = "".join(filter(str.isdigit, contact.phone_number))
+                if not clean_phone:
+                    continue
+                if clean_phone in sent_phones:
+                    print(f"[Campaign] Skipping duplicate phone number: {clean_phone}")
+                    continue
+                sent_phones.add(clean_phone)
+
                 # Create CampaignRecipient record
                 recipient = CampaignRecipient(
                     campaign_id=campaign.id,

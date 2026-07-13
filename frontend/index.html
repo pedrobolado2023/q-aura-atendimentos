@@ -652,9 +652,18 @@
                                     <div class="active-contact-info">
                                         <div class="avatar" id="active-avatar">H</div>
                                         <div>
-                                            <h4 style="display: flex; align-items: center; gap: 8px; margin: 0;">
+                                            <h4 style="display: flex; align-items: center; gap: 8px; margin: 0; position: relative;">
                                                 <span id="active-contact-name">Hóspede</span>
-                                                <i class="fa-solid fa-flag" id="chat-flag-toggle" style="cursor: pointer; font-size: 14px; color: var(--text-muted); transition: color 0.2s;" title="Flegar Cliente"></i>
+                                                <div class="flag-dropdown-wrapper" style="position: relative; display: inline-block;">
+                                                    <i class="fa-solid fa-flag" id="chat-flag-toggle" style="cursor: pointer; font-size: 14px; color: var(--text-muted); transition: color 0.2s;" title="Flegar Cliente"></i>
+                                                    <div class="flag-selector-menu" id="flag-selector-menu" style="display: none; position: absolute; top: 100%; left: 0; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 8px; box-shadow: var(--shadow-md); z-index: 100; gap: 10px; flex-direction: row; align-items: center; white-space: nowrap;">
+                                                        <i class="fa-solid fa-flag" data-flag="red" style="color: #ef4444; cursor: pointer; font-size: 14px;" title="Importante / Urgente"></i>
+                                                        <i class="fa-solid fa-flag" data-flag="yellow" style="color: #fbbf24; cursor: pointer; font-size: 14px;" title="Atenção"></i>
+                                                        <i class="fa-solid fa-flag" data-flag="blue" style="color: #3b82f6; cursor: pointer; font-size: 14px;" title="Suporte / Dúvida"></i>
+                                                        <i class="fa-solid fa-flag" data-flag="green" style="color: #10b981; cursor: pointer; font-size: 14px;" title="Resolvido"></i>
+                                                        <i class="fa-solid fa-ban" data-flag="none" style="color: var(--text-muted); cursor: pointer; font-size: 14px;" title="Limpar Flag"></i>
+                                                    </div>
+                                                </div>
                                             </h4>
                                             <span class="status-indicator online" id="active-contact-status">Aguardando Atendente</span>
                                         </div>
@@ -724,6 +733,6 @@
     </div>
 
     <div id="toast-container" class="toast-container"></div>
-    <script src="app.js?v=1.2.9"></script>
+    <script src="app.js?v=1.3.0"></script>
 </body>
 </html>
