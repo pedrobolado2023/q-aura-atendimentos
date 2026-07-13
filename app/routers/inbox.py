@@ -584,84 +584,93 @@ async def dispatch_campaign_bulk(
                     "to": contact.phone_number
                 }
                 
-                # Check button configuration
-                if campaign.button_type == "cta_url" and campaign.button_label and campaign.button_url:
-                    # Append tracking parameter or redirect tracker
-                    tracking_url = f"{base_url}/api/inbox/campaigns/click/{recipient.id}"
-                    payload["type"] = "interactive"
-                    payload["interactive"] = {
-                        "type": "cta_url",
-                        "body": {
-                            "text": campaign.body
-                        },
-                        "action": {
-                            "name": "cta_url",
-                            "parameters": {
-                                "display_text": campaign.button_label,
-                                "url": tracking_url
-                            }
+                if campaign.use_template:
+                    payload["type"] = "template"
+                    payload["template"] = {
+                        "name": campaign.template_name,
+                        "language": {
+                            "code": campaign.template_language or "pt_BR"
                         }
                     }
-                    if campaign.media_type in ["image", "video"] and campaign.media_url:
-                        payload["interactive"]["header"] = {
-                            "type": campaign.media_type,
-                            campaign.media_type: {
-                                "link": campaign.media_url
-                            }
-                        }
-                        
-                elif campaign.button_type == "quick_reply" and campaign.button_label:
-                    payload["type"] = "interactive"
-                    payload["interactive"] = {
-                        "type": "button",
-                        "body": {
-                            "text": campaign.body
-                        },
-                        "action": {
-                            "buttons": [
-                                {
-                                    "type": "reply",
-                                    "reply": {
-                                        # Use recipient ID as the reply button ID so we can track the click in webhook!
-                                        "id": f"camp_click_{recipient.id}",
-                                        "title": campaign.button_label
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                    if campaign.media_type in ["image", "video"] and campaign.media_url:
-                        payload["interactive"]["header"] = {
-                            "type": campaign.media_type,
-                            campaign.media_type: {
-                                "link": campaign.media_url
-                            }
-                        }
                 else:
-                    # Media without buttons or plain text
-                    if campaign.media_type == "image" and campaign.media_url:
-                        payload["type"] = "image"
-                        payload["image"] = {
-                            "link": campaign.media_url,
-                            "caption": campaign.body
+                    # Check button configuration
+                    if campaign.button_type == "cta_url" and campaign.button_label and campaign.button_url:
+                        # Append tracking parameter or redirect tracker
+                        tracking_url = f"{base_url}/api/inbox/campaigns/click/{recipient.id}"
+                        payload["type"] = "interactive"
+                        payload["interactive"] = {
+                            "type": "cta_url",
+                            "body": {
+                                "text": campaign.body
+                            },
+                            "action": {
+                                "name": "cta_url",
+                                "parameters": {
+                                    "display_text": campaign.button_label,
+                                    "url": tracking_url
+                                }
+                            }
                         }
-                    elif campaign.media_type == "video" and campaign.media_url:
-                        payload["type"] = "video"
-                        payload["video"] = {
-                            "link": campaign.media_url,
-                            "caption": campaign.body
+                        if campaign.media_type in ["image", "video"] and campaign.media_url:
+                            payload["interactive"]["header"] = {
+                                "type": campaign.media_type,
+                                campaign.media_type: {
+                                    "link": campaign.media_url
+                                }
+                            }
+                            
+                    elif campaign.button_type == "quick_reply" and campaign.button_label:
+                        payload["type"] = "interactive"
+                        payload["interactive"] = {
+                            "type": "button",
+                            "body": {
+                                "text": campaign.body
+                            },
+                            "action": {
+                                "buttons": [
+                                    {
+                                        "type": "reply",
+                                        "reply": {
+                                            # Use recipient ID as the reply button ID so we can track the click in webhook!
+                                            "id": f"camp_click_{recipient.id}",
+                                            "title": campaign.button_label
+                                        }
+                                    }
+                                ]
+                            }
                         }
-                    elif campaign.media_type == "audio" and campaign.media_url:
-                        payload["type"] = "audio"
-                        payload["audio"] = {
-                            "link": campaign.media_url
-                        }
+                        if campaign.media_type in ["image", "video"] and campaign.media_url:
+                            payload["interactive"]["header"] = {
+                                "type": campaign.media_type,
+                                campaign.media_type: {
+                                    "link": campaign.media_url
+                                }
+                            }
                     else:
-                        payload["type"] = "text"
-                        payload["text"] = {
-                            "preview_url": False,
-                            "body": campaign.body
-                        }
+                        # Media without buttons or plain text
+                        if campaign.media_type == "image" and campaign.media_url:
+                            payload["type"] = "image"
+                            payload["image"] = {
+                                "link": campaign.media_url,
+                                "caption": campaign.body
+                            }
+                        elif campaign.media_type == "video" and campaign.media_url:
+                            payload["type"] = "video"
+                            payload["video"] = {
+                                "link": campaign.media_url,
+                                "caption": campaign.body
+                            }
+                        elif campaign.media_type == "audio" and campaign.media_url:
+                            payload["type"] = "audio"
+                            payload["audio"] = {
+                                "link": campaign.media_url
+                            }
+                        else:
+                            payload["type"] = "text"
+                            payload["text"] = {
+                                "preview_url": False,
+                                "body": campaign.body
+                            }
                         
                 # 3. Request sending to Meta
                 meta_message_id = None
@@ -685,9 +694,9 @@ async def dispatch_campaign_bulk(
                     conversation_id=convo.id,
                     sender_type="agent",
                     sender_id=agent_id,
-                    message_type="image" if campaign.media_type == "image" else ("video" if campaign.media_type == "video" else ("audio" if campaign.media_type == "audio" else "text")),
-                    body=campaign.body,
-                    media_url=campaign.media_url,
+                    message_type="text" if campaign.use_template else ("image" if campaign.media_type == "image" else ("video" if campaign.media_type == "video" else ("audio" if campaign.media_type == "audio" else "text"))),
+                    body=f"[Template: {campaign.template_name}]" if campaign.use_template else campaign.body,
+                    media_url=campaign.media_url if not campaign.use_template else None,
                     meta_message_id=meta_message_id,
                     status="sent" if meta_message_id else "failed"
                 )
@@ -728,12 +737,15 @@ async def send_campaign(
     campaign = MarketingCampaign(
         tenant_id=current_tenant.id,
         name=camp.name,
-        body=camp.body,
+        body=camp.body or "",
         media_type=camp.media_type,
         media_url=camp.media_url,
         button_type=camp.button_type,
         button_label=camp.button_label,
         button_url=camp.button_url,
+        use_template=camp.use_template or False,
+        template_name=camp.template_name,
+        template_language=camp.template_language or "pt_BR",
         sent_count=0
     )
     db.add(campaign)

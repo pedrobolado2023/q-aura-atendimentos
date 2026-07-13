@@ -1098,6 +1098,30 @@ if (saveContactsBtn) {
 
 // --- Live Preview Synchronizer ---
 function syncCampaignPreview() {
+    const useTemplateCheck = document.getElementById("campaign-use-template");
+    const previewBody = document.getElementById("preview-message-body");
+    const headerMedia = document.getElementById("preview-header-media");
+    const previewImg = document.getElementById("preview-header-img");
+    const previewVideo = document.getElementById("preview-header-video");
+    const previewAudio = document.getElementById("preview-audio-media");
+    const previewBtn = document.getElementById("preview-action-button");
+    const mediaFileGroup = document.getElementById("campaign-media-file-group");
+
+    if (useTemplateCheck && useTemplateCheck.checked) {
+        headerMedia.style.display = "none";
+        previewImg.style.display = "none";
+        previewVideo.style.display = "none";
+        previewAudio.style.display = "none";
+        previewBtn.style.display = "none";
+        if (mediaFileGroup) mediaFileGroup.style.display = "none";
+        
+        const templateNameVal = document.getElementById("campaign-template-name").value.trim() || "nome_do_modelo";
+        const templateLangVal = document.getElementById("campaign-template-lang").value.trim() || "pt_BR";
+        
+        previewBody.innerHTML = `<span style="color:var(--color-brand); font-weight:700;"><i class="fa-solid fa-square-poll-horizontal"></i> Modelo Aprovado (Template)</span>\n\nTemplate: <strong>${templateNameVal}</strong>\nIdioma: <strong>${templateLangVal}</strong>\n\n<span style="font-size: 10px; opacity: 0.7;">*(O texto final é determinado pelo modelo cadastrado na Meta)*</span>`;
+        return;
+    }
+
     const mediaTypeSelect = document.getElementById("campaign-media-type");
     if (!mediaTypeSelect) return; // Prevent run on separate views
     
@@ -1185,6 +1209,26 @@ function syncCampaignPreview() {
 }
 
 // Vincula ouvintes
+const useTemplateCheck = document.getElementById("campaign-use-template");
+if (useTemplateCheck) {
+    useTemplateCheck.addEventListener("change", () => {
+        const customFields = document.getElementById("campaign-custom-fields");
+        const templateFields = document.getElementById("campaign-template-fields");
+        
+        if (useTemplateCheck.checked) {
+            customFields.style.display = "none";
+            templateFields.style.display = "flex";
+        } else {
+            customFields.style.display = "flex";
+            templateFields.style.display = "none";
+        }
+        syncCampaignPreview();
+    });
+
+    document.getElementById("campaign-template-name").addEventListener("input", syncCampaignPreview);
+    document.getElementById("campaign-template-lang").addEventListener("input", syncCampaignPreview);
+}
+
 const mediaTypeField = document.getElementById("campaign-media-type");
 if (mediaTypeField) {
     mediaTypeField.addEventListener("change", syncCampaignPreview);
@@ -1243,48 +1287,83 @@ const dispatchCampaignBtn = document.getElementById("btn-dispatch-campaign");
 if (dispatchCampaignBtn) {
     dispatchCampaignBtn.addEventListener("click", async () => {
         const name = document.getElementById("campaign-name").value.trim();
-        const mediaType = document.getElementById("campaign-media-type").value;
-        const mediaUrl = document.getElementById("campaign-media-url").value.trim();
-        const body = document.getElementById("campaign-body").value.trim();
-        const buttonType = document.getElementById("campaign-button-type").value;
-        const btnLabel = document.getElementById("campaign-btn-label").value.trim();
-        const btnUrl = document.getElementById("campaign-btn-url").value.trim();
+        const useTemplate = document.getElementById("campaign-use-template").checked;
         
+        let payload = {};
+
         if (!name) {
             showToast("Por favor, informe o nome da campanha.", "error");
             return;
         }
-        if (!body) {
-            showToast("Por favor, escreva a mensagem da campanha.", "error");
-            return;
-        }
-        if (buttonType !== "none" && !btnLabel) {
-            showToast("Por favor, informe o texto do botão.", "error");
-            return;
-        }
-        if (buttonType === "cta_url" && !btnUrl) {
-            showToast("Por favor, insira a URL do link do botão.", "error");
-            return;
-        }
-        
-        dispatchCampaignBtn.disabled = true;
-        dispatchCampaignBtn.innerText = "Agendando disparos...";
-        
-        try {
-            await api.post("/api/inbox/campaigns/send", {
+
+        if (useTemplate) {
+            const templateName = document.getElementById("campaign-template-name").value.trim();
+            const templateLang = document.getElementById("campaign-template-lang").value.trim();
+            
+            if (!templateName) {
+                showToast("Por favor, insira o nome do modelo aprovado na Meta.", "error");
+                return;
+            }
+
+            payload = {
                 name,
+                use_template: true,
+                template_name: templateName,
+                template_language: templateLang || "pt_BR",
+                media_type: "text",
+                body: `[Template: ${templateName}]`,
+                button_type: "none"
+            };
+        } else {
+            const mediaType = document.getElementById("campaign-media-type").value;
+            const mediaUrl = document.getElementById("campaign-media-url").value.trim();
+            const body = document.getElementById("campaign-body").value.trim();
+            const buttonType = document.getElementById("campaign-button-type").value;
+            const btnLabel = document.getElementById("campaign-btn-label").value.trim();
+            const btnUrl = document.getElementById("campaign-btn-url").value.trim();
+
+            if (!body) {
+                showToast("Por favor, escreva a mensagem da campanha.", "error");
+                return;
+            }
+            if (buttonType !== "none" && !btnLabel) {
+                showToast("Por favor, informe o texto do botão.", "error");
+                return;
+            }
+            if (buttonType === "cta_url" && !btnUrl) {
+                showToast("Por favor, insira a URL do link do botão.", "error");
+                return;
+            }
+
+            payload = {
+                name,
+                use_template: false,
                 media_type: mediaType,
                 media_url: mediaType !== "none" ? mediaUrl : null,
                 body,
                 button_type: buttonType,
                 button_label: buttonType !== "none" ? btnLabel : null,
                 button_url: buttonType === "cta_url" ? btnUrl : null
-            });
+            };
+        }
+        
+        dispatchCampaignBtn.disabled = true;
+        dispatchCampaignBtn.innerText = "Agendando disparos...";
+        
+        try {
+            await api.post("/api/inbox/campaigns/send", payload);
             
             showToast("Disparo de campanha iniciado em segundo plano com sucesso!", "success");
             
             // Limpa o formulário
             document.getElementById("campaign-name").value = "";
+            document.getElementById("campaign-use-template").checked = false;
+            document.getElementById("campaign-template-name").value = "";
+            document.getElementById("campaign-template-lang").value = "pt_BR";
+            
+            document.getElementById("campaign-custom-fields").style.display = "flex";
+            document.getElementById("campaign-template-fields").style.display = "none";
+            
             document.getElementById("campaign-media-type").value = "none";
             document.getElementById("campaign-media-url").value = "";
             const fileInputEl = document.getElementById("campaign-media-file");

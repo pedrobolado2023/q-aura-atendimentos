@@ -205,6 +205,9 @@ class MarketingCampaign(Base):
     button_type = Column(String(50), nullable=True) # 'none', 'quick_reply', 'cta_url'
     button_label = Column(String(100), nullable=True)
     button_url = Column(Text, nullable=True)
+    use_template = Column(Boolean, default=False)
+    template_name = Column(String(255), nullable=True)
+    template_language = Column(String(20), default="pt_BR")
     sent_count = Column(Integer, default=0)
     delivered_count = Column(Integer, default=0)
     read_count = Column(Integer, default=0)

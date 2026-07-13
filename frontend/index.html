@@ -466,44 +466,66 @@
                                     <input type="text" id="campaign-name" placeholder="Ex: Promoção de Inverno 2026">
                                 </div>
                                 
-                                <div class="input-group">
-                                    <label for="campaign-media-type">Tipo de Mídia Anexa</label>
-                                    <select id="campaign-media-type" style="width: 100%; background: var(--bg-primary); color: var(--text-main); border: 1px solid var(--border-color); padding: 10px; border-radius: var(--radius-sm);">
-                                        <option value="none">Nenhum</option>
-                                        <option value="image">Imagem (Foto)</option>
-                                        <option value="video">Vídeo</option>
-                                        <option value="audio">Áudio (Mensagem de Voz)</option>
-                                    </select>
+                                <!-- Checkbox to toggle Meta Template -->
+                                <div style="display: flex; align-items: center; gap: 8px; margin: 12px 0 16px 0;">
+                                    <input type="checkbox" id="campaign-use-template" style="width: auto; cursor: pointer; transform: scale(1.15);">
+                                    <label for="campaign-use-template" style="font-weight: 600; font-size: 13px; cursor: pointer; margin: 0; color: var(--text-primary);">Usar Modelo de Mensagem (Template) da Meta</label>
                                 </div>
-                                
-                                <div class="input-group" id="campaign-media-file-group" style="display: none;">
-                                    <label for="campaign-media-file">Selecionar Arquivo de Mídia</label>
-                                    <input type="file" id="campaign-media-file" style="width: 100%; color: var(--text-main); background: var(--bg-primary); padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);" accept="image/*,video/*,audio/*">
-                                    <input type="hidden" id="campaign-media-url">
-                                </div>
-                                
-                                <div class="input-group">
-                                    <label for="campaign-body">Mensagem (Corpo de Texto)</label>
-                                    <textarea id="campaign-body" rows="5" placeholder="Olá! Temos uma novidade incrível para você..."></textarea>
-                                </div>
-                                
-                                <div class="input-group">
-                                    <label for="campaign-button-type">Tipo de Botão</label>
-                                    <select id="campaign-button-type" style="width: 100%; background: var(--bg-primary); color: var(--text-main); border: 1px solid var(--border-color); padding: 10px; border-radius: var(--radius-sm);">
-                                        <option value="none">Nenhum</option>
-                                        <option value="cta_url">Link de Direcionamento (CTA URL)</option>
-                                        <option value="quick_reply">Resposta Rápida (Quick Reply)</option>
-                                    </select>
-                                </div>
-                                
-                                <div id="campaign-button-fields" style="display: none;">
+
+                                <!-- Template Specific Fields (Hidden by default) -->
+                                <div id="campaign-template-fields" style="display: none; flex-direction: column; gap: 12px; margin-bottom: 16px;">
                                     <div class="input-group">
-                                        <label for="campaign-btn-label">Nome do Botão</label>
-                                        <input type="text" id="campaign-btn-label" placeholder="Ex: Reservar Agora">
+                                        <label for="campaign-template-name">Nome do Modelo (Meta)</label>
+                                        <input type="text" id="campaign-template-name" placeholder="Ex: promocao_inverno">
+                                        <span style="font-size: 10px; opacity: 0.6; display: block; margin-top: 4px;">Deve ser idêntico ao nome cadastrado no painel Business Manager.</span>
                                     </div>
-                                    <div class="input-group" id="campaign-btn-url-group">
-                                        <label for="campaign-btn-url">Link URL do Botão</label>
-                                        <input type="text" id="campaign-btn-url" placeholder="https://seuhotel.com/reserva">
+                                    <div class="input-group">
+                                        <label for="campaign-template-lang">Idioma do Modelo</label>
+                                        <input type="text" id="campaign-template-lang" value="pt_BR" placeholder="Ex: pt_BR">
+                                    </div>
+                                </div>
+
+                                <!-- Custom Message Session Fields (Visible by default) -->
+                                <div id="campaign-custom-fields" style="display: flex; flex-direction: column; gap: 12px;">
+                                    <div class="input-group">
+                                        <label for="campaign-media-type">Tipo de Mídia Anexa</label>
+                                        <select id="campaign-media-type" style="width: 100%; background: var(--bg-primary); color: var(--text-main); border: 1px solid var(--border-color); padding: 10px; border-radius: var(--radius-sm);">
+                                            <option value="none">Nenhum</option>
+                                            <option value="image">Imagem (Foto)</option>
+                                            <option value="video">Vídeo</option>
+                                            <option value="audio">Áudio (Mensagem de Voz)</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="input-group" id="campaign-media-file-group" style="display: none;">
+                                        <label for="campaign-media-file">Selecionar Arquivo de Mídia</label>
+                                        <input type="file" id="campaign-media-file" style="width: 100%; color: var(--text-main); background: var(--bg-primary); padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);" accept="image/*,video/*,audio/*">
+                                        <input type="hidden" id="campaign-media-url">
+                                    </div>
+                                    
+                                    <div class="input-group">
+                                        <label for="campaign-body">Mensagem (Corpo de Texto)</label>
+                                        <textarea id="campaign-body" rows="5" placeholder="Olá! Temos uma novidade incrível para você..."></textarea>
+                                    </div>
+                                    
+                                    <div class="input-group">
+                                        <label for="campaign-button-type">Tipo de Botão</label>
+                                        <select id="campaign-button-type" style="width: 100%; background: var(--bg-primary); color: var(--text-main); border: 1px solid var(--border-color); padding: 10px; border-radius: var(--radius-sm);">
+                                            <option value="none">Nenhum</option>
+                                            <option value="cta_url">Link de Direcionamento (CTA URL)</option>
+                                            <option value="quick_reply">Resposta Rápida (Quick Reply)</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div id="campaign-button-fields" style="display: none;">
+                                        <div class="input-group">
+                                            <label for="campaign-btn-label">Nome do Botão</label>
+                                            <input type="text" id="campaign-btn-label" placeholder="Ex: Reservar Agora">
+                                        </div>
+                                        <div class="input-group" id="campaign-btn-url-group">
+                                            <label for="campaign-btn-url">Link URL do Botão</label>
+                                            <input type="text" id="campaign-btn-url" placeholder="https://seuhotel.com/reserva">
+                                        </div>
                                     </div>
                                 </div>
                                 
@@ -733,6 +755,6 @@
     </div>
 
     <div id="toast-container" class="toast-container"></div>
-    <script src="app.js?v=1.3.0"></script>
+    <script src="app.js?v=1.3.1"></script>
 </body>
 </html>

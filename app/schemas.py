@@ -220,18 +220,24 @@ class CampaignSendRequest(BaseModel):
     name: str
     media_type: str  # text, image, video, audio
     media_url: Optional[str] = None
-    body: str
+    body: Optional[str] = ""
     button_type: str  # none, cta_url, quick_reply
     button_label: Optional[str] = None
     button_url: Optional[str] = None
+    use_template: Optional[bool] = False
+    template_name: Optional[str] = None
+    template_language: Optional[str] = "pt_BR"
 
 class CampaignResponse(BaseModel):
     id: UUID
     name: str
-    body: str
+    body: Optional[str] = None
     button_type: Optional[str] = None
     button_label: Optional[str] = None
     button_url: Optional[str] = None
+    use_template: bool
+    template_name: Optional[str] = None
+    template_language: Optional[str] = "pt_BR"
     sent_count: int
     delivered_count: int
     read_count: int
