@@ -620,7 +620,7 @@ const appRouter = {
                         try {
                             await api.delete(`/api/inbox/quick-messages/${id}`);
                             showToast("Resposta rápida excluída!", "success");
-                            this.loadQuickMessages();
+                            appRouter.loadQuickMessages();
                         } catch (err) {
                             showToast("Erro ao excluir: " + err.message, "error");
                         }
