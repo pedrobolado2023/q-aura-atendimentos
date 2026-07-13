@@ -270,14 +270,14 @@ def assign_conversation(
     return convo
 
 @router.post("/conversations/{conversation_id}/resolve", response_model=ConversationResponse)
-def resolve_conversation(
+async def resolve_conversation(
     conversation_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
     """
-    Marks the conversation as resolved.
+    Marks the conversation as resolved and sends a final closing message to the contact.
     """
     convo = db.query(Conversation).filter(
         Conversation.id == conversation_id,
@@ -287,6 +287,57 @@ def resolve_conversation(
         raise HTTPException(status_code=404, detail="Conversation not found")
         
     convo.status = "resolved"
+    
+    # Send closing message to the contact
+    creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == current_tenant.id).first()
+    if creds and convo.contact and convo.contact.phone_number:
+        closing_msg = (
+            "*Atendimento Concluído*\n\n"
+            "Seu atendimento foi finalizado com sucesso. Agradecemos imensamente o seu contato! "
+            "Se precisar de qualquer outra informação ou suporte no futuro, estaremos sempre por aqui.\n\n"
+            "Tenha um excelente dia! ✨🏨"
+        )
+        
+        meta_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{creds.phone_number_id}/messages"
+        headers = {
+            "Authorization": f"Bearer {creds.permanent_access_token}",
+            "Content-Type": "application/json"
+        }
+        meta_payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": convo.contact.phone_number,
+            "type": "text",
+            "text": {
+                "preview_url": False,
+                "body": closing_msg
+            }
+        }
+        
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(meta_url, headers=headers, json=meta_payload)
+                if response.status_code == 200:
+                    res_data = response.json()
+                    meta_message_id = res_data.get("messages", [{}])[0].get("id")
+                    
+                    # Save to db
+                    msg = Message(
+                        conversation_id=convo.id,
+                        sender_type="system",
+                        sender_id=current_user.id,
+                        message_type="text",
+                        body=closing_msg,
+                        meta_message_id=meta_message_id,
+                        status="sent"
+                    )
+                    db.add(msg)
+                    
+                    from sqlalchemy.sql import func
+                    convo.last_message_at = func.now()
+            except Exception as e:
+                print(f"[Resolve] Failed to send closing message: {e}")
+                
     db.commit()
     db.refresh(convo)
     return convo
