@@ -127,6 +127,7 @@ class Contact(Base):
     pms_id = Column(String(100))
     sales_funnel_stage = Column(String(50), default="lead") # lead, qualified, quotation, reservation_pending, reservation_confirmed, lost
     avatar_url = Column(String(500))
+    is_list_contact = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

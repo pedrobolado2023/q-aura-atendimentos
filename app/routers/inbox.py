@@ -158,10 +158,14 @@ async def start_conversation(
             phone_number=cleaned_phone,
             name=contact_name,
             language="pt-BR",
-            sales_funnel_stage="lead"
+            sales_funnel_stage="lead",
+            is_list_contact=True
         )
         db.add(contact)
         db.flush()
+    else:
+        contact.is_list_contact = True
+        db.commit()
 
     # 3. Get/Create conversation
     convo = db.query(Conversation).filter(
@@ -488,6 +492,7 @@ def import_contacts_bulk(
         
         if contact:
             contact.name = c.name
+            contact.is_list_contact = True
         else:
             contact = Contact(
                 tenant_id=current_tenant.id,
@@ -495,7 +500,8 @@ def import_contacts_bulk(
                 name=c.name,
                 sales_funnel_stage="lead",
                 loyalty_level="none",
-                language="pt-BR"
+                language="pt-BR",
+                is_list_contact=True
             )
             db.add(contact)
         imported_count += 1
@@ -526,9 +532,12 @@ async def dispatch_campaign_bulk(
             print(f"[Campaign] Credentials not found for tenant {tenant_id}")
             return
             
-        contacts = db.query(Contact).filter(Contact.tenant_id == tenant_id).all()
+        contacts = db.query(Contact).filter(
+            Contact.tenant_id == tenant_id,
+            Contact.is_list_contact == True
+        ).all()
         if not contacts:
-            print(f"[Campaign] No contacts in database for tenant {tenant_id}")
+            print(f"[Campaign] No list contacts in database for tenant {tenant_id}")
             return
             
         meta_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{creds.phone_number_id}/messages"
