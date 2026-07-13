@@ -103,8 +103,8 @@
                     <a href="#" class="menu-item admin-manager-only" data-target="team-view" data-module="team" onclick="appRouter.selectTab(event)">
                         <i class="fa-solid fa-users"></i> <span>Gerenciar Equipe</span>
                     </a>
-                    <a href="#" class="menu-item admin-only" data-target="settings-view" data-module="meta_settings" onclick="appRouter.selectTab(event)">
-                        <i class="fa-solid fa-sliders"></i> <span>Configurações Meta</span>
+                    <a href="#" class="menu-item" data-target="settings-view" data-module="meta_settings" onclick="appRouter.selectTab(event)">
+                        <i class="fa-solid fa-sliders"></i> <span>Configurações</span>
                     </a>
 
                 </nav>
@@ -191,7 +191,7 @@
                         <h1>Configuração Meta WhatsApp Cloud API</h1>
                     </header>
                     <div class="settings-container">
-                        <form id="settings-form" class="settings-card">
+                        <form id="settings-form" class="settings-card admin-only">
                             <h3>Credenciais do Aplicativo WhatsApp</h3>
                             <p class="settings-desc">Insira seus dados do painel do Meta for Developers para habilitar o envio e recebimento de mensagens.</p>
                             
@@ -214,7 +214,7 @@
                             <button type="submit" class="btn btn-primary">Salvar Credenciais</button>
                         </form>
 
-                        <div class="settings-card info-card">
+                        <div class="settings-card info-card admin-only">
                             <h3>Webhook Exclusivo Gerado</h3>
                             <p>Configure a URL abaixo no painel de Webhooks da Meta para receber as mensagens em tempo real.</p>
                             <div class="webhook-display">
