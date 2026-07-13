@@ -616,14 +616,12 @@ const appRouter = {
             listEl.querySelectorAll(".btn-delete-quick").forEach(btn => {
                 btn.addEventListener("click", async (e) => {
                     const id = e.currentTarget.getAttribute("data-id");
-                    if (confirm("Deseja realmente excluir esta resposta rápida?")) {
-                        try {
-                            await api.delete(`/api/inbox/quick-messages/${id}`);
-                            showToast("Resposta rápida excluída!", "success");
-                            appRouter.loadQuickMessages();
-                        } catch (err) {
-                            showToast("Erro ao excluir: " + err.message, "error");
-                        }
+                    try {
+                        await api.delete(`/api/inbox/quick-messages/${id}`);
+                        showToast("Resposta rápida excluída!", "success");
+                        appRouter.loadQuickMessages();
+                    } catch (err) {
+                        showToast("Erro ao excluir: " + err.message, "error");
                     }
                 });
             });
