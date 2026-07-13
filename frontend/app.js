@@ -1181,7 +1181,6 @@ function syncCampaignPreview() {
     }
     
     // Visualização do Botão
-    previewBtn = document.getElementById("preview-action-button");
     const previewBtnAnchor = document.getElementById("preview-btn-anchor");
     const previewBtnText = document.getElementById("preview-btn-text");
     const previewBtnIcon = document.getElementById("preview-btn-icon");
