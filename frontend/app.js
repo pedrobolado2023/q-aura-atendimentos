@@ -1163,7 +1163,6 @@ function syncCampaignPreview() {
     }
     
     // Texto do corpo
-    const previewBody = document.getElementById("preview-message-body");
     previewBody.innerHTML = formatMessageBody(body || "Olá! Temos uma novidade incrível para você...");
     
     // Controles de Botões
