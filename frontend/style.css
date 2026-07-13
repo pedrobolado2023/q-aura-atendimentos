@@ -612,7 +612,7 @@ body {
 .inbox-layout {
     display: grid;
     grid-template-columns: 340px 1fr 320px;
-    height: 100vh;
+    height: 100%;
     width: 100%;
     overflow: hidden;
     background: var(--bg-secondary);
@@ -1179,6 +1179,12 @@ img.avatar {
         grid-template-columns: 1fr !important;
     }
 }
+
+/* Disable scroll on workspace when inbox is active to keep input box locked at the bottom */
+.workspace:has(#inbox-view.active) {
+    overflow-y: hidden !important;
+}
+
 
 
 
