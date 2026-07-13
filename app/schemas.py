@@ -223,6 +223,23 @@ class CampaignSendRequest(BaseModel):
     button_label: Optional[str] = None
     button_url: Optional[str] = None
 
+class CampaignResponse(BaseModel):
+    id: UUID
+    name: str
+    body: str
+    button_type: Optional[str] = None
+    button_label: Optional[str] = None
+    button_url: Optional[str] = None
+    sent_count: int
+    delivered_count: int
+    read_count: int
+    click_count: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # Chatbot Config Schemas
 class BotConfigResponse(BaseModel):
     id: UUID

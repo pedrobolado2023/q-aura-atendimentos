@@ -1,7 +1,7 @@
 import httpx
 from typing import Optional
 from sqlalchemy.orm import Session
-from app.models import Contact, Conversation, Message, BotConfig, MetaCredential
+from app.models import Contact, Conversation, Message, BotConfig, MetaCredential, CampaignRecipient
 from app.config import settings
 from app.database import SessionLocal
 from datetime import datetime
@@ -49,6 +49,37 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                 value = change.get("value", {})
                 messages = value.get("messages", [])
                 contacts_meta = value.get("contacts", [])
+                statuses = value.get("statuses", [])
+
+                if statuses:
+                    for status_data in statuses:
+                        meta_msg_id = status_data.get("id")
+                        status_type = status_data.get("status") # 'delivered', 'read', 'failed'
+                        
+                        recipient = db.query(CampaignRecipient).filter(
+                            CampaignRecipient.meta_message_id == meta_msg_id
+                        ).first()
+                        
+                        if recipient:
+                            current_status = recipient.status
+                            if status_type == "read":
+                                if current_status != "read":
+                                    recipient.status = "read"
+                                    campaign = recipient.campaign
+                                    if campaign:
+                                        campaign.read_count = (campaign.read_count or 0) + 1
+                                        if current_status == "sent":
+                                            campaign.delivered_count = (campaign.delivered_count or 0) + 1
+                            elif status_type == "delivered":
+                                if current_status not in ["delivered", "read"]:
+                                    recipient.status = "delivered"
+                                    campaign = recipient.campaign
+                                    if campaign:
+                                        campaign.delivered_count = (campaign.delivered_count or 0) + 1
+                            elif status_type == "failed":
+                                recipient.status = "failed"
+                            
+                            db.commit()
 
                 if not messages:
                     continue
@@ -68,6 +99,7 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                     media_url = None
                     media_mime = None
 
+                    button_reply_id = None
                     if msg_type == "text":
                         body_content = msg_data.get("text", {}).get("body", "")
                     elif msg_type == "image":
@@ -78,6 +110,14 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                         body_content = "[Áudio]"
                         media_url = msg_data.get("audio", {}).get("id")
                         media_mime = msg_data.get("audio", {}).get("mime_type")
+                    elif msg_type == "interactive":
+                        interactive_data = msg_data.get("interactive", {})
+                        int_type = interactive_data.get("type")
+                        if int_type == "button_reply":
+                            body_content = interactive_data.get("button_reply", {}).get("title", "[Clique no Botão]")
+                            button_reply_id = interactive_data.get("button_reply", {}).get("id", "")
+                        else:
+                            body_content = "[Resposta Interativa]"
                     else:
                         body_content = f"[{msg_type.capitalize()}]"
 
@@ -97,6 +137,18 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                         db.add(contact)
                         db.commit()
                         db.refresh(contact)
+
+                    # Check campaign quick-reply button click tracking
+                    if button_reply_id and button_reply_id.startswith("camp_click_"):
+                        recipient_id_str = button_reply_id.replace("camp_click_", "")
+                        recipient = db.query(CampaignRecipient).filter(CampaignRecipient.id == recipient_id_str).first()
+                        if recipient and not recipient.clicked:
+                            recipient.clicked = True
+                            recipient.clicked_at = datetime.utcnow()
+                            campaign = recipient.campaign
+                            if campaign:
+                                campaign.click_count = (campaign.click_count or 0) + 1
+                            db.commit()
 
                     # 2. Resolve Conversation (find the latest conversation for this contact)
                     convo = db.query(Conversation).filter(

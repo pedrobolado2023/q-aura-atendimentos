@@ -191,3 +191,38 @@ class QuickMessage(Base):
     tenant = relationship("Tenant")
     user = relationship("User")
 
+
+class MarketingCampaign(Base):
+    __tablename__ = "qa_marketing_campaigns"
+    id = Column(String(36), primary_key=True, default=generate_uuid_str)
+    tenant_id = Column(String(36), ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    body = Column(Text, nullable=False)
+    media_type = Column(String(50), default="text") # 'text', 'image', 'video', 'audio'
+    media_url = Column(Text, nullable=True)
+    button_type = Column(String(50), nullable=True) # 'none', 'quick_reply', 'cta_url'
+    button_label = Column(String(100), nullable=True)
+    button_url = Column(Text, nullable=True)
+    sent_count = Column(Integer, default=0)
+    delivered_count = Column(Integer, default=0)
+    read_count = Column(Integer, default=0)
+    click_count = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    tenant = relationship("Tenant")
+
+
+class CampaignRecipient(Base):
+    __tablename__ = "qa_campaign_recipients"
+    id = Column(String(36), primary_key=True, default=generate_uuid_str)
+    campaign_id = Column(String(36), ForeignKey("qa_marketing_campaigns.id", ondelete="CASCADE"), nullable=False, index=True)
+    contact_id = Column(String(36), ForeignKey("qa_contacts.id", ondelete="CASCADE"), nullable=False, index=True)
+    meta_message_id = Column(String(255), nullable=True, index=True)
+    status = Column(String(50), default="sent") # 'sent', 'delivered', 'read', 'failed'
+    clicked = Column(Boolean, default=False)
+    clicked_at = Column(DateTime(timezone=True), nullable=True)
+
+    campaign = relationship("MarketingCampaign")
+    contact = relationship("Contact")
+
+

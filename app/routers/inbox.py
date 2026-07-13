@@ -8,8 +8,8 @@ from uuid import UUID
 from datetime import datetime
 from typing import List, Optional
 from app.database import get_db, SessionLocal
-from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig, Department, QuickMessage
-from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, StartConversationRequest, QuickMessageCreate, QuickMessageResponse
+from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig, Department, QuickMessage, MarketingCampaign, CampaignRecipient
+from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, CampaignResponse, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, StartConversationRequest, QuickMessageCreate, QuickMessageResponse
 from app.auth import get_current_user, get_current_tenant, ModuleRequired
 from app.config import settings
 
@@ -456,7 +456,8 @@ def import_contacts_bulk(
 async def dispatch_campaign_bulk(
     tenant_id: UUID,
     agent_id: UUID,
-    camp: CampaignSendRequest,
+    campaign_id: str,
+    base_url: str,
     db_session_factory
 ):
     """
@@ -464,6 +465,11 @@ async def dispatch_campaign_bulk(
     """
     db = db_session_factory()
     try:
+        campaign = db.query(MarketingCampaign).filter(MarketingCampaign.id == campaign_id).first()
+        if not campaign:
+            print(f"[Campaign] Campaign {campaign_id} not found")
+            return
+
         creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == tenant_id).first()
         if not creds:
             print(f"[Campaign] Credentials not found for tenant {tenant_id}")
@@ -480,8 +486,18 @@ async def dispatch_campaign_bulk(
             "Content-Type": "application/json"
         }
         
+        sent_count = 0
         async with httpx.AsyncClient() as client:
             for contact in contacts:
+                # Create CampaignRecipient record
+                recipient = CampaignRecipient(
+                    campaign_id=campaign.id,
+                    contact_id=contact.id,
+                    status="sent"
+                )
+                db.add(recipient)
+                db.flush() # Populate recipient.id
+
                 # 1. Resolve active conversation
                 convo = db.query(Conversation).filter(
                     Conversation.tenant_id == tenant_id,
@@ -508,79 +524,82 @@ async def dispatch_campaign_bulk(
                 }
                 
                 # Check button configuration
-                if camp.button_type == "cta_url" and camp.button_label and camp.button_url:
+                if campaign.button_type == "cta_url" and campaign.button_label and campaign.button_url:
+                    # Append tracking parameter or redirect tracker
+                    tracking_url = f"{base_url}/api/inbox/campaigns/click/{recipient.id}"
                     payload["type"] = "interactive"
                     payload["interactive"] = {
                         "type": "cta_url",
                         "body": {
-                            "text": camp.body
+                            "text": campaign.body
                         },
                         "action": {
                             "name": "cta_url",
                             "parameters": {
-                                "display_text": camp.button_label,
-                                "url": camp.button_url
+                                "display_text": campaign.button_label,
+                                "url": tracking_url
                             }
                         }
                     }
-                    if camp.media_type in ["image", "video"] and camp.media_url:
+                    if campaign.media_type in ["image", "video"] and campaign.media_url:
                         payload["interactive"]["header"] = {
-                            "type": camp.media_type,
-                            camp.media_type: {
-                                "link": camp.media_url
+                            "type": campaign.media_type,
+                            campaign.media_type: {
+                                "link": campaign.media_url
                             }
                         }
                         
-                elif camp.button_type == "quick_reply" and camp.button_label:
+                elif campaign.button_type == "quick_reply" and campaign.button_label:
                     payload["type"] = "interactive"
                     payload["interactive"] = {
                         "type": "button",
                         "body": {
-                            "text": camp.body
+                            "text": campaign.body
                         },
                         "action": {
                             "buttons": [
                                 {
                                     "type": "reply",
                                     "reply": {
-                                        "id": "campaign_reply_1",
-                                        "title": camp.button_label
+                                        # Use recipient ID as the reply button ID so we can track the click in webhook!
+                                        "id": f"camp_click_{recipient.id}",
+                                        "title": campaign.button_label
                                     }
                                 }
                             ]
                         }
                     }
-                    if camp.media_type in ["image", "video"] and camp.media_url:
+                    if campaign.media_type in ["image", "video"] and campaign.media_url:
                         payload["interactive"]["header"] = {
-                            "type": camp.media_type,
-                            camp.media_type: {
-                                "link": camp.media_url
+                            "type": campaign.media_type,
+                            campaign.media_type: {
+                                "link": campaign.media_url
                             }
                         }
                 else:
                     # Media without buttons or plain text
-                    if camp.media_type == "image" and camp.media_url:
+                    if campaign.media_type == "image" and campaign.media_url:
                         payload["type"] = "image"
                         payload["image"] = {
-                            "link": camp.media_url,
-                            "caption": camp.body
+                            "link": campaign.media_url,
+                            "caption": campaign.body
                         }
-                    elif camp.media_type == "video" and camp.media_url:
+                    elif campaign.media_type == "video" and campaign.media_url:
                         payload["type"] = "video"
                         payload["video"] = {
-                            "link": camp.media_url,
-                            "caption": camp.body
+                            "link": campaign.media_url,
+                            "caption": campaign.body
                         }
-                    elif camp.media_type == "audio" and camp.media_url:
+                    elif campaign.media_type == "audio" and campaign.media_url:
                         payload["type"] = "audio"
                         payload["audio"] = {
-                            "link": camp.media_url
+                            "link": campaign.media_url
                         }
                     else:
                         payload["type"] = "text"
                         payload["text"] = {
                             "preview_url": False,
-                            "body": camp.body
+                            "body": campaign.body
                         }
                         
                 # 3. Request sending to Meta
@@ -590,24 +609,35 @@ async def dispatch_campaign_bulk(
                     if response.status_code == 200:
                         res_data = response.json()
                         meta_message_id = res_data.get("messages", [{}])[0].get("id")
+                        sent_count += 1
                 except Exception as e:
                     print(f"[Campaign] Error sending to {contact.phone_number}: {e}")
                     
-                # 4. Save to Database
+                # Save recipient msg id and update
+                if meta_message_id:
+                    recipient.meta_message_id = meta_message_id
+                else:
+                    recipient.status = "failed"
+                
+                # 4. Save to Database Messages
                 new_msg = Message(
                     conversation_id=convo.id,
                     sender_type="agent",
                     sender_id=agent_id,
-                    message_type="image" if camp.media_type == "image" else ("video" if camp.media_type == "video" else ("audio" if camp.media_type == "audio" else "text")),
-                    body=camp.body,
-                    media_url=camp.media_url,
+                    message_type="image" if campaign.media_type == "image" else ("video" if campaign.media_type == "video" else ("audio" if campaign.media_type == "audio" else "text")),
+                    body=campaign.body,
+                    media_url=campaign.media_url,
                     meta_message_id=meta_message_id,
                     status="sent" if meta_message_id else "failed"
                 )
                 db.add(new_msg)
                 convo.last_message_at = datetime.utcnow()
                 db.commit()
-                
+
+        # Update campaign sent_count
+        campaign.sent_count = sent_count
+        db.commit()
+                 
     except Exception as e:
         print(f"[Campaign] General campaign failure: {e}")
     finally:
@@ -618,6 +648,7 @@ async def dispatch_campaign_bulk(
 async def send_campaign(
     camp: CampaignSendRequest,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(ModuleRequired("crm"))
@@ -632,16 +663,77 @@ async def send_campaign(
     if not creds:
         raise HTTPException(status_code=400, detail="Chaves da API da Meta não configuradas para este hotel.")
         
+    # Create the campaign record first
+    campaign = MarketingCampaign(
+        tenant_id=current_tenant.id,
+        name=camp.name,
+        body=camp.body,
+        media_type=camp.media_type,
+        media_url=camp.media_url,
+        button_type=camp.button_type,
+        button_label=camp.button_label,
+        button_url=camp.button_url,
+        sent_count=0
+    )
+    db.add(campaign)
+    db.commit()
+    db.refresh(campaign)
+
+    base_url = str(request.base_url).rstrip("/")
+
     # Queue campaign dispatch in background
     background_tasks.add_task(
         dispatch_campaign_bulk,
         tenant_id=current_tenant.id,
         agent_id=current_user.id,
-        camp=camp,
+        campaign_id=campaign.id,
+        base_url=base_url,
         db_session_factory=SessionLocal
     )
     
-    return {"status": "campaign_queued"}
+    return {"status": "campaign_queued", "campaign_id": campaign.id}
+
+
+@router.get("/campaigns", response_model=List[CampaignResponse])
+def get_campaigns(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("crm"))
+):
+    """
+    Retrieve all campaigns for the tenant.
+    """
+    campaigns = db.query(MarketingCampaign).filter(
+        MarketingCampaign.tenant_id == current_tenant.id
+    ).order_by(MarketingCampaign.created_at.desc()).all()
+    return campaigns
+
+
+@router.get("/campaigns/click/{recipient_id}")
+def campaign_click_tracker(
+    recipient_id: UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Tracks button/link clicks by redirecting through this server endpoint.
+    """
+    recipient = db.query(CampaignRecipient).filter(CampaignRecipient.id == str(recipient_id)).first()
+    if not recipient:
+        raise HTTPException(status_code=404, detail="Recipient not found")
+        
+    if not recipient.clicked:
+        recipient.clicked = True
+        recipient.clicked_at = datetime.utcnow()
+        campaign = recipient.campaign
+        if campaign:
+            campaign.click_count = (campaign.click_count or 0) + 1
+        db.commit()
+        
+    redirect_url = recipient.campaign.button_url if (recipient.campaign and recipient.campaign.button_url) else "/"
+    return Response(
+        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+        headers={"Location": redirect_url}
+    )
 
 @router.post("/upload-media")
 def upload_media(

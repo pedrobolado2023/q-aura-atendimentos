@@ -144,6 +144,7 @@ const appRouter = {
             // Limpa o cache temporário ao mudar de aba
             tempContacts = [];
             updateContactsPreview();
+            this.loadCampaigns();
         }
     },
 
@@ -1547,6 +1548,200 @@ if (downloadCsvBtn) {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    });
+}
+
+
+}
+
+// --- CRM Campaign Reports Handler ---
+appRouter.loadCampaigns = async function() {
+    const listEl = document.getElementById("crm-campaigns-list");
+    if (!listEl) return;
+
+    try {
+        const campaigns = await api.get("/api/inbox/campaigns");
+        listEl.innerHTML = "";
+
+        if (campaigns.length === 0) {
+            listEl.innerHTML = `<tr><td colspan="2" style="text-align: center; padding: 20px; opacity: 0.5;">Nenhuma campanha enviada.</td></tr>`;
+            this.updateCampaignsSummary([]);
+            return;
+        }
+
+        campaigns.forEach(camp => {
+            const tr = document.createElement("tr");
+            tr.style.cursor = "pointer";
+            tr.className = "campaign-row";
+            tr.setAttribute("data-id", camp.id);
+            
+            const dateFormatted = new Date(camp.created_at).toLocaleDateString("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+
+            tr.innerHTML = `
+                <td><strong>${camp.name}</strong></td>
+                <td style="font-size: 11px; opacity: 0.8;">${dateFormatted}</td>
+            `;
+            
+            tr.onclick = () => this.showCampaignDetail(camp);
+            listEl.appendChild(tr);
+        });
+
+        this.updateCampaignsSummary(campaigns);
+
+    } catch (err) {
+        showToast("Erro ao carregar relatórios: " + err.message, "error");
+    }
+};
+
+appRouter.updateCampaignsSummary = function(campaigns) {
+    let totalSent = 0;
+    let totalDelivered = 0;
+    let totalRead = 0;
+    let totalClicked = 0;
+
+    campaigns.forEach(c => {
+        totalSent += (c.sent_count || 0);
+        totalDelivered += (c.delivered_count || 0);
+        totalRead += (c.read_count || 0);
+        totalClicked += (c.click_count || 0);
+    });
+
+    const deliveryRate = totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0;
+    const readRate = totalSent > 0 ? Math.round((totalRead / totalSent) * 100) : 0;
+    const clickRate = totalSent > 0 ? Math.round((totalClicked / totalSent) * 100) : 0;
+
+    document.getElementById("rep-total-sent").innerText = totalSent;
+    document.getElementById("rep-total-delivered").innerText = `${deliveryRate}%`;
+    document.getElementById("rep-progress-delivered").style.width = `${deliveryRate}%`;
+    document.getElementById("rep-total-read").innerText = `${readRate}%`;
+    document.getElementById("rep-progress-read").style.width = `${readRate}%`;
+    document.getElementById("rep-total-clicked").innerText = `${clickRate}%`;
+    document.getElementById("rep-progress-clicked").style.width = `${clickRate}%`;
+};
+
+appRouter.showCampaignDetail = function(camp) {
+    const detailsPanel = document.getElementById("campaign-details-panel");
+    if (!detailsPanel) return;
+
+    // Highlight selected row
+    document.querySelectorAll(".campaign-row").forEach(row => {
+        row.style.background = "transparent";
+        if (row.getAttribute("data-id") === camp.id) {
+            row.style.background = "rgba(79, 70, 229, 0.1)";
+        }
+    });
+
+    const dateFormatted = new Date(camp.created_at).toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+
+    const deliveryPercent = camp.sent_count > 0 ? Math.round((camp.delivered_count / camp.sent_count) * 100) : 0;
+    const readPercent = camp.sent_count > 0 ? Math.round((camp.read_count / camp.sent_count) * 100) : 0;
+    const clickPercent = camp.sent_count > 0 ? Math.round((camp.click_count / camp.sent_count) * 100) : 0;
+
+    let mediaBadge = "";
+    if (camp.media_type && camp.media_type !== "none") {
+        mediaBadge = `<span class="scope-badge global" style="font-size:10px; margin-left: 6px;">Mídia: ${camp.media_type.toUpperCase()}</span>`;
+    }
+
+    detailsPanel.style.textAlign = "left";
+    detailsPanel.style.justifyContent = "flex-start";
+    detailsPanel.style.alignItems = "stretch";
+
+    detailsPanel.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-color); padding-bottom:12px; margin-bottom:16px;">
+            <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--text-primary);">${camp.name} ${mediaBadge}</h3>
+            <span style="font-size:11px; opacity:0.6;">Disparado em: ${dateFormatted}</span>
+        </div>
+
+        <div class="metrics-grid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:20px;">
+            <div style="background:var(--bg-primary); border:1px solid var(--border-color); padding:12px; border-radius:var(--radius-sm); text-align:center;">
+                <span style="font-size:10px; color:var(--text-muted);">Disparos</span>
+                <h4 style="font-size:18px; font-weight:800; margin:4px 0 0 0;">${camp.sent_count}</h4>
+            </div>
+            <div style="background:var(--bg-primary); border:1px solid var(--border-color); padding:12px; border-radius:var(--radius-sm); text-align:center;">
+                <span style="font-size:10px; color:var(--text-muted);">Entregues</span>
+                <h4 style="font-size:18px; font-weight:800; margin:4px 0 0 0; color:var(--color-primary);">${camp.delivered_count} <span style="font-size:10px; font-weight:600; opacity:0.8;">(${deliveryPercent}%)</span></h4>
+            </div>
+            <div style="background:var(--bg-primary); border:1px solid var(--border-color); padding:12px; border-radius:var(--radius-sm); text-align:center;">
+                <span style="font-size:10px; color:var(--text-muted);">Lidos</span>
+                <h4 style="font-size:18px; font-weight:800; margin:4px 0 0 0; color:var(--color-success);">${camp.read_count} <span style="font-size:10px; font-weight:600; opacity:0.8;">(${readPercent}%)</span></h4>
+            </div>
+            <div style="background:var(--bg-primary); border:1px solid var(--border-color); padding:12px; border-radius:var(--radius-sm); text-align:center;">
+                <span style="font-size:10px; color:var(--text-muted);">Cliques</span>
+                <h4 style="font-size:18px; font-weight:800; margin:4px 0 0 0; color:var(--color-warning);">${camp.click_count} <span style="font-size:10px; font-weight:600; opacity:0.8;">(${clickPercent}%)</span></h4>
+            </div>
+        </div>
+
+        <!-- Conversion Funnel Visualization -->
+        <h4 style="font-size:12px; font-weight:700; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.5px;">Funil de Conversão</h4>
+        <div style="display:flex; flex-direction:column; gap:10px; background:var(--bg-primary); border:1px solid var(--border-color); padding:16px; border-radius:var(--radius-md); margin-bottom:20px;">
+            <div>
+                <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;"><span>1. Envios Iniciados</span><strong style="opacity:0.8;">${camp.sent_count} (100%)</strong></div>
+                <div style="height:8px; background:var(--border-color); border-radius:4px; overflow:hidden;"><div style="width:100%; height:100%; background:var(--text-muted);"></div></div>
+            </div>
+            <div>
+                <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;"><span>2. Recebidos (Entregues)</span><strong>${camp.delivered_count} (${deliveryPercent}%)</strong></div>
+                <div style="height:8px; background:var(--border-color); border-radius:4px; overflow:hidden;"><div style="width:${deliveryPercent}%; height:100%; background:var(--color-primary); transition: width 0.4s;"></div></div>
+            </div>
+            <div>
+                <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;"><span>3. Abertos (Lidos)</span><strong>${camp.read_count} (${readPercent}%)</strong></div>
+                <div style="height:8px; background:var(--border-color); border-radius:4px; overflow:hidden;"><div style="width:${readPercent}%; height:100%; background:var(--color-success); transition: width 0.4s;"></div></div>
+            </div>
+            <div>
+                <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;"><span>4. Clicados (Engajamento)</span><strong>${camp.click_count} (${clickPercent}%)</strong></div>
+                <div style="height:8px; background:var(--border-color); border-radius:4px; overflow:hidden;"><div style="width:${clickPercent}%; height:100%; background:var(--color-warning); transition: width 0.4s;"></div></div>
+            </div>
+        </div>
+
+        <h4 style="font-size:12px; font-weight:700; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px;">Mensagem Enviada</h4>
+        <div style="background:var(--bg-secondary); border:1px solid var(--border-color); padding:12px; border-radius:var(--radius-sm); font-size:11px; white-space:pre-wrap; max-height:120px; overflow-y:auto; color:var(--text-primary); font-family:var(--font-primary);">
+            ${camp.body}
+        </div>
+    `;
+};
+
+// CRM Sub-tabs toggling click handlers
+const crmTabSendBtn = document.getElementById("crm-tab-send");
+const crmTabReportsBtn = document.getElementById("crm-tab-reports");
+const crmSendPanel = document.getElementById("crm-send-panel");
+const crmReportsPanel = document.getElementById("crm-reports-panel");
+
+if (crmTabSendBtn && crmTabReportsBtn && crmSendPanel && crmReportsPanel) {
+    crmTabSendBtn.addEventListener("click", () => {
+        crmTabSendBtn.classList.add("active");
+        crmTabReportsBtn.classList.remove("active");
+        crmTabSendBtn.style.color = "var(--color-brand)";
+        crmTabSendBtn.style.borderBottomColor = "var(--color-brand)";
+        crmTabReportsBtn.style.color = "var(--text-muted)";
+        crmTabReportsBtn.style.borderBottomColor = "transparent";
+        
+        crmSendPanel.style.display = "block";
+        crmReportsPanel.style.display = "none";
+    });
+
+    crmTabReportsBtn.addEventListener("click", () => {
+        crmTabReportsBtn.classList.add("active");
+        crmTabSendBtn.classList.remove("active");
+        crmTabReportsBtn.style.color = "var(--color-brand)";
+        crmTabReportsBtn.style.borderBottomColor = "var(--color-brand)";
+        crmTabSendBtn.style.color = "var(--text-muted)";
+        crmTabSendBtn.style.borderBottomColor = "transparent";
+
+        crmSendPanel.style.display = "none";
+        crmReportsPanel.style.display = "flex";
+        
+        appRouter.loadCampaigns();
     });
 }
 
