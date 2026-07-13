@@ -9,3 +9,4 @@ passlib[bcrypt]
 httpx
 aiofiles
 python-multipart
+websockets
