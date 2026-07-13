@@ -2,7 +2,7 @@
 
 class SuperadminRouter {
     constructor() {
-        this.token = localStorage.getItem("sa_token") || null;
+        this.token = localStorage.getItem("sa_token") || localStorage.getItem("qa_token") || null;
         this.apiUrl = window.location.origin;
         this.plans = [];
         this.tenants = [];
@@ -99,6 +99,8 @@ class SuperadminRouter {
             const user = await this.request("/api/auth/me");
             if (user && user.role === "superadmin") {
                 localStorage.setItem("sa_token", this.token);
+                localStorage.setItem("qa_token", this.token);
+                localStorage.setItem("qa_user", JSON.stringify(user));
                 this.showToast("Login efetuado com sucesso!");
                 this.showLayout();
                 this.loadDashboard();
@@ -125,7 +127,7 @@ class SuperadminRouter {
     }
 
     logout() {
-        localStorage.removeItem("sa_token");
+        localStorage.clear();
         this.token = null;
         this.showLogin();
     }
