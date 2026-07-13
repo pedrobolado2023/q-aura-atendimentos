@@ -1133,7 +1133,6 @@ function syncCampaignPreview() {
     const btnUrl = document.getElementById("campaign-btn-url").value.trim();
     
     // Exibe ou oculta campo de arquivo de mídia
-    const mediaFileGroup = document.getElementById("campaign-media-file-group");
     if (mediaFileGroup) {
         if (mediaType !== "none") {
             mediaFileGroup.style.display = "block";
@@ -1147,11 +1146,6 @@ function syncCampaignPreview() {
     }
     
     // Elementos do mockup de celular
-    const headerMedia = document.getElementById("preview-header-media");
-    const previewImg = document.getElementById("preview-header-img");
-    const previewVideo = document.getElementById("preview-header-video");
-    const previewAudio = document.getElementById("preview-audio-media");
-    
     headerMedia.style.display = "none";
     previewImg.style.display = "none";
     previewVideo.style.display = "none";
