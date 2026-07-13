@@ -618,6 +618,10 @@ body {
     background: var(--bg-secondary);
 }
 
+.inbox-layout > * {
+    min-height: 0;
+}
+
 /* Inbox Sidebar */
 .inbox-sidebar {
     background: var(--bg-secondary);
