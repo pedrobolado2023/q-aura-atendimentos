@@ -222,6 +222,7 @@ async def send_bot_message(
     msg = Message(
         conversation_id=payload.conversation_id,
         sender_type="bot",
+        message_type="text",
         body=payload.body,
         meta_message_id=meta_message_id,
         status="sent" if meta_message_id else "failed"
