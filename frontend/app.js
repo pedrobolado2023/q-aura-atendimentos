@@ -440,6 +440,16 @@ const appRouter = {
                     transferBtn.classList.add("btn-secondary");
                 }
             }
+
+            // Toggle Enviar para o Bot button
+            const transferToBotBtn = document.getElementById("btn-transfer-to-bot");
+            if (transferToBotBtn) {
+                if (convo.status === "bot") {
+                    transferToBotBtn.style.display = "none";
+                } else {
+                    transferToBotBtn.style.display = "block";
+                }
+            }
         }
 
         // Load Messages
@@ -983,6 +993,29 @@ document.getElementById("btn-show-context").addEventListener("click", () => {
     
     const showContextBtn = document.getElementById("btn-show-context");
     if (showContextBtn) showContextBtn.style.display = "none";
+});
+
+// Transfer Conversation back to Bot
+document.getElementById("btn-transfer-to-bot").addEventListener("click", async () => {
+    if (!state.activeConversationId) return;
+    
+    try {
+        await api.post(`/api/inbox/conversations/${state.activeConversationId}/transfer-to-bot`, {});
+        showToast("Conversa enviada para o Bot com sucesso!", "success");
+        
+        // Reload conversations queue
+        const activeTab = document.querySelector(".inbox-tabs .tab-btn.active");
+        const currentStatus = activeTab ? activeTab.getAttribute("data-status") : "waiting";
+        await appRouter.loadConversations(currentStatus);
+        
+        // Clear active chat workspace since it went back to the bot queue
+        document.getElementById("active-chat-area").classList.add("empty");
+        document.getElementById("active-chat-area").querySelector(".no-chat-selected").style.display = "flex";
+        document.getElementById("active-chat-area").querySelector(".chat-wrapper").style.display = "none";
+        document.getElementById("guest-context").style.display = "none";
+    } catch (err) {
+        showToast("Erro ao transferir para o Bot: " + err.message, "error");
+    }
 });
 
 // --- Client Flagging (Flegar Cliente) Action ---

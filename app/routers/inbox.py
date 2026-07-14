@@ -428,6 +428,31 @@ def assign_conversation(
     db.refresh(convo)
     return convo
 
+
+@router.post("/conversations/{conversation_id}/transfer-to-bot", response_model=ConversationResponse)
+def transfer_conversation_to_bot(
+    conversation_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    """
+    Sends the conversation back to the chatbot (sets status to 'bot' and unassigns the user).
+    """
+    convo = db.query(Conversation).filter(
+        Conversation.id == str(conversation_id),
+        Conversation.tenant_id == current_tenant.id
+    ).first()
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+        
+    convo.status = "bot"
+    convo.assigned_user_id = None
+    db.commit()
+    db.refresh(convo)
+    return convo
+
+
 @router.post("/conversations/{conversation_id}/resolve", response_model=ConversationResponse)
 async def resolve_conversation(
     conversation_id: UUID,
