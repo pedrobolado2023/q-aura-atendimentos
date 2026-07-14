@@ -505,6 +505,8 @@ def import_contacts_bulk(
 
     imported_count = 0
     seen_phones = set()
+    contacts_to_process = []
+    
     for c in payload.contacts:
         phone = format_brazilian_phone(c.phone_number)
         if not phone:
@@ -512,20 +514,30 @@ def import_contacts_bulk(
         if phone in seen_phones:
             continue
         seen_phones.add(phone)
-            
-        contact = db.query(Contact).filter(
-            Contact.tenant_id == current_tenant.id,
-            Contact.phone_number == phone
-        ).first()
-        
+        contacts_to_process.append((phone, c.name))
+
+    if not contacts_to_process:
+        return {"status": "success", "imported": 0}
+
+    # Fetch all existing contacts in a single query
+    phones_list = [p[0] for p in contacts_to_process]
+    existing = db.query(Contact).filter(
+        Contact.tenant_id == current_tenant.id,
+        Contact.phone_number.in_(phones_list)
+    ).all()
+    
+    existing_map = {c.phone_number: c for c in existing}
+
+    for phone, name in contacts_to_process:
+        contact = existing_map.get(phone)
         if contact:
-            contact.name = c.name
+            contact.name = name
             contact.is_list_contact = True
         else:
             contact = Contact(
                 tenant_id=current_tenant.id,
                 phone_number=phone,
-                name=c.name,
+                name=name,
                 sales_funnel_stage="lead",
                 loyalty_level="none",
                 language="pt-BR",
