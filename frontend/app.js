@@ -716,49 +716,76 @@ const appRouter = {
     },
 
     connectWebSocket() {
-        if (state.ws) state.ws.close();
+        if (state.ws) {
+            try {
+                state.ws.close();
+            } catch (e) {}
+        }
         
         const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
         const wsHost = window.location.port === "3000" ? "localhost:8000" : window.location.host;
+        
+        console.log(`Connecting WebSocket to: ${wsProtocol}//${wsHost}/ws/${state.tenant_id}`);
         state.ws = new WebSocket(`${wsProtocol}//${wsHost}/ws/${state.tenant_id}`);
         
+        state.ws.onopen = () => {
+            console.log("WebSocket connected successfully!");
+        };
+        
         state.ws.onmessage = (event) => {
-            const message = JSON.parse(event.data);
-            if (message.type === "new_message" && message.conversation_id === state.activeConversationId) {
-                // Append message to scroll area
-                const scroll = document.getElementById("message-scroll");
-                const bubble = document.createElement("div");
-                bubble.className = `message-bubble ${message.sender_type === 'contact' ? 'incoming' : 'outgoing'}`;
+            try {
+                const message = JSON.parse(event.data);
+                console.log("WebSocket message received:", message);
                 
-                if (message.message_type === "image" && message.media_url) {
-                    const img = document.createElement("img");
-                    
-                    let imgSrc = message.media_url;
-                    // Se for um ID da Meta, usa o proxy. Se for link do uploader, usa direto.
-                    if (!message.media_url.startsWith("http://") && !message.media_url.startsWith("https://")) {
-                        imgSrc = `${API_URL}/api/inbox/media/${message.media_url}?token=${state.token}`;
+                if (message.type === "new_message" && message.conversation_id === state.activeConversationId) {
+                    const scroll = document.getElementById("message-scroll");
+                    if (scroll) {
+                        const bubble = document.createElement("div");
+                        bubble.className = `message-bubble ${message.sender_type === 'contact' ? 'incoming' : 'outgoing'}`;
+                        
+                        if (message.message_type === "image" && message.media_url) {
+                            const img = document.createElement("img");
+                            let imgSrc = message.media_url;
+                            if (!message.media_url.startsWith("http://") && !message.media_url.startsWith("https://")) {
+                                imgSrc = `${API_URL}/api/inbox/media/${message.media_url}?token=${state.token}`;
+                            }
+                            
+                            img.src = imgSrc;
+                            img.alt = "Imagem";
+                            img.className = "chat-media-image";
+                            img.onclick = () => window.open(imgSrc, "_blank");
+                            bubble.appendChild(img);
+                            
+                            if (message.body && message.body !== "[Imagem]") {
+                                const caption = document.createElement("div");
+                                caption.innerHTML = formatMessageBody(message.body);
+                                caption.style.marginTop = "8px";
+                                bubble.appendChild(caption);
+                            }
+                        } else {
+                            bubble.innerHTML = formatMessageBody(message.body);
+                        }
+                        scroll.appendChild(bubble);
+                        scroll.scrollTop = scroll.scrollHeight;
                     }
-                    
-                    img.src = imgSrc;
-                    img.alt = "Imagem";
-                    img.className = "chat-media-image";
-                    img.onclick = () => window.open(imgSrc, "_blank");
-                    bubble.appendChild(img);
-                    
-                    if (message.body && message.body !== "[Imagem]") {
-                        const caption = document.createElement("div");
-                        caption.innerHTML = formatMessageBody(message.body);
-                        caption.style.marginTop = "8px";
-                        bubble.appendChild(caption);
-                    }
-                } else {
-                    bubble.innerHTML = formatMessageBody(message.body);
                 }
-                scroll.appendChild(bubble);
-                scroll.scrollTop = scroll.scrollHeight;
+                this.loadConversations();
+            } catch (e) {
+                console.error("Error handling WebSocket message:", e);
             }
-            // Reload list to update last message preview
-            this.loadConversations();
+        };
+        
+        state.ws.onerror = (err) => {
+            console.error("WebSocket error:", err);
+        };
+        
+        state.ws.onclose = () => {
+            console.log("WebSocket connection closed. Reconnecting in 3 seconds...");
+            setTimeout(() => {
+                if (state.token && state.tenant_id) {
+                    this.connectWebSocket();
+                }
+            }, 3000);
         };
     }
 };
