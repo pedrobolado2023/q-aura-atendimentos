@@ -391,7 +391,7 @@ const appRouter = {
             // Toggle Assumir Atendimento vs Transferir button
             const transferBtn = document.getElementById("btn-transfer-chat");
             if (transferBtn) {
-                if (convo.status === "waiting") {
+                if (convo.status === "waiting" || convo.status === "bot") {
                     transferBtn.innerHTML = `<i class="fa-solid fa-headset"></i> Assumir Atendimento`;
                     transferBtn.classList.remove("btn-secondary");
                     transferBtn.classList.add("btn-primary");
@@ -827,9 +827,9 @@ document.querySelectorAll(".inbox-tabs .tab-btn").forEach(btn => {
 document.getElementById("btn-transfer-chat").addEventListener("click", async () => {
     if (!state.activeConversationId) return;
     
-    // Identifica se a conversa atual está na fila (aguardando)
+    // Identifica se a conversa atual está na fila (aguardando ou no bot)
     const convo = state.conversations.find(c => c.id === state.activeConversationId);
-    const isWaiting = convo && convo.status === "waiting";
+    const isWaiting = convo && (convo.status === "waiting" || convo.status === "bot");
     
     try {
         await api.post(`/api/inbox/conversations/${state.activeConversationId}/assign`, {});
