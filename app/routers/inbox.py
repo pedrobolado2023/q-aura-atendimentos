@@ -488,6 +488,63 @@ async def get_media(
         except httpx.HTTPError as e:
             raise HTTPException(status_code=502, detail=f"Bad gateway response from Meta: {str(e)}")
 
+import traceback
+
+@router.post("/contacts/test-error")
+def test_error_endpoint(
+    payload: BulkContactUploadRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("crm"))
+):
+    try:
+        imported_count = 0
+        seen_phones = set()
+        contacts_to_process = []
+        for c in payload.contacts:
+            phone = format_brazilian_phone(c.phone_number)
+            if not phone:
+                continue
+            if phone in seen_phones:
+                continue
+            seen_phones.add(phone)
+            contacts_to_process.append((phone, c.name))
+
+        if not contacts_to_process:
+            return {"status": "success", "imported": 0}
+
+        phones_list = [p[0] for p in contacts_to_process]
+        existing = db.query(Contact).filter(
+            Contact.tenant_id == current_tenant.id,
+            Contact.phone_number.in_(phones_list)
+        ).all()
+        
+        existing_map = {c.phone_number: c for c in existing}
+
+        for phone, name in contacts_to_process:
+            contact = existing_map.get(phone)
+            if contact:
+                contact.name = name
+                contact.is_list_contact = True
+            else:
+                contact = Contact(
+                    tenant_id=current_tenant.id,
+                    phone_number=phone,
+                    name=name,
+                    sales_funnel_stage="lead",
+                    loyalty_level="none",
+                    language="pt-BR",
+                    is_list_contact=True
+                )
+                db.add(contact)
+            imported_count += 1
+            
+        db.commit()
+        return {"status": "success", "imported": imported_count}
+    except Exception as e:
+        db.rollback()
+        return {"status": "error", "error": str(e), "traceback": traceback.format_exc()}
+
 # --- CRM & Campaigns Endpoints ---
 
 @router.post("/contacts/bulk")
