@@ -93,6 +93,23 @@ const api = {
         return response.json();
     },
 
+    async put(endpoint, data, useAuth = true) {
+        const headers = { "Content-Type": "application/json" };
+        if (useAuth && state.token) {
+            headers["Authorization"] = `Bearer ${state.token}`;
+        }
+        const response = await fetch(`${API_URL}${endpoint}`, {
+            method: "PUT",
+            headers,
+            body: JSON.stringify(data)
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || "Erro desconhecido");
+        }
+        return response.json();
+    },
+
     async delete(endpoint) {
         const headers = {};
         if (state.token) {
