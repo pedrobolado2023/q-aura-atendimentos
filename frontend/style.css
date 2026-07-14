@@ -618,6 +618,10 @@ body {
     background: var(--bg-secondary);
 }
 
+.inbox-layout.hide-context {
+    grid-template-columns: 340px 1fr;
+}
+
 .inbox-layout > * {
     min-height: 0;
 }

@@ -344,13 +344,35 @@ const appRouter = {
         activeArea.querySelector(".no-chat-selected").style.display = "none";
         activeArea.querySelector(".chat-wrapper").style.display = "flex";
 
-        // Show guest context panel
-        document.getElementById("guest-context").style.display = "block";
+        // Show guest context panel based on state setting
+        const guestContext = document.getElementById("guest-context");
+        const layout = document.querySelector(".inbox-layout");
+        const showContextBtn = document.getElementById("btn-show-context");
+        
+        if (state.isContextPanelVisible === undefined) {
+            state.isContextPanelVisible = true;
+        }
+        
+        if (state.isContextPanelVisible) {
+            guestContext.style.display = "block";
+            if (layout) layout.classList.remove("hide-context");
+            if (showContextBtn) showContextBtn.style.display = "none";
+        } else {
+            guestContext.style.display = "none";
+            if (layout) layout.classList.add("hide-context");
+            if (showContextBtn) showContextBtn.style.display = "block";
+        }
 
         // Update contact details in Right panel and Active header
         if (convo && convo.contact) {
             const contactName = convo.contact.name || convo.contact.phone_number || "Hóspede";
             document.getElementById("active-contact-name").innerText = contactName;
+            
+            const nameInput = document.getElementById("guest-name-input");
+            if (nameInput) {
+                nameInput.value = convo.contact.name || "";
+            }
+            
             document.getElementById("guest-phone").innerText = convo.contact.phone_number;
             document.getElementById("guest-lang").innerText = convo.contact.language === "pt-BR" ? "Português" : convo.contact.language;
             
@@ -884,6 +906,66 @@ document.getElementById("btn-resolve-chat").addEventListener("click", async () =
     } catch (err) {
         showToast("Erro ao resolver conversa: " + err.message, "error");
     }
+});
+
+
+// --- Context Panel Actions (Name Edit & Hide/Show Ficha) ---
+
+// Save Client Name (Ficha do Hóspede)
+document.getElementById("btn-save-guest-name").addEventListener("click", async () => {
+    const activeConvo = state.conversations.find(c => c.id === state.activeConversationId);
+    if (!activeConvo || !activeConvo.contact) return;
+    
+    const nameInput = document.getElementById("guest-name-input");
+    const newName = nameInput.value.trim();
+    if (!newName) {
+        showToast("O nome do cliente não pode estar vazio.", "error");
+        return;
+    }
+    
+    try {
+        const updatedContact = await api.put(`/api/inbox/contacts/${activeConvo.contact.id}`, { name: newName });
+        
+        // Update state name
+        activeConvo.contact.name = updatedContact.name;
+        
+        // Update header UI
+        document.getElementById("active-contact-name").innerText = updatedContact.name;
+        
+        // Reload conversations list to show new name in queue
+        const activeTab = document.querySelector(".inbox-tabs .tab-btn.active");
+        const currentStatus = activeTab ? activeTab.getAttribute("data-status") : "waiting";
+        await appRouter.loadConversations(currentStatus);
+        
+        showToast("Nome do cliente atualizado com sucesso!", "success");
+    } catch (e) {
+        console.error(e);
+        showToast("Erro ao salvar nome do cliente.", "error");
+    }
+});
+
+// Hide Context Panel (Ficha)
+document.getElementById("btn-hide-context").addEventListener("click", () => {
+    state.isContextPanelVisible = false;
+    document.getElementById("guest-context").style.display = "none";
+    
+    const layout = document.querySelector(".inbox-layout");
+    if (layout) layout.classList.add("hide-context");
+    
+    const showContextBtn = document.getElementById("btn-show-context");
+    if (showContextBtn) showContextBtn.style.display = "block";
+});
+
+// Show Context Panel (Ficha)
+document.getElementById("btn-show-context").addEventListener("click", () => {
+    state.isContextPanelVisible = true;
+    document.getElementById("guest-context").style.display = "block";
+    
+    const layout = document.querySelector(".inbox-layout");
+    if (layout) layout.classList.remove("hide-context");
+    
+    const showContextBtn = document.getElementById("btn-show-context");
+    if (showContextBtn) showContextBtn.style.display = "none";
 });
 
 // --- Client Flagging (Flegar Cliente) Action ---

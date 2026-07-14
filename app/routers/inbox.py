@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import List, Optional
 from app.database import get_db, SessionLocal
 from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig, Department, QuickMessage, MarketingCampaign, CampaignRecipient
-from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, CampaignResponse, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, StartConversationRequest, QuickMessageCreate, QuickMessageResponse
+from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, CampaignResponse, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, StartConversationRequest, QuickMessageCreate, QuickMessageResponse, ContactResponse
 from app.auth import get_current_user, get_current_tenant, ModuleRequired
 from app.config import settings
 
@@ -1287,6 +1287,30 @@ def delete_quick_message(
     db.delete(qm)
     db.commit()
     return {"status": "success", "detail": "Resposta rápida removida com sucesso"}
+
+
+class ContactUpdatePayload(BaseModel):
+    name: str
+
+@router.put("/contacts/{contact_id}", response_model=ContactResponse)
+def update_contact(
+    contact_id: UUID,
+    payload: ContactUpdatePayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    contact = db.query(Contact).filter(
+        Contact.id == str(contact_id),
+        Contact.tenant_id == current_tenant.id
+    ).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contato não encontrado")
+        
+    contact.name = payload.name
+    db.commit()
+    db.refresh(contact)
+    return contact
 
 
 

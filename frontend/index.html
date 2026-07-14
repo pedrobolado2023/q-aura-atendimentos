@@ -701,7 +701,8 @@
                                             <span class="status-indicator online" id="active-contact-status">Aguardando Atendente</span>
                                         </div>
                                     </div>
-                                    <div class="chat-actions">
+                                    <div class="chat-actions" style="display: flex; gap: 8px;">
+                                        <button class="btn btn-secondary btn-sm" id="btn-show-context" style="display: none;" title="Exibir Ficha do Hóspede"><i class="fa-solid fa-circle-info"></i> Ficha</button>
                                         <button class="btn btn-secondary btn-sm" id="btn-transfer-chat"><i class="fa-solid fa-arrow-right-arrow-left"></i> Transferir</button>
                                         <button class="btn btn-success btn-sm" id="btn-resolve-chat"><i class="fa-solid fa-check"></i> Resolver</button>
                                     </div>
@@ -719,9 +720,19 @@
                         </div>
 
                         <!-- Right: Context panel -->
-                        <div class="context-panel" id="guest-context" style="display: none;">
-                            <h3>Ficha do Hóspede</h3>
+                        <div class="context-panel" id="guest-context" style="display: none; position: relative;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; margin-bottom: 12px;">
+                                <h3 style="margin: 0; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-secondary); border: none; padding: 0;">Ficha do Hóspede</h3>
+                                <button id="btn-hide-context" title="Ocultar Ficha" style="background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 4px;"><i class="fa-solid fa-chevron-right"></i></button>
+                            </div>
                             <div class="context-section">
+                                <div class="info-row" style="flex-direction: column; align-items: flex-start; gap: 6px; margin-bottom: 10px; border-bottom: none;">
+                                    <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); font-weight: bold;">Nome</span>
+                                    <div style="display: flex; gap: 6px; width: 100%;">
+                                        <input type="text" id="guest-name-input" style="flex: 1; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); padding: 5px 8px; border-radius: var(--radius-sm); font-size: 13px;" placeholder="Nome do Cliente">
+                                        <button class="btn btn-primary btn-sm" id="btn-save-guest-name" style="padding: 5px 10px; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 4px;" title="Salvar nome"><i class="fa-solid fa-floppy-disk"></i> Salvar</button>
+                                    </div>
+                                </div>
                                 <div class="info-row"><span>Telefone</span><strong id="guest-phone">+55 11 99999-9999</strong></div>
                                 <div class="info-row"><span>Idioma</span><strong id="guest-lang">Português</strong></div>
                                 <div class="info-row"><span>Fidelidade</span><strong id="guest-loyalty">Gold Member</strong></div>
