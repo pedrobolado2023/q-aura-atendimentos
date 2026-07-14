@@ -206,19 +206,31 @@ async def send_bot_message(
             db.add(contact)
             db.flush()
 
+        # Get the latest active/open conversation for this contact
         convo = db.query(Conversation).filter(
             Conversation.contact_id == contact.id,
-            Conversation.tenant_id == current_tenant.id
-        ).first()
+            Conversation.tenant_id == current_tenant.id,
+            Conversation.status != "resolved"
+        ).order_by(Conversation.last_message_at.desc()).first()
+        
         if not convo:
-            convo = Conversation(
-                tenant_id=current_tenant.id,
-                contact_id=contact.id,
-                status="bot",
-                routing_mode="queue"
-            )
-            db.add(convo)
-            db.flush()
+            # If no open conversation, look for any resolved conversation to re-open
+            convo = db.query(Conversation).filter(
+                Conversation.contact_id == contact.id,
+                Conversation.tenant_id == current_tenant.id
+            ).order_by(Conversation.last_message_at.desc()).first()
+            
+            if convo:
+                convo.status = "bot"
+            else:
+                convo = Conversation(
+                    tenant_id=current_tenant.id,
+                    contact_id=contact.id,
+                    status="bot",
+                    routing_mode="queue"
+                )
+                db.add(convo)
+                db.flush()
 
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
