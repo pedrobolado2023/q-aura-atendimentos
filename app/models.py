@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, DateTime, Boolean, Text, JSON, Table, Integer, Numeric
+from sqlalchemy import Column, String, ForeignKey, DateTime, Boolean, Text, JSON, Table, Integer, Numeric, Uuid
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base, db_url
@@ -117,8 +117,8 @@ class Department(Base):
 
 class Contact(Base):
     __tablename__ = "qa_contacts"
-    id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    tenant_id = Column(String(36), ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False)
+    id = Column(Uuid(as_uuid=False), primary_key=True, default=generate_uuid_str)
+    tenant_id = Column(Uuid(as_uuid=False), ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False)
     phone_number = Column(String(30), nullable=False)
     name = Column(String(255))
     email = Column(String(255))
@@ -220,9 +220,9 @@ class MarketingCampaign(Base):
 
 class CampaignRecipient(Base):
     __tablename__ = "qa_campaign_recipients"
-    id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    campaign_id = Column(String(36), ForeignKey("qa_marketing_campaigns.id", ondelete="CASCADE"), nullable=False, index=True)
-    contact_id = Column(String(36), ForeignKey("qa_contacts.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Uuid(as_uuid=False), primary_key=True, default=generate_uuid_str)
+    campaign_id = Column(Uuid(as_uuid=False), ForeignKey("qa_marketing_campaigns.id", ondelete="CASCADE"), nullable=False, index=True)
+    contact_id = Column(Uuid(as_uuid=False), ForeignKey("qa_contacts.id", ondelete="CASCADE"), nullable=False, index=True)
     meta_message_id = Column(String(255), nullable=True, index=True)
     status = Column(String(50), default="sent") # 'sent', 'delivered', 'read', 'failed'
     clicked = Column(Boolean, default=False)
