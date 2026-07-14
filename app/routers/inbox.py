@@ -2,6 +2,7 @@ import os
 import shutil
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status, Response, BackgroundTasks, UploadFile, File, Request
+from pydantic import BaseModel
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -156,6 +157,95 @@ async def send_message(
     convo.last_message_at = convo.updated_at
     db.commit()
     db.refresh(msg)
+    return msg
+
+
+class BotMessageSend(BaseModel):
+    conversation_id: UUID
+    body: str
+
+
+@router.post("/send-bot-message", response_model=MessageResponse)
+async def send_bot_message(
+    payload: BotMessageSend,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    # 1. Verify conversation
+    convo = db.query(Conversation).filter(
+        Conversation.id == payload.conversation_id,
+        Conversation.tenant_id == current_tenant.id
+    ).first()
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+        
+    contact = db.query(Contact).filter(Contact.id == convo.contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+
+    # 2. Get Meta API credentials
+    creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == current_tenant.id).first()
+    if not creds:
+        raise HTTPException(status_code=400, detail="Meta credentials not configured for this tenant")
+
+    # 3. Post to Meta API
+    meta_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{creds.phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {creds.permanent_access_token}",
+        "Content-Type": "application/json"
+    }
+    meta_payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": contact.phone_number,
+        "type": "text",
+        "text": {
+            "preview_url": False,
+            "body": payload.body
+        }
+    }
+
+    meta_message_id = None
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(meta_url, headers=headers, json=meta_payload)
+            if response.status_code == 200:
+                res_data = response.json()
+                meta_message_id = res_data.get("messages", [{}])[0].get("id")
+            else:
+                print(f"Bot send error: {response.text}")
+        except Exception as e:
+            print(f"Error sending bot message: {e}")
+
+    # 4. Save to Database
+    msg = Message(
+        conversation_id=payload.conversation_id,
+        sender_type="bot",
+        body=payload.body,
+        meta_message_id=meta_message_id,
+        status="sent" if meta_message_id else "failed"
+    )
+    db.add(msg)
+    
+    convo.last_message_at = datetime.utcnow()
+    db.commit()
+    db.refresh(msg)
+
+    # 5. Broadcast to active agents via websocket so it shows up in UI immediately!
+    from app.services.websocket_manager import manager
+    broadcast_data = {
+        "type": "new_message",
+        "conversation_id": convo.id,
+        "sender_type": "bot",
+        "body": payload.body,
+        "message_type": "text",
+        "media_url": None,
+        "unread": False,
+        "created_at": msg.created_at.isoformat() if msg.created_at else None
+    }
+    await manager.broadcast_to_tenant(current_tenant.id, broadcast_data)
+
     return msg
 
 

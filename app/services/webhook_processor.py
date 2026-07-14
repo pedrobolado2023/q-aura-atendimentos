@@ -332,6 +332,8 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
             n8n_url = settings.N8N_WEBHOOK_URL
 
         if n8n_url:
+            if 'convo' in locals() and convo:
+                payload["conversation_id"] = str(convo.id)
             await relay_webhook_to_n8n(n8n_url, payload)
 
         return True
