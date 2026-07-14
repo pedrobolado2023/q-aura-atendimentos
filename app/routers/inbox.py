@@ -51,7 +51,10 @@ def get_conversations(
 ):
     query = db.query(Conversation).filter(Conversation.tenant_id == current_tenant.id)
     if status_filter:
-        query = query.filter(Conversation.status == status_filter)
+        if status_filter == "waiting":
+            query = query.filter(Conversation.status.in_(["waiting", "bot"]))
+        else:
+            query = query.filter(Conversation.status == status_filter)
         
     # Para atendentes normais (agentes), filtra para exibir apenas as conversas atribuídas a eles na aba Minhas
     if status_filter == "active" and current_user.role not in ["administrator", "manager"]:

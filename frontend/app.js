@@ -276,6 +276,7 @@ const appRouter = {
                 // Status label translation (Aguardando, Em atendimento, Finalizado)
                 let statusLabel = "";
                 if (c.status === "waiting") statusLabel = "Aguardando";
+                else if (c.status === "bot") statusLabel = "Bot";
                 else if (c.status === "active") statusLabel = "Em atendimento";
                 else if (c.status === "resolved") statusLabel = "Finalizado";
                 
