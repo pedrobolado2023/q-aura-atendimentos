@@ -212,7 +212,18 @@
                                     <label for="permanent-token">Permanent Access Token</label>
                                     <textarea id="permanent-token" required placeholder="EAABw..." rows="3"></textarea>
                                 </div>
-                                <button type="submit" class="btn btn-primary">Salvar Credenciais</button>
+
+                                <div class="settings-divider" style="margin: 25px 0; border-top: 1px solid var(--border-color, rgba(255,255,255,0.1)); opacity: 0.2;"></div>
+
+                                <h3>Integração n8n (Agente de IA)</h3>
+                                <p class="settings-desc">Defina a URL do seu webhook do n8n. O backend irá encaminhar as mensagens da Meta (payload original) para este endereço.</p>
+                                
+                                <div class="input-group">
+                                    <label for="n8n-webhook-url">URL do Webhook do n8n</label>
+                                    <input type="url" id="n8n-webhook-url" placeholder="https://seu-n8n.com/webhook/..."/>
+                                </div>
+
+                                <button type="submit" class="btn btn-primary">Salvar Configurações</button>
                             </form>
                         </div>
 

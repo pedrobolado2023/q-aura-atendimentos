@@ -460,6 +460,15 @@ const appRouter = {
             document.getElementById("webhook-generated-url").innerText = `${API_URL}/api/webhook/${state.tenant_id}`;
             console.log("Credenciais Meta não encontradas ou não configuradas.");
         }
+
+        try {
+            const botConfig = await api.get("/api/inbox/bot-config");
+            if (botConfig) {
+                document.getElementById("n8n-webhook-url").value = botConfig.n8n_webhook_url || "";
+            }
+        } catch (e) {
+            console.log("Erro ao carregar URL do n8n: " + e.message);
+        }
     },
 
     async loadBotConfig() {
@@ -757,15 +766,24 @@ document.getElementById("settings-form").addEventListener("submit", async (e) =>
     const waba_id = document.getElementById("waba-id").value;
     const verify_token = document.getElementById("verify-token").value;
     const permanent_access_token = document.getElementById("permanent-token").value;
+    const n8n_webhook_url = document.getElementById("n8n-webhook-url").value;
 
     try {
+        // Save Meta credentials
         await api.post("/api/auth/meta-credentials", {
             phone_number_id,
             waba_id,
             verify_token,
             permanent_access_token
         });
-        showToast("Credenciais salvas com sucesso!", "success");
+
+        // Save n8n webhook URL
+        await api.post("/api/inbox/bot-config", {
+            n8n_webhook_url
+        });
+
+        showToast("Configurações salvas com sucesso!", "success");
+        appRouter.loadMetaSettings();
     } catch (err) {
         showToast("Erro ao salvar: " + err.message, "error");
     }
