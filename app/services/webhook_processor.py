@@ -6,6 +6,32 @@ from app.config import settings
 from app.database import SessionLocal
 from datetime import datetime
 
+def format_brazilian_phone(phone: str) -> str:
+    # Mantém apenas dígitos
+    phone = "".join(filter(str.isdigit, phone))
+    
+    # Valida formato e DDI do Brasil (55)
+    if phone.startswith("55") and len(phone) >= 12:
+        ddd = int(phone[2:4])
+        # Se tem 13 dígitos e DDD >= 31, remove o 9º dígito (o 9 logo após o DDD)
+        if len(phone) == 13 and ddd >= 31 and phone[4] == "9":
+            phone = phone[:4] + phone[5:]
+        # Se tem 12 dígitos e DDD < 31 (11 a 28), adiciona o 9º dígito
+        elif len(phone) == 12 and 11 <= ddd <= 28:
+            phone = phone[:4] + "9" + phone[4:]
+            
+    # Caso importado sem DDI 55
+    elif len(phone) in [10, 11] and not phone.startswith("55"):
+        ddd = int(phone[0:2])
+        if len(phone) == 11 and ddd >= 31 and phone[2] == "9":
+            phone = "55" + phone[:2] + phone[3:]
+        elif len(phone) == 10 and 11 <= ddd <= 28:
+            phone = "55" + phone[:2] + "9" + phone[2:]
+        else:
+            phone = "55" + phone
+            
+    return phone
+
 async def send_whatsapp_text(phone_number_id: str, token: str, to_phone: str, body: str) -> Optional[str]:
     """Helper function to send a text WhatsApp message via Meta Cloud API."""
     meta_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{phone_number_id}/messages"
@@ -90,7 +116,7 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                     contact_name = contacts_meta[0].get("profile", {}).get("name", contact_name)
 
                 for msg_data in messages:
-                    sender_phone = msg_data.get("from")
+                    sender_phone = format_brazilian_phone(msg_data.get("from"))
                     meta_msg_id = msg_data.get("id")
                     msg_type = msg_data.get("type", "text")
                     

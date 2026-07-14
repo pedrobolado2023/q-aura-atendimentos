@@ -13,6 +13,32 @@ from app.schemas import ConversationResponse, MessageResponse, BulkContactUpload
 from app.auth import get_current_user, get_current_tenant, ModuleRequired
 from app.config import settings
 
+def format_brazilian_phone(phone: str) -> str:
+    # Mantém apenas dígitos
+    phone = "".join(filter(str.isdigit, phone))
+    
+    # Valida formato e DDI do Brasil (55)
+    if phone.startswith("55") and len(phone) >= 12:
+        ddd = int(phone[2:4])
+        # Se tem 13 dígitos e DDD >= 31, remove o 9º dígito (o 9 logo após o DDD)
+        if len(phone) == 13 and ddd >= 31 and phone[4] == "9":
+            phone = phone[:4] + phone[5:]
+        # Se tem 12 dígitos e DDD < 31 (11 a 28), adiciona o 9º dígito
+        elif len(phone) == 12 and 11 <= ddd <= 28:
+            phone = phone[:4] + "9" + phone[4:]
+            
+    # Caso importado sem DDI 55
+    elif len(phone) in [10, 11] and not phone.startswith("55"):
+        ddd = int(phone[0:2])
+        if len(phone) == 11 and ddd >= 31 and phone[2] == "9":
+            phone = "55" + phone[:2] + phone[3:]
+        elif len(phone) == 10 and 11 <= ddd <= 28:
+            phone = "55" + phone[:2] + "9" + phone[2:]
+        else:
+            phone = "55" + phone
+            
+    return phone
+
 router = APIRouter(prefix="/api/inbox", tags=["inbox"])
 
 @router.get("/conversations", response_model=List[ConversationResponse])
@@ -140,8 +166,7 @@ async def start_conversation(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
-    # 1. Clean and validate phone number
-    cleaned_phone = "".join(c for c in payload.phone_number if c.isdigit())
+    cleaned_phone = format_brazilian_phone(payload.phone_number)
     if not cleaned_phone:
         raise HTTPException(status_code=400, detail="Número de telefone inválido.")
 
@@ -479,11 +504,14 @@ def import_contacts_bulk(
         raise HTTPException(status_code=403, detail="Apenas administradores e supervisores podem importar contatos.")
 
     imported_count = 0
+    seen_phones = set()
     for c in payload.contacts:
-        # Limpa o telefone para conter apenas dígitos
-        phone = "".join(filter(str.isdigit, c.phone_number))
+        phone = format_brazilian_phone(c.phone_number)
         if not phone:
             continue
+        if phone in seen_phones:
+            continue
+        seen_phones.add(phone)
             
         contact = db.query(Contact).filter(
             Contact.tenant_id == current_tenant.id,
