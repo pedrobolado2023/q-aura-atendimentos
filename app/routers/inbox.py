@@ -944,6 +944,8 @@ def update_bot_config(
         config.out_of_hours_message = payload.out_of_hours_message
     if payload.transfer_keywords is not None:
         config.transfer_keywords = payload.transfer_keywords
+    if payload.n8n_webhook_url is not None:
+        config.n8n_webhook_url = payload.n8n_webhook_url
         
     db.commit()
     db.refresh(config)

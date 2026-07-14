@@ -60,6 +60,19 @@ async def send_whatsapp_text(phone_number_id: str, token: str, to_phone: str, bo
             print(f"Error sending WhatsApp message: {str(e)}")
     return None
 
+async def relay_webhook_to_n8n(url: str, payload: dict):
+    """
+    Relays the raw Meta webhook payload to the n8n endpoint asynchronously.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            headers = {"Content-Type": "application/json"}
+            res = await client.post(url, json=payload, headers=headers, timeout=10.0)
+            if res.status_code not in [200, 201]:
+                print(f"[Webhook Relay] n8n returned error status {res.status_code}: {res.text}")
+    except Exception as e:
+        print(f"[Webhook Relay] Error forwarding webhook to n8n at {url}: {e}")
+
 async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broadcast_fn) -> bool:
     """
     Parses Meta WhatsApp Webhook payload and updates contacts, conversations, messages,
@@ -309,6 +322,17 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                                 "created_at": bot_msg.created_at.isoformat() if bot_msg.created_at else None
                             }
                             await websocket_broadcast_fn(tenant_id, bot_broadcast_data)
+
+        # Forward/Relay to n8n webhook
+        n8n_url = None
+        bot_config = db.query(BotConfig).filter(BotConfig.tenant_id == tenant_id).first()
+        if bot_config and bot_config.n8n_webhook_url:
+            n8n_url = bot_config.n8n_webhook_url
+        elif settings.N8N_WEBHOOK_URL:
+            n8n_url = settings.N8N_WEBHOOK_URL
+
+        if n8n_url:
+            await relay_webhook_to_n8n(n8n_url, payload)
 
         return True
     except Exception as e:

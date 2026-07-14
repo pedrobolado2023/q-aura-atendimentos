@@ -10,5 +10,6 @@ class Settings:
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
     META_APP_SECRET: str = os.getenv("META_APP_SECRET", "")
     META_API_VERSION: str = os.getenv("META_API_VERSION", "v18.0")
+    N8N_WEBHOOK_URL: str = os.getenv("N8N_WEBHOOK_URL", "")
 
 settings = Settings()
