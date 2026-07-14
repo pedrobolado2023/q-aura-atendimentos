@@ -161,7 +161,8 @@ async def send_message(
 
 
 class BotMessageSend(BaseModel):
-    conversation_id: UUID
+    conversation_id: Optional[UUID] = None
+    phone_number: Optional[str] = None
     body: str
 
 
@@ -172,15 +173,50 @@ async def send_bot_message(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
-    # 1. Verify conversation
-    convo = db.query(Conversation).filter(
-        Conversation.id == payload.conversation_id,
-        Conversation.tenant_id == current_tenant.id
-    ).first()
-    if not convo:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-        
-    contact = db.query(Contact).filter(Contact.id == convo.contact_id).first()
+    if not payload.conversation_id and not payload.phone_number:
+        raise HTTPException(status_code=400, detail="Either conversation_id or phone_number must be provided.")
+
+    convo = None
+    contact = None
+
+    if payload.conversation_id:
+        convo = db.query(Conversation).filter(
+            Conversation.id == payload.conversation_id,
+            Conversation.tenant_id == current_tenant.id
+        ).first()
+        if not convo:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        contact = db.query(Contact).filter(Contact.id == convo.contact_id).first()
+    else:
+        cleaned_phone = format_brazilian_phone(payload.phone_number)
+        contact = db.query(Contact).filter(
+            Contact.phone_number == cleaned_phone,
+            Contact.tenant_id == current_tenant.id
+        ).first()
+        if not contact:
+            contact = Contact(
+                tenant_id=current_tenant.id,
+                phone_number=cleaned_phone,
+                name="Hóspede WhatsApp",
+                sales_funnel_stage="lead"
+            )
+            db.add(contact)
+            db.flush()
+
+        convo = db.query(Conversation).filter(
+            Conversation.contact_id == contact.id,
+            Conversation.tenant_id == current_tenant.id
+        ).first()
+        if not convo:
+            convo = Conversation(
+                tenant_id=current_tenant.id,
+                contact_id=contact.id,
+                status="bot",
+                routing_mode="queue"
+            )
+            db.add(convo)
+            db.flush()
+
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
 
@@ -220,7 +256,7 @@ async def send_bot_message(
 
     # 4. Save to Database
     msg = Message(
-        conversation_id=payload.conversation_id,
+        conversation_id=convo.id,
         sender_type="bot",
         message_type="text",
         body=payload.body,
