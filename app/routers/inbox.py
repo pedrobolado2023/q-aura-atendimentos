@@ -808,6 +808,20 @@ async def dispatch_campaign_bulk(
                             "code": campaign.template_language or "pt_BR"
                         }
                     }
+                    if campaign.media_type in ["image", "video", "document"] and campaign.media_url:
+                        payload["template"]["components"] = [
+                            {
+                                "type": "header",
+                                "parameters": [
+                                    {
+                                        "type": campaign.media_type,
+                                        campaign.media_type: {
+                                            "link": campaign.media_url
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
                 else:
                     # Check button configuration
                     if campaign.button_type == "cta_url" and campaign.button_label and campaign.button_url:
@@ -896,6 +910,8 @@ async def dispatch_campaign_bulk(
                         res_data = response.json()
                         meta_message_id = res_data.get("messages", [{}])[0].get("id")
                         sent_count += 1
+                    else:
+                        print(f"[Campaign] API Error sending to {contact.phone_number}: {response.status_code} - {response.text}")
                 except Exception as e:
                     print(f"[Campaign] Error sending to {contact.phone_number}: {e}")
                     
