@@ -1286,12 +1286,38 @@ function syncCampaignPreview() {
     const mediaFileGroup = document.getElementById("campaign-media-file-group");
 
     if (useTemplateCheck && useTemplateCheck.checked) {
+        const mediaTypeSelect = document.getElementById("campaign-media-type");
+        const mediaType = mediaTypeSelect ? mediaTypeSelect.value : "none";
+        
+        if (mediaFileGroup) {
+            if (mediaType !== "none") {
+                mediaFileGroup.style.display = "block";
+            } else {
+                mediaFileGroup.style.display = "none";
+                document.getElementById("campaign-media-url").value = "";
+                const fileInputEl = document.getElementById("campaign-media-file");
+                if (fileInputEl) fileInputEl.value = "";
+            }
+        }
+        
         headerMedia.style.display = "none";
         previewImg.style.display = "none";
         previewVideo.style.display = "none";
         previewAudio.style.display = "none";
         previewBtn.style.display = "none";
-        if (mediaFileGroup) mediaFileGroup.style.display = "none";
+        
+        // Mockup preview with media header if uploaded
+        const mediaUrl = document.getElementById("campaign-media-url").value.trim();
+        if (mediaType !== "none" && mediaUrl) {
+            headerMedia.style.display = "block";
+            if (mediaType === "image") {
+                previewImg.style.display = "block";
+                previewImg.src = mediaUrl;
+            } else if (mediaType === "video") {
+                previewVideo.style.display = "block";
+                previewVideo.src = mediaUrl;
+            }
+        }
         
         const templateNameVal = document.getElementById("campaign-template-name").value.trim() || "nome_do_modelo";
         const templateLangVal = document.getElementById("campaign-template-lang").value.trim() || "pt_BR";
@@ -1475,12 +1501,16 @@ if (dispatchCampaignBtn) {
                 return;
             }
 
+            const mediaType = document.getElementById("campaign-media-type").value;
+            const mediaUrl = document.getElementById("campaign-media-url").value.trim();
+
             payload = {
                 name,
                 use_template: true,
                 template_name: templateName,
                 template_language: templateLang || "pt_BR",
-                media_type: "text",
+                media_type: mediaType,
+                media_url: mediaType !== "none" ? mediaUrl : null,
                 body: `[Template: ${templateName}]`,
                 button_type: "none"
             };

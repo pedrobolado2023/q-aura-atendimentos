@@ -477,8 +477,24 @@
                                     <input type="text" id="campaign-name" placeholder="Ex: Promoção de Inverno 2026">
                                 </div>
                                 
+                                <div class="input-group" style="margin-top: 12px;">
+                                    <label for="campaign-media-type">Tipo de Mídia Anexa (Cabeçalho)</label>
+                                    <select id="campaign-media-type" style="width: 100%; background: var(--bg-primary); color: var(--text-main); border: 1px solid var(--border-color); padding: 10px; border-radius: var(--radius-sm);">
+                                        <option value="none">Nenhum</option>
+                                        <option value="image">Imagem (Foto)</option>
+                                        <option value="video">Vídeo</option>
+                                        <option value="audio">Áudio (Mensagem de Voz)</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="input-group" id="campaign-media-file-group" style="display: none; margin-top: 12px;">
+                                    <label for="campaign-media-file">Selecionar Arquivo de Mídia</label>
+                                    <input type="file" id="campaign-media-file" style="width: 100%; color: var(--text-main); background: var(--bg-primary); padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);" accept="image/*,video/*,audio/*">
+                                    <input type="hidden" id="campaign-media-url">
+                                </div>
+                                
                                 <!-- Checkbox to toggle Meta Template -->
-                                <div style="display: flex; align-items: center; gap: 8px; margin: 12px 0 16px 0;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin: 16px 0 16px 0;">
                                     <input type="checkbox" id="campaign-use-template" style="width: auto; cursor: pointer; transform: scale(1.15);">
                                     <label for="campaign-use-template" style="font-weight: 600; font-size: 13px; cursor: pointer; margin: 0; color: var(--text-primary);">Usar Modelo de Mensagem (Template) da Meta</label>
                                 </div>
@@ -498,22 +514,6 @@
 
                                 <!-- Custom Message Session Fields (Visible by default) -->
                                 <div id="campaign-custom-fields" style="display: flex; flex-direction: column; gap: 12px;">
-                                    <div class="input-group">
-                                        <label for="campaign-media-type">Tipo de Mídia Anexa</label>
-                                        <select id="campaign-media-type" style="width: 100%; background: var(--bg-primary); color: var(--text-main); border: 1px solid var(--border-color); padding: 10px; border-radius: var(--radius-sm);">
-                                            <option value="none">Nenhum</option>
-                                            <option value="image">Imagem (Foto)</option>
-                                            <option value="video">Vídeo</option>
-                                            <option value="audio">Áudio (Mensagem de Voz)</option>
-                                        </select>
-                                    </div>
-                                    
-                                    <div class="input-group" id="campaign-media-file-group" style="display: none;">
-                                        <label for="campaign-media-file">Selecionar Arquivo de Mídia</label>
-                                        <input type="file" id="campaign-media-file" style="width: 100%; color: var(--text-main); background: var(--bg-primary); padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);" accept="image/*,video/*,audio/*">
-                                        <input type="hidden" id="campaign-media-url">
-                                    </div>
-                                    
                                     <div class="input-group">
                                         <label for="campaign-body">Mensagem (Corpo de Texto)</label>
                                         <textarea id="campaign-body" rows="5" placeholder="Olá! Temos uma novidade incrível para você..."></textarea>
