@@ -1789,17 +1789,30 @@ if (chatInput && qmDropdown) {
                 e.preventDefault();
                 selectedQuickIndex = (selectedQuickIndex + 1) % filteredQuickReplies.length;
                 updateDropdownSelection();
+                return;
             } else if (e.key === "ArrowUp") {
                 e.preventDefault();
                 selectedQuickIndex = (selectedQuickIndex - 1 + filteredQuickReplies.length) % filteredQuickReplies.length;
                 updateDropdownSelection();
+                return;
             } else if (e.key === "Enter") {
                 if (selectedQuickIndex >= 0 && selectedQuickIndex < filteredQuickReplies.length) {
                     e.preventDefault();
                     selectQuickReply(filteredQuickReplies[selectedQuickIndex]);
+                    return;
                 }
             } else if (e.key === "Escape") {
                 qmDropdown.style.display = "none";
+                return;
+            }
+        }
+
+        // Send message on Enter (without Shift)
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            const form = document.getElementById("chat-input-form");
+            if (form) {
+                form.dispatchEvent(new Event("submit"));
             }
         }
     });
@@ -1828,6 +1841,59 @@ if (chatInput && qmDropdown) {
             qmDropdown.style.display = "none";
         }
     });
+
+    // --- Emoji Picker setup ---
+    const emojiBtn = document.getElementById("chat-emoji-btn");
+    const emojiPopup = document.getElementById("emoji-picker-popup");
+    const emojiGrid = document.getElementById("emoji-grid");
+
+    if (emojiBtn && emojiPopup && emojiGrid) {
+        const emojis = [
+            "👋", "😊", "👍", "🙌", "👏", "🎉", "🔥", "❤️", "🤖", "💬", "📞", "📧", "📍", "📅", "⏰", "🛍️",
+            "💰", "🎁", "💡", "❓", "❗", "✅", "❌", "⚠️", "🏠", "🔑", "🚗", "✈️", "🤩", "😍", "😅",
+            "😂", "😉", "😎", "🚀", "✨", "🌟", "😱", "🥳"
+        ];
+
+        // Populate grid
+        emojis.forEach(emoji => {
+            const span = document.createElement("span");
+            span.innerText = emoji;
+            span.style.padding = "4px";
+            span.style.borderRadius = "4px";
+            span.style.transition = "background 0.2s";
+            span.style.userSelect = "none";
+            span.addEventListener("mouseover", () => span.style.background = "var(--bg-tertiary)");
+            span.addEventListener("mouseout", () => span.style.background = "transparent");
+            span.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const startPos = chatInput.selectionStart;
+                const endPos = chatInput.selectionEnd;
+                const text = chatInput.value;
+                chatInput.value = text.substring(0, startPos) + emoji + text.substring(endPos);
+                chatInput.focus();
+                
+                const newPos = startPos + emoji.length;
+                chatInput.setSelectionRange(newPos, newPos);
+                
+                emojiPopup.style.display = "none";
+            });
+            emojiGrid.appendChild(span);
+        });
+
+        // Toggle popup
+        emojiBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const display = emojiPopup.style.display;
+            emojiPopup.style.display = display === "block" ? "none" : "block";
+        });
+
+        // Close on click outside
+        document.addEventListener("click", (e) => {
+            if (!emojiPopup.contains(e.target) && e.target !== emojiBtn && !emojiBtn.contains(e.target)) {
+                emojiPopup.style.display = "none";
+            }
+        });
+    }
 }
 
 function renderDropdown(items) {

@@ -711,10 +711,23 @@
                                 <div class="chat-messages" id="message-scroll">
                                     <!-- Loaded dynamic bubbles -->
                                 </div>
-                                <form id="chat-input-form" class="chat-input-area" style="position: relative;">
+                                <form id="chat-input-form" class="chat-input-area" style="position: relative; display: flex; align-items: flex-end; gap: 8px;">
                                     <!-- Autocomplete Dropdown Menu -->
                                     <div id="quick-replies-dropdown" class="quick-replies-dropdown" style="display: none;"></div>
-                                    <input type="text" id="chat-message-input" placeholder="Digite uma mensagem ou digite / para respostas rápidas..." autocomplete="off">
+                                    
+                                    <!-- Emoji Button -->
+                                    <button type="button" class="btn-emoji" id="chat-emoji-btn" style="background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted); padding: 8px 4px; display: flex; align-items: center;" title="Inserir Emoji">
+                                        <i class="fa-regular fa-face-smile"></i>
+                                    </button>
+                                    
+                                    <!-- Emoji Picker Popup -->
+                                    <div id="emoji-picker-popup" style="display: none; position: absolute; bottom: 65px; left: 24px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); width: 280px; z-index: 1000; box-sizing: border-box;">
+                                        <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; max-height: 180px; overflow-y: auto; text-align: center; font-size: 18px; cursor: pointer;" id="emoji-grid">
+                                            <!-- Emojis will be populated here -->
+                                        </div>
+                                    </div>
+
+                                    <textarea id="chat-message-input" placeholder="Digite uma mensagem ou digite / para respostas rápidas..." autocomplete="off"></textarea>
                                     <button type="submit" class="btn-send"><i class="fa-solid fa-paper-plane"></i></button>
                                 </form>
                             </div>
