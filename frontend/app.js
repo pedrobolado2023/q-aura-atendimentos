@@ -62,6 +62,94 @@ function formatMessageBody(body) {
     return escaped;
 }
 
+// --- Render Message Bubble Helper ---
+function renderMessageBubble(m) {
+    const bubble = document.createElement("div");
+    bubble.className = `message-bubble ${m.sender_type === 'contact' ? 'incoming' : 'outgoing'}`;
+    
+    // Helper to get media source URL
+    const getMediaSrc = (mediaUrl) => {
+        if (!mediaUrl) return "";
+        if (mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://")) {
+            return mediaUrl;
+        }
+        return `${API_URL}/api/inbox/media/${mediaUrl}?token=${state.token}`;
+    };
+
+    if (m.message_type === "image" && m.media_url) {
+        const img = document.createElement("img");
+        const imgSrc = getMediaSrc(m.media_url);
+        img.src = imgSrc;
+        img.alt = "Imagem";
+        img.className = "chat-media-image";
+        img.onclick = () => window.open(imgSrc, "_blank");
+        bubble.appendChild(img);
+        
+        if (m.body && m.body !== "[Imagem]" && m.body !== "[Image]") {
+            const caption = document.createElement("div");
+            caption.innerHTML = formatMessageBody(m.body);
+            caption.style.marginTop = "8px";
+            bubble.appendChild(caption);
+        }
+    } else if ((m.message_type === "audio" || m.message_type === "voice") && m.media_url) {
+        const audio = document.createElement("audio");
+        audio.src = getMediaSrc(m.media_url);
+        audio.controls = true;
+        audio.style.maxWidth = "100%";
+        audio.style.display = "block";
+        audio.style.marginTop = "4px";
+        bubble.appendChild(audio);
+        
+        if (m.body && m.body !== "[Áudio]" && m.body !== "[Audio]") {
+            const caption = document.createElement("div");
+            caption.innerHTML = formatMessageBody(m.body);
+            caption.style.marginTop = "8px";
+            bubble.appendChild(caption);
+        }
+    } else if (m.message_type === "video" && m.media_url) {
+        const video = document.createElement("video");
+        video.src = getMediaSrc(m.media_url);
+        video.controls = true;
+        video.style.maxWidth = "280px";
+        video.style.borderRadius = "8px";
+        video.style.display = "block";
+        video.style.marginTop = "4px";
+        bubble.appendChild(video);
+        
+        if (m.body && m.body !== "[Vídeo]" && m.body !== "[Video]") {
+            const caption = document.createElement("div");
+            caption.innerHTML = formatMessageBody(m.body);
+            caption.style.marginTop = "8px";
+            bubble.appendChild(caption);
+        }
+    } else if (m.message_type === "document" && m.media_url) {
+        const docDiv = document.createElement("div");
+        docDiv.className = "document-bubble";
+        docDiv.style.display = "flex";
+        docDiv.style.alignItems = "center";
+        docDiv.style.gap = "8px";
+        docDiv.style.padding = "8px";
+        docDiv.style.background = "var(--bg-tertiary)";
+        docDiv.style.borderRadius = "8px";
+        docDiv.style.border = "1px solid var(--border-color)";
+        docDiv.style.marginTop = "4px";
+        
+        const docSrc = getMediaSrc(m.media_url);
+        docDiv.innerHTML = `
+            <i class="fa-solid fa-file-pdf" style="font-size: 24px; color: #ef4444;"></i>
+            <div style="flex: 1; text-align: left; min-width: 0;">
+                <div style="font-size: 13px; font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; color: var(--text-primary);">${m.body || 'Documento'}</div>
+                <a href="${docSrc}" target="_blank" style="font-size: 11px; color: var(--color-brand); text-decoration: underline;">Visualizar Documento</a>
+            </div>
+        `;
+        bubble.appendChild(docDiv);
+    } else {
+        bubble.innerHTML = formatMessageBody(m.body);
+    }
+    
+    return bubble;
+}
+
 // --- API Client ---
 const api = {
     async post(endpoint, data, useAuth = true) {
@@ -459,33 +547,7 @@ const appRouter = {
             scroll.innerHTML = "";
             
             messages.forEach(m => {
-                const bubble = document.createElement("div");
-                bubble.className = `message-bubble ${m.sender_type === 'contact' ? 'incoming' : 'outgoing'}`;
-                
-                if (m.message_type === "image" && m.media_url) {
-                    const img = document.createElement("img");
-                    
-                    let imgSrc = m.media_url;
-                    // Se for um ID da Meta, usa o proxy. Se for link do uploader, usa direto.
-                    if (!m.media_url.startsWith("http://") && !m.media_url.startsWith("https://")) {
-                        imgSrc = `${API_URL}/api/inbox/media/${m.media_url}?token=${state.token}`;
-                    }
-                    
-                    img.src = imgSrc;
-                    img.alt = "Imagem";
-                    img.className = "chat-media-image";
-                    img.onclick = () => window.open(imgSrc, "_blank");
-                    bubble.appendChild(img);
-                    
-                    if (m.body && m.body !== "[Imagem]") {
-                        const caption = document.createElement("div");
-                        caption.innerHTML = formatMessageBody(m.body);
-                        caption.style.marginTop = "8px";
-                        bubble.appendChild(caption);
-                    }
-                } else {
-                    bubble.innerHTML = formatMessageBody(m.body);
-                }
+                const bubble = renderMessageBubble(m);
                 scroll.appendChild(bubble);
             });
             scroll.scrollTop = scroll.scrollHeight;
@@ -740,31 +802,7 @@ const appRouter = {
                 if (message.type === "new_message" && message.conversation_id === state.activeConversationId) {
                     const scroll = document.getElementById("message-scroll");
                     if (scroll) {
-                        const bubble = document.createElement("div");
-                        bubble.className = `message-bubble ${message.sender_type === 'contact' ? 'incoming' : 'outgoing'}`;
-                        
-                        if (message.message_type === "image" && message.media_url) {
-                            const img = document.createElement("img");
-                            let imgSrc = message.media_url;
-                            if (!message.media_url.startsWith("http://") && !message.media_url.startsWith("https://")) {
-                                imgSrc = `${API_URL}/api/inbox/media/${message.media_url}?token=${state.token}`;
-                            }
-                            
-                            img.src = imgSrc;
-                            img.alt = "Imagem";
-                            img.className = "chat-media-image";
-                            img.onclick = () => window.open(imgSrc, "_blank");
-                            bubble.appendChild(img);
-                            
-                            if (message.body && message.body !== "[Imagem]") {
-                                const caption = document.createElement("div");
-                                caption.innerHTML = formatMessageBody(message.body);
-                                caption.style.marginTop = "8px";
-                                bubble.appendChild(caption);
-                            }
-                        } else {
-                            bubble.innerHTML = formatMessageBody(message.body);
-                        }
+                        const bubble = renderMessageBubble(message);
                         scroll.appendChild(bubble);
                         scroll.scrollTop = scroll.scrollHeight;
                     }
