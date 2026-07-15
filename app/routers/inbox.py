@@ -786,7 +786,7 @@ async def dispatch_campaign_bulk(
                     convo = Conversation(
                         tenant_id=tenant_id,
                         contact_id=contact.id,
-                        status="waiting",
+                        status="resolved",
                         routing_mode="queue"
                     )
                     db.add(convo)
