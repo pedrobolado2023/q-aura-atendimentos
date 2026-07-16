@@ -203,6 +203,8 @@ class ConversationResponse(BaseModel):
     unread: bool
     unread_count: int
     contact: Optional[ContactResponse] = None
+    last_message_body: Optional[str] = None
+    last_message_sender_type: Optional[str] = None
 
     class Config:
         from_attributes = True

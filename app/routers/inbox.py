@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 from datetime import datetime
 from typing import List, Optional
+from sqlalchemy import func
 from app.database import get_db, SessionLocal
 from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig, Department, QuickMessage, MarketingCampaign, CampaignRecipient
 from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, CampaignResponse, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, StartConversationRequest, QuickMessageCreate, QuickMessageResponse, ContactResponse
@@ -56,11 +57,45 @@ def get_conversations(
         else:
             query = query.filter(Conversation.status == status_filter)
         
-    # Para atendentes normais (agentes), filtra para exibir apenas as conversas atribuídas a eles na aba Minhas
+    # Para atendentes normais (agentes), filtra apenas as conversas atribuídas a eles na aba Minhas
     if status_filter == "active" and current_user.role not in ["administrator", "manager"]:
         query = query.filter(Conversation.assigned_user_id == current_user.id)
         
-    return query.order_by(Conversation.last_message_at.desc()).all()
+    convos = query.order_by(Conversation.last_message_at.desc()).all()
+
+    # Busca última mensagem de cada conversa (1 query, compatível SQLite e PostgreSQL)
+    if convos:
+        from sqlalchemy import func as sqlfunc
+        convo_ids = [str(c.id) for c in convos]
+        # Subquery: max(created_at) por conversa
+        max_subq = (
+            db.query(
+                Message.conversation_id.label("cid"),
+                sqlfunc.max(Message.created_at).label("max_at")
+            )
+            .filter(Message.conversation_id.in_(convo_ids))
+            .group_by(Message.conversation_id)
+            .subquery()
+        )
+        last_msgs = (
+            db.query(Message)
+            .join(max_subq, (Message.conversation_id == max_subq.c.cid) & (Message.created_at == max_subq.c.max_at))
+            .all()
+        )
+        last_msg_map = {str(m.conversation_id): m for m in last_msgs}
+    else:
+        last_msg_map = {}
+
+    # Enriquece cada conversa com preview da última mensagem
+    result = []
+    for c in convos:
+        d = ConversationResponse.from_orm(c)
+        lm = last_msg_map.get(str(c.id))
+        if lm:
+            d.last_message_body = (lm.body or "")[:80]
+            d.last_message_sender_type = lm.sender_type
+        result.append(d)
+    return result
 
 @router.get("/conversations/{conversation_id}/messages", response_model=List[MessageResponse])
 def get_messages(
@@ -288,12 +323,18 @@ async def send_bot_message(
     from app.services.websocket_manager import manager
     broadcast_data = {
         "type": "new_message",
+        "id": msg.id,
         "conversation_id": convo.id,
         "sender_type": "bot",
         "body": payload.body,
         "message_type": "text",
         "media_url": None,
         "unread": False,
+        "contact_name": contact.name or contact.phone_number,
+        "contact_phone": contact.phone_number,
+        "contact_avatar": contact.avatar_url,
+        "preview": payload.body[:60] if payload.body else "",
+        "last_message_at": msg.created_at.isoformat() if msg.created_at else None,
         "created_at": msg.created_at.isoformat() if msg.created_at else None
     }
     await manager.broadcast_to_tenant(current_tenant.id, broadcast_data)

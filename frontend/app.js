@@ -62,11 +62,38 @@ function formatMessageBody(body) {
     return escaped;
 }
 
+// --- Relative Time Helper ---
+function formatRelativeTime(isoStr) {
+    if (!isoStr) return "";
+    const d = new Date(isoStr);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffH = Math.floor(diffMs / 3600000);
+    const diffD = Math.floor(diffMs / 86400000);
+    if (diffMin < 1) return "agora";
+    if (diffMin < 60) return `${diffMin}m`;
+    if (diffH < 24) return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    if (diffD === 1) return "ontem";
+    return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
 // --- Render Message Bubble Helper ---
 function renderMessageBubble(m) {
     const bubble = document.createElement("div");
     bubble.className = `message-bubble ${m.sender_type === 'contact' ? 'incoming' : 'outgoing'}`;
-    
+    // Tag para deduplicação
+    if (m.id) bubble.setAttribute("data-msg-id", m.id);
+    if (m.meta_message_id) bubble.setAttribute("data-meta-id", m.meta_message_id);
+
+    // Indicador de remetente para bot/agente
+    if (m.sender_type === 'bot') {
+        const senderLabel = document.createElement("div");
+        senderLabel.style.cssText = "font-size:10px;opacity:0.6;margin-bottom:3px;font-weight:600;";
+        senderLabel.innerText = "🤖 Bot";
+        bubble.appendChild(senderLabel);
+    }
+
     // Helper to get media source URL
     const getMediaSrc = (mediaUrl) => {
         if (!mediaUrl) return "";
@@ -145,6 +172,15 @@ function renderMessageBubble(m) {
         bubble.appendChild(docDiv);
     } else {
         bubble.innerHTML = formatMessageBody(m.body);
+    }
+
+    // Timestamp na bolha
+    if (m.created_at) {
+        const ts = document.createElement("div");
+        const d = new Date(m.created_at);
+        ts.style.cssText = "font-size:10px;opacity:0.5;margin-top:4px;text-align:right;";
+        ts.innerText = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        bubble.appendChild(ts);
     }
     
     return bubble;
@@ -373,23 +409,24 @@ const appRouter = {
                 
                 const contactName = c.contact ? c.contact.name || c.contact.phone_number : "Hóspede";
                 
-                // Avatar image with DiceBear initials fallback
                 const avatarUrl = (c.contact && c.contact.avatar_url)
                     ? c.contact.avatar_url
                     : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(contactName)}`;
                 
-                // Status label translation (Aguardando, Em atendimento, Finalizado)
-                let statusLabel = "";
-                if (c.status === "waiting") statusLabel = "Aguardando";
-                else if (c.status === "bot") statusLabel = "Bot";
-                else if (c.status === "active") statusLabel = "Em atendimento";
-                else if (c.status === "resolved") statusLabel = "Finalizado";
-                
-                const subtitleText = statusLabel;
-                
-                // Unread badge with number count
+                // Preview: última mensagem da conversa
+                let previewText = "";
+                if (c.last_message_body) {
+                    const prefix = c.last_message_sender_type === 'bot' ? '🤖 ' : c.last_message_sender_type === 'agent' ? '✍️ ' : '';
+                    previewText = prefix + c.last_message_body.substring(0, 50);
+                } else {
+                    if (c.status === "waiting") previewText = "Aguardando atendimento";
+                    else if (c.status === "bot") previewText = "Em atendimento pelo bot";
+                    else if (c.status === "active") previewText = "Em atendimento";
+                    else previewText = "Conversa finalizada";
+                }
+
                 const unreadBadge = isUnread
-                    ? `<span class="unread-badge" style="background-color: var(--color-primary); color: white; border-radius: 50%; font-size: 10px; font-weight: 700; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; margin-left: 8px; box-shadow: 0 0 4px var(--color-primary);">${c.unread_count}</span>`
+                    ? `<span class="unread-badge" style="background-color: var(--color-primary); color: white; border-radius: 50%; font-size: 10px; font-weight: 700; min-width: 18px; height: 18px; padding: 0 4px; display: inline-flex; align-items: center; justify-content: center; margin-left: 8px; box-shadow: 0 0 4px var(--color-primary);">${c.unread_count}</span>`
                     : '';
 
                 let flagColor = "transparent";
@@ -399,21 +436,23 @@ const appRouter = {
                 else if (c.flag_type === "green") flagColor = "#10b981";
 
                 const flagIcon = c.flag_type && c.flag_type !== "none"
-                    ? `<i class="fa-solid fa-flag" style="color: ${flagColor}; margin-left: 6px; font-size: 11px;" title="Cliente Flegado"></i>`
+                    ? `<i class="fa-solid fa-flag" style="color: ${flagColor}; margin-left: 6px; font-size: 11px;"></i>`
                     : '';
+
+                const timeStr = formatRelativeTime(c.last_message_at);
                 
                 item.innerHTML = `
                     <img class="avatar" src="${avatarUrl}" alt="${contactName}">
                     <div class="convo-meta">
                         <h4>
-                            <span style="display: flex; align-items: center;">
-                                ${contactName}
+                            <span style="display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden;">
+                                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${contactName}</span>
                                 ${flagIcon}
                                 ${unreadBadge}
                             </span>
-                            <span class="convo-time">Hoje</span>
+                            <span class="convo-time">${timeStr}</span>
                         </h4>
-                        <p>${subtitleText}</p>
+                        <p style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; opacity: 0.7;">${previewText}</p>
                     </div>
                 `;
                 listContainer.appendChild(item);
@@ -777,54 +816,113 @@ const appRouter = {
         }
     },
 
-    connectWebSocket() {
+    connectWebSocket(retryDelay = 1000) {
         if (state.ws) {
-            try {
-                state.ws.close();
-            } catch (e) {}
+            try { state.ws.close(); } catch (e) {}
         }
-        
+
         const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
         const wsHost = window.location.port === "3000" ? "localhost:8000" : window.location.host;
-        
-        console.log(`Connecting WebSocket to: ${wsProtocol}//${wsHost}/ws/${state.tenant_id}`);
         state.ws = new WebSocket(`${wsProtocol}//${wsHost}/ws/${state.tenant_id}`);
         
         state.ws.onopen = () => {
-            console.log("WebSocket connected successfully!");
+            console.log("[WS] Conectado.");
+            retryDelay = 1000; // reset backoff
         };
         
         state.ws.onmessage = (event) => {
             try {
-                const message = JSON.parse(event.data);
-                console.log("WebSocket message received:", message);
-                
-                if (message.type === "new_message" && message.conversation_id === state.activeConversationId) {
+                const msg = JSON.parse(event.data);
+                if (msg.type !== "new_message") return;
+
+                // --- Atualizar bolha no chat aberto ---
+                if (msg.conversation_id === state.activeConversationId) {
                     const scroll = document.getElementById("message-scroll");
                     if (scroll) {
-                        const bubble = renderMessageBubble(message);
-                        scroll.appendChild(bubble);
-                        scroll.scrollTop = scroll.scrollHeight;
+                        // Deduplicação: não adicionar se já existe bolha com mesmo id
+                        const alreadyExists = msg.id && scroll.querySelector(`[data-msg-id="${msg.id}"]`);
+                        if (!alreadyExists) {
+                            const bubble = renderMessageBubble(msg);
+                            scroll.appendChild(bubble);
+                            scroll.scrollTop = scroll.scrollHeight;
+                        }
                     }
                 }
-                this.loadConversations();
+
+                // --- Atualização incremental da lista (sem reload completo) ---
+                this._updateConversationInList(msg);
+
             } catch (e) {
-                console.error("Error handling WebSocket message:", e);
+                console.error("[WS] Erro ao processar mensagem:", e);
             }
         };
         
         state.ws.onerror = (err) => {
-            console.error("WebSocket error:", err);
+            console.error("[WS] Erro:", err);
         };
         
         state.ws.onclose = () => {
-            console.log("WebSocket connection closed. Reconnecting in 3 seconds...");
-            setTimeout(() => {
-                if (state.token && state.tenant_id) {
-                    this.connectWebSocket();
-                }
-            }, 3000);
+            console.log(`[WS] Desconectado. Reconectando em ${retryDelay}ms...`);
+            if (state.token && state.tenant_id) {
+                setTimeout(() => {
+                    this.connectWebSocket(Math.min(retryDelay * 2, 30000));
+                }, retryDelay);
+            }
         };
+    },
+
+    // Atualiza apenas o item da conversa na lista sem recarregar tudo
+    _updateConversationInList(msg) {
+        const listContainer = document.getElementById("convo-list");
+        if (!listContainer) return;
+
+        const convoId = msg.conversation_id;
+        let item = listContainer.querySelector(`[data-id="${convoId}"]`);
+        const isActive = convoId === state.activeConversationId;
+        const isIncoming = msg.sender_type === "contact";
+
+        if (!item) {
+            // Conversa não está na lista atual — recarregar a lista
+            this.loadConversations();
+            return;
+        }
+
+        // Atualizar preview
+        const previewEl = item.querySelector("p");
+        if (previewEl) {
+            const prefix = msg.sender_type === 'bot' ? '🤖 ' : msg.sender_type === 'agent' ? '✍️ ' : '';
+            const previewText = prefix + (msg.body || msg.preview || '').substring(0, 50);
+            previewEl.textContent = previewText;
+            previewEl.style.cssText = "overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; opacity: 0.7;";
+        }
+
+        // Atualizar horário
+        const timeEl = item.querySelector(".convo-time");
+        if (timeEl) timeEl.textContent = formatRelativeTime(msg.last_message_at || msg.created_at);
+
+        // Atualizar badge de não lido (somente mensagens do contato e não é a conversa ativa)
+        if (isIncoming && !isActive) {
+            item.classList.add("unread");
+            const convo = state.conversations.find(c => c.id === convoId);
+            if (convo) {
+                convo.unread_count = (convo.unread_count || 0) + 1;
+                convo.unread = true;
+            }
+            let badge = item.querySelector(".unread-badge");
+            const newCount = convo ? convo.unread_count : 1;
+            if (!badge) {
+                badge = document.createElement("span");
+                badge.className = "unread-badge";
+                badge.style.cssText = "background-color: var(--color-primary); color: white; border-radius: 50%; font-size: 10px; font-weight: 700; min-width: 18px; height: 18px; padding: 0 4px; display: inline-flex; align-items: center; justify-content: center; margin-left: 8px; box-shadow: 0 0 4px var(--color-primary);";
+                const nameSpan = item.querySelector("h4 span");
+                if (nameSpan) nameSpan.appendChild(badge);
+            }
+            badge.textContent = newCount;
+        }
+
+        // Mover conversa para o topo da lista
+        listContainer.removeChild(item);
+        listContainer.insertBefore(item, listContainer.firstChild);
     }
 };
 

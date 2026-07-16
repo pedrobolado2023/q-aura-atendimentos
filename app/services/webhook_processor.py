@@ -251,6 +251,7 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                     # 4. Broadcast via WebSocket Manager
                     broadcast_data = {
                         "type": "new_message",
+                        "id": new_msg.id,
                         "conversation_id": convo.id,
                         "sender_type": "contact",
                         "body": body_content,
@@ -258,6 +259,11 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                         "media_url": media_url,
                         "unread": True,
                         "unread_count": convo.unread_count,
+                        "contact_name": contact.name or contact.phone_number,
+                        "contact_phone": contact.phone_number,
+                        "contact_avatar": contact.avatar_url,
+                        "preview": body_content[:60] if body_content else "",
+                        "last_message_at": convo.last_message_at.isoformat() if convo.last_message_at else None,
                         "created_at": new_msg.created_at.isoformat() if new_msg.created_at else None
                     }
                     await websocket_broadcast_fn(tenant_id, broadcast_data)
@@ -313,12 +319,19 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                             # Broadcast the bot's reply via WebSocket
                             bot_broadcast_data = {
                                 "type": "new_message",
+                                "id": bot_msg.id,
                                 "conversation_id": convo.id,
                                 "sender_type": "bot",
                                 "body": bot_reply_body,
                                 "message_type": "text",
                                 "media_url": None,
-                                "unread": True,
+                                "unread": False,
+                                "unread_count": convo.unread_count,
+                                "contact_name": contact.name or contact.phone_number,
+                                "contact_phone": contact.phone_number,
+                                "contact_avatar": contact.avatar_url,
+                                "preview": bot_reply_body[:60] if bot_reply_body else "",
+                                "last_message_at": convo.last_message_at.isoformat() if convo.last_message_at else None,
                                 "created_at": bot_msg.created_at.isoformat() if bot_msg.created_at else None
                             }
                             await websocket_broadcast_fn(tenant_id, bot_broadcast_data)
