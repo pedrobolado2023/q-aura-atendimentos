@@ -2399,6 +2399,8 @@ if (selectBillingMode) {
 
 const btnBillingRecharge = document.getElementById("btn-billing-recharge");
 if (btnBillingRecharge) {
+    let pollingInterval = null;
+
     btnBillingRecharge.addEventListener("click", async () => {
         const amountInput = document.getElementById("billing-recharge-amount");
         const amount = parseFloat(amountInput.value) || 0;
@@ -2414,8 +2416,38 @@ if (btnBillingRecharge) {
 
         try {
             const res = await api.post(`/api/billing/recharge?amount=${amount}`, {});
-            showToast(`Recarga de R$ ${amount.toFixed(2)} efetuada com sucesso!`, "success");
-            appRouter.loadBillingSummary();
+            if (res && res.success) {
+                // Abre o modal Pix
+                const pixModal = document.getElementById("pix-payment-modal");
+                const qrCodeImg = document.getElementById("pix-qr-code-img");
+                const copiaColaInput = document.getElementById("pix-copia-cola-input");
+                
+                if (pixModal && qrCodeImg && copiaColaInput) {
+                    qrCodeImg.src = `data:image/png;base64,${res.qrCodeBase64}`;
+                    copiaColaInput.value = res.qrCode;
+                    pixModal.style.display = "flex";
+
+                    // Limpa polling anterior se existir
+                    if (pollingInterval) clearInterval(pollingInterval);
+
+                    // Polling de 3 em 3 segundos para validar status
+                    pollingInterval = setInterval(async () => {
+                        try {
+                            const statusRes = await api.get(`/api/billing/recharge/status/${res.paymentId}`);
+                            if (statusRes && statusRes.status === "approved") {
+                                clearInterval(pollingInterval);
+                                showToast("Pagamento Pix aprovado! Créditos liberados.", "success");
+                                pixModal.style.display = "none";
+                                appRouter.loadBillingSummary();
+                            }
+                        } catch (err) {
+                            console.error("Erro no polling do Pix:", err);
+                        }
+                    }, 3000);
+                }
+            } else {
+                showToast("Erro ao criar pagamento Pix.", "error");
+            }
         } catch (err) {
             showToast("Erro ao processar recarga: " + err.message, "error");
         } finally {
@@ -2423,6 +2455,29 @@ if (btnBillingRecharge) {
             btnBillingRecharge.innerHTML = originalText;
         }
     });
+
+    // Close Pix Modal button
+    const btnClosePix = document.getElementById("btn-close-pix-modal");
+    if (btnClosePix) {
+        btnClosePix.addEventListener("click", () => {
+            const pixModal = document.getElementById("pix-payment-modal");
+            if (pixModal) pixModal.style.display = "none";
+            if (pollingInterval) clearInterval(pollingInterval);
+            appRouter.loadBillingSummary();
+        });
+    }
+
+    // Copy Pix Copia e Cola button
+    const btnCopyPix = document.getElementById("btn-copy-pix");
+    if (btnCopyPix) {
+        btnCopyPix.addEventListener("click", () => {
+            const input = document.getElementById("pix-copia-cola-input");
+            if (input && input.value) {
+                navigator.clipboard.writeText(input.value);
+                showToast("Código Pix Copia e Cola copiado!", "success");
+            }
+        });
+    }
 }
 
 
