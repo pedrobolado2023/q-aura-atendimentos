@@ -195,13 +195,6 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                         Conversation.contact_id == contact.id
                     ).order_by(Conversation.last_message_at.desc()).first()
 
-                    # Check if the day has turned since the last message
-                    if convo and convo.last_message_at:
-                        if convo.last_message_at.date() != datetime.utcnow().date():
-                            convo.status = "resolved"
-                            db.commit()
-                            convo = None
-
                     # Check if chatbot is active for the tenant
                     bot_config = db.query(BotConfig).filter(BotConfig.tenant_id == tenant_id).first()
                     is_bot_active = bot_config and bot_config.is_active
