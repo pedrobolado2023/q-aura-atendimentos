@@ -107,12 +107,14 @@ def get_conversation_detail(
 ):
     """Retorna detalhes completos de uma conversa incluindo contato aninhado."""
     from sqlalchemy.orm import joinedload
+    convo_id_str = str(conversation_id)
+    tenant_id_str = str(current_tenant.id)
     convo = (
         db.query(Conversation)
         .options(joinedload(Conversation.contact))
         .filter(
-            Conversation.id == conversation_id,
-            Conversation.tenant_id == current_tenant.id
+            Conversation.id == convo_id_str,
+            Conversation.tenant_id == tenant_id_str
         )
         .first()
     )
@@ -123,7 +125,7 @@ def get_conversation_detail(
     # Preview da última mensagem
     lm = (
         db.query(Message)
-        .filter(Message.conversation_id == conversation_id)
+        .filter(Message.conversation_id == convo_id_str)
         .order_by(Message.created_at.desc())
         .first()
     )
