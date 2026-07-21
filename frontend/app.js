@@ -1034,15 +1034,7 @@ document.getElementById("chat-input-form").addEventListener("submit", async (e) 
 
     input.value = "";
     try {
-        const msg = await api.post(`/api/inbox/send-message?conversation_id=${state.activeConversationId}&body=${encodeURIComponent(body)}`, {});
-        
-        // Append bubble
-        const scroll = document.getElementById("message-scroll");
-        const bubble = document.createElement("div");
-        bubble.className = "message-bubble outgoing";
-        bubble.innerText = msg.body;
-        scroll.appendChild(bubble);
-        scroll.scrollTop = scroll.scrollHeight;
+        await api.post(`/api/inbox/send-message?conversation_id=${state.activeConversationId}&body=${encodeURIComponent(body)}`, {});
     } catch (err) {
         showToast("Erro ao enviar: " + err.message, "error");
     }
