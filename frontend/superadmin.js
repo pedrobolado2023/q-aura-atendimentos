@@ -180,7 +180,7 @@ class SuperadminRouter {
         if (data) {
             this.tenants = data;
             if (data.length === 0) {
-                tableBody.innerHTML = `<tr><td colspan="7" style="padding:32px; text-align:center; color:#64748b;">Nenhuma empresa cadastrada.</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="8" style="padding:32px; text-align:center; color:#64748b;">Nenhuma empresa cadastrada.</td></tr>`;
                 return;
             }
 
@@ -196,14 +196,20 @@ class SuperadminRouter {
                 const date = new Date(tenant.created_at).toLocaleDateString("pt-BR");
                 const planName = tenant.plan ? tenant.plan.name : "Customizado / Sem Plano";
 
+                const billingModeText = tenant.billing_mode === "postpaid" ? "Pós-pago" : "Pré-pago";
+                const balanceVal = tenant.balance !== undefined ? tenant.balance.toFixed(2) : "0.00";
+                const limitVal = tenant.postpaid_limit !== undefined ? tenant.postpaid_limit.toFixed(2) : "100.00";
+
                 tr.innerHTML = `
                     <td style="padding: 16px 24px; font-weight: 500; color: #0f172a;">${tenant.name}</td>
                     <td style="padding: 16px 24px; color: #64748b;">${tenant.subdomain}</td>
-                    <td style="padding: 16px 24px; color: #64748b;">${tenant.cnpj || "-"}</td>
                     <td style="padding: 16px 24px;"><span class="badge badge-purple">${planName}</span></td>
+                    <td style="padding: 16px 24px; color: #0f172a; font-weight: 600;">${billingModeText}</td>
+                    <td style="padding: 16px 24px; color: #10b981; font-weight: 600;">R$ ${balanceVal}</td>
+                    <td style="padding: 16px 24px; color: #64748b;">R$ ${limitVal}</td>
                     <td style="padding: 16px 24px;">${statusBadge}</td>
-                    <td style="padding: 16px 24px; color: #64748b;">${date}</td>
                     <td style="padding: 16px 24px;" class="actions-cell">
+                        <button class="btn btn-success btn-xs" data-action="billing" data-id="${tenant.id}" title="Gerenciar Faturamento"><i class="fa-solid fa-credit-card"></i></button>
                         <button class="btn btn-secondary btn-xs" data-action="edit" data-id="${tenant.id}"><i class="fa-solid fa-pen"></i></button>
                         <button class="btn btn-danger btn-xs" data-action="delete" data-id="${tenant.id}"><i class="fa-solid fa-trash"></i></button>
                     </td>
@@ -212,6 +218,9 @@ class SuperadminRouter {
             });
 
             // Attach dynamic listeners for action buttons
+            tableBody.querySelectorAll("button[data-action='billing']").forEach(btn => {
+                btn.addEventListener("click", () => this.openBillingModal(btn.dataset.id));
+            });
             tableBody.querySelectorAll("button[data-action='edit']").forEach(btn => {
                 btn.addEventListener("click", () => this.openEditTenantModal(btn.dataset.id));
             });
@@ -470,6 +479,71 @@ class SuperadminRouter {
                 this.showToast("Plano excluído com sucesso!");
                 this.loadPlans();
             }
+        }
+    }
+
+    // Modal de Faturamento do Superadmin
+    openBillingModal(tenantId) {
+        const tenant = this.tenants.find(t => t.id === tenantId);
+        if (!tenant) return;
+
+        this.activeBillingTenantId = tenantId;
+        document.getElementById("billing-modal-tenant-name").innerText = tenant.name;
+        document.getElementById("tenant-billing-mode-select").value = tenant.billing_mode || "prepaid";
+        document.getElementById("tenant-billing-balance-input").value = "";
+        document.getElementById("tenant-billing-limit-input").value = tenant.postpaid_limit || 100.00;
+
+        document.getElementById("tenant-billing-modal").style.display = "flex";
+    }
+
+    closeBillingModal() {
+        document.getElementById("tenant-billing-modal").style.display = "none";
+        this.activeBillingTenantId = null;
+    }
+
+    async saveBillingMode() {
+        if (!this.activeBillingTenantId) return;
+        const billing_mode = document.getElementById("tenant-billing-mode-select").value;
+
+        const res = await this.request(`/api/superadmin/tenants/${this.activeBillingTenantId}/set-billing-mode`, "POST", { billing_mode });
+        if (res) {
+            this.showToast("Método de cobrança atualizado com sucesso!");
+            this.closeBillingModal();
+            this.loadTenants();
+        }
+    }
+
+    async saveTenantBalance() {
+        if (!this.activeBillingTenantId) return;
+        const amount = parseFloat(document.getElementById("tenant-billing-balance-input").value) || 0.0;
+
+        if (amount <= 0) {
+            this.showToast("Insira um valor maior que zero para injetar créditos.", "error");
+            return;
+        }
+
+        const res = await this.request(`/api/superadmin/tenants/${this.activeBillingTenantId}/add-balance`, "POST", { amount });
+        if (res) {
+            this.showToast("Crédito adicionado com sucesso!");
+            this.closeBillingModal();
+            this.loadTenants();
+        }
+    }
+
+    async saveTenantLimit() {
+        if (!this.activeBillingTenantId) return;
+        const limit = parseFloat(document.getElementById("tenant-billing-limit-input").value) || 0.0;
+
+        if (limit < 0) {
+            this.showToast("Insira um limite válido.", "error");
+            return;
+        }
+
+        const res = await this.request(`/api/superadmin/tenants/${this.activeBillingTenantId}/set-limit`, "POST", { limit });
+        if (res) {
+            this.showToast("Limite pós-pago atualizado com sucesso!");
+            this.closeBillingModal();
+            this.loadTenants();
         }
     }
 }

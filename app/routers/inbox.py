@@ -211,6 +211,30 @@ async def send_message(
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
         
+    # Validar saldo / limite antes de enviar nova mensagem ativa
+    from app.services.charge_service import can_initiate_conversation, charge_tenant_conversation
+    from datetime import datetime, timezone
+    
+    # Verifica se a janela de 24h já expirou (se sim, cobramos por iniciar uma nova conversação)
+    last_contact_msg = (
+        db.query(Message)
+        .filter(Message.conversation_id == convo.id, Message.sender_type == "contact")
+        .order_by(Message.created_at.desc())
+        .first()
+    )
+    is_new_session = True
+    if last_contact_msg and last_contact_msg.created_at:
+        created_at_tz = last_contact_msg.created_at.replace(tzinfo=timezone.utc) if last_contact_msg.created_at.tzinfo is None else last_contact_msg.created_at
+        diff_hours = (datetime.now(timezone.utc) - created_at_tz).total_seconds() / 3600
+        if diff_hours <= 24.0:
+            is_new_session = False
+
+    if is_new_session and not can_initiate_conversation(db, current_tenant.id):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED, 
+            detail="Saldo insuficiente ou limite pós-pago atingido. Efetue uma recarga para continuar enviando mensagens ativas."
+        )
+
     contact = db.query(Contact).filter(Contact.id == convo.contact_id).first()
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
@@ -270,6 +294,16 @@ async def send_message(
     convo.last_message_at = func.now()
     db.commit()
     db.refresh(msg)
+
+    # Executa o débito/tarifação se for nova sessão
+    if is_new_session and meta_message_id:
+        charge_tenant_conversation(
+            db, 
+            tenant_id=str(current_tenant.id), 
+            conversation_id=str(convo.id), 
+            category="service", # Mensagem enviada pelo atendente é cobrada como Service
+            custom_description=f"Conversa de Serviço iniciada por atendente com {contact.phone_number}"
+        )
 
     # Broadcast via WebSocket Manager
     from app.services.websocket_manager import manager
@@ -450,6 +484,14 @@ async def start_conversation(
     if not cleaned_phone:
         raise HTTPException(status_code=400, detail="Número de telefone inválido.")
 
+    # Validar saldo / limite antes de abrir nova conversa ativa
+    from app.services.charge_service import can_initiate_conversation, charge_tenant_conversation
+    if not can_initiate_conversation(db, current_tenant.id):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Saldo insuficiente ou limite pós-pago atingido. Efetue uma recarga para continuar enviando mensagens ativas."
+        )
+
     # 2. Get/Create contact
     contact = db.query(Contact).filter(
         Contact.phone_number == cleaned_phone,
@@ -551,6 +593,18 @@ async def start_conversation(
     convo.last_message_at = func.now()
     db.commit()
     db.refresh(msg)
+
+    # Executa tarifação se a mensagem foi enviada com sucesso
+    if meta_message_id:
+        # Se contiver a palavra "primeiro_contato" ou template, é cobrado como utility
+        category = "utility" if "primeiro_contato" in payload.body else "marketing"
+        charge_tenant_conversation(
+            db,
+            tenant_id=str(current_tenant.id),
+            conversation_id=str(convo.id),
+            category=category,
+            custom_description=f"Primeira Conversa de {category.capitalize()} iniciada de forma ativa com {contact.phone_number}"
+        )
 
     return msg
 
@@ -1074,6 +1128,17 @@ async def dispatch_campaign_bulk(
                 convo.last_message_at = datetime.utcnow()
                 db.commit()
 
+                # Registra o débito no faturamento da empresa se enviado com sucesso
+                if meta_message_id:
+                    from app.services.charge_service import charge_tenant_conversation
+                    charge_tenant_conversation(
+                        db,
+                        tenant_id=tenant_id,
+                        conversation_id=str(convo.id),
+                        category="marketing",
+                        custom_description=f"Campanha de Marketing '{campaign.name}' enviada para {contact.phone_number}"
+                    )
+
         # Update campaign sent_count
         campaign.sent_count = sent_count
         db.commit()
@@ -1098,6 +1163,13 @@ async def send_campaign(
     """
     if current_user.role not in ["administrator", "manager"]:
         raise HTTPException(status_code=403, detail="Apenas administradores e supervisores podem disparar campanhas.")
+        
+    from app.services.charge_service import can_initiate_conversation
+    if not can_initiate_conversation(db, current_tenant.id):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Saldo insuficiente ou limite pós-pago atingido. Não é possível iniciar disparos em massa."
+        )
         
     creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == current_tenant.id).first()
     if not creds:

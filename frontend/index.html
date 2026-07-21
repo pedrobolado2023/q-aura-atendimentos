@@ -277,6 +277,71 @@
                                 </table>
                             </div>
                         </div>
+                        <!-- Billing and Consumption (Faturamento e Consumo) Editor -->
+                        <div class="settings-card" style="grid-column: span 2;">
+                            <h3><i class="fa-solid fa-credit-card"></i> Faturamento e Consumo (WhatsApp API)</h3>
+                            <p class="settings-desc">Acompanhe seu saldo, controle seu limite mensal de envio ou mude sua forma de faturamento.</p>
+
+                            <!-- Consolidado Financeiro Grid -->
+                            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;">
+                                <div style="background: var(--bg-secondary); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 4px;">
+                                    <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Método Ativo</span>
+                                    <strong id="billing-active-mode" style="font-size: 18px; color: var(--color-brand); font-weight: 700;">Carregando...</strong>
+                                </div>
+                                <div style="background: var(--bg-secondary); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 4px;">
+                                    <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Saldo Disponível</span>
+                                    <strong id="billing-balance" style="font-size: 18px; color: var(--color-success); font-weight: 700;">R$ 0,00</strong>
+                                </div>
+                                <div style="background: var(--bg-secondary); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 4px;">
+                                    <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Consumo no Mês</span>
+                                    <strong id="billing-monthly-spend" style="font-size: 18px; color: var(--text-primary); font-weight: 700;">R$ 0,00</strong>
+                                </div>
+                                <div style="background: var(--bg-secondary); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 4px;">
+                                    <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Limite Mensal (Pós)</span>
+                                    <strong id="billing-postpaid-limit" style="font-size: 18px; color: var(--text-primary); font-weight: 700;">R$ 100,00</strong>
+                                </div>
+                            </div>
+
+                            <!-- Ações de Gerenciamento Financeiro -->
+                            <div style="display: flex; gap: 20px; align-items: flex-start; margin-bottom: 24px; flex-wrap: wrap;">
+                                <!-- Seletor de Modo -->
+                                <div class="input-group" style="margin-bottom: 0; min-width: 200px;">
+                                    <label for="select-billing-mode" style="font-size: 12px; font-weight: 600; margin-bottom: 6px;">Escolher Método de Cobrança</label>
+                                    <select id="select-billing-mode" style="width: 100%; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); padding: 10px; border-radius: var(--radius-sm);">
+                                        <option value="prepaid">Pré-pago (Recarga via Pix)</option>
+                                        <option value="postpaid">Pós-pago (Fatura Mensal)</option>
+                                    </select>
+                                </div>
+
+                                <!-- Simulação de Recarga (Exibe se for pré-pago) -->
+                                <div id="prepaid-recharge-section" style="display: flex; align-items: flex-end; gap: 10px;">
+                                    <div class="input-group" style="margin-bottom: 0; width: 140px;">
+                                        <label for="billing-recharge-amount" style="font-size: 12px; font-weight: 600; margin-bottom: 6px;">Valor da Recarga (R$)</label>
+                                        <input type="number" id="billing-recharge-amount" value="50" min="10" style="padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); width: 100%;">
+                                    </div>
+                                    <button class="btn btn-success" id="btn-billing-recharge" style="padding: 10px 16px;"><i class="fa-solid fa-wallet"></i> Recarregar Saldo</button>
+                                </div>
+                            </div>
+
+                            <h4 style="margin: 20px 0 10px 0; color: var(--text-primary); font-size: 14px; font-weight: 700;">Histórico de Lançamentos e Transações</h4>
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Data</th>
+                                            <th>Categoria</th>
+                                            <th>Descrição / Evento</th>
+                                            <th>Valor Cobrado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="billing-transactions-list">
+                                        <tr>
+                                            <td colspan="4" style="text-align: center; opacity: 0.5; padding: 20px;">Nenhum lançamento registrado.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

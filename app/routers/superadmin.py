@@ -48,6 +48,9 @@ def _tenant_to_response(tenant: Tenant) -> dict:
         "created_at": tenant.created_at,
         "plan": tenant.plan,
         "enabled_modules": _get_enabled_modules(tenant),
+        "billing_mode": tenant.billing_mode or "prepaid",
+        "balance": float(tenant.balance or 0.0),
+        "postpaid_limit": float(tenant.postpaid_limit or 100.0),
     }
 
 
@@ -306,3 +309,75 @@ def get_tenant_users(
         }
         for u in users
     ]
+
+
+# ─── Superadmin Billing Overrides ─────────────────────────────────────────────
+from pydantic import BaseModel
+from decimal import Decimal
+from app.models import BillingTransaction
+
+class SuperadminAddBalanceRequest(BaseModel):
+    amount: float
+
+class SuperadminSetLimitRequest(BaseModel):
+    limit: float
+
+class SuperadminSetModeRequest(BaseModel):
+    billing_mode: str
+
+@router.post("/tenants/{tenant_id}/add-balance")
+def superadmin_add_balance(
+    tenant_id: str,
+    payload: SuperadminAddBalanceRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada.")
+
+    tenant.balance = (tenant.balance or Decimal("0.00")) + Decimal(str(payload.amount))
+    
+    tx = BillingTransaction(
+        tenant_id=tenant.id,
+        category="recharge",
+        amount=Decimal(str(payload.amount)),
+        cost_meta=Decimal("0.00"),
+        description="Crédito manual injetado pelo Superadmin"
+    )
+    db.add(tx)
+    db.commit()
+    return {"message": "Saldo adicionado com sucesso.", "new_balance": float(tenant.balance)}
+
+@router.post("/tenants/{tenant_id}/set-limit")
+def superadmin_set_limit(
+    tenant_id: str,
+    payload: SuperadminSetLimitRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada.")
+
+    tenant.postpaid_limit = Decimal(str(payload.limit))
+    db.commit()
+    return {"message": "Limite pós-pago atualizado com sucesso.", "new_limit": float(tenant.postpaid_limit)}
+
+@router.post("/tenants/{tenant_id}/set-billing-mode")
+def superadmin_set_billing_mode(
+    tenant_id: str,
+    payload: SuperadminSetModeRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    if payload.billing_mode not in ["prepaid", "postpaid"]:
+        raise HTTPException(status_code=400, detail="Modo de faturamento inválido.")
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada.")
+
+    tenant.billing_mode = payload.billing_mode
+    db.commit()
+    return {"message": "Método de faturamento atualizado com sucesso.", "billing_mode": tenant.billing_mode}
+

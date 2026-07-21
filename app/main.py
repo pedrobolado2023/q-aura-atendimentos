@@ -44,6 +44,15 @@ try:
         print("[Database] Adding internal_note column to qa_messages table...")
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE qa_messages ADD COLUMN internal_note BOOLEAN DEFAULT FALSE"))
+
+    # Check qa_tenants columns for billing
+    columns_tenants = [col["name"] for col in inspector.get_columns("qa_tenants")]
+    if "billing_mode" not in columns_tenants:
+        print("[Database] Adding billing columns to qa_tenants table...")
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE qa_tenants ADD COLUMN billing_mode VARCHAR(20) DEFAULT 'prepaid'"))
+            conn.execute(text("ALTER TABLE qa_tenants ADD COLUMN balance NUMERIC(10, 2) DEFAULT 0.00"))
+            conn.execute(text("ALTER TABLE qa_tenants ADD COLUMN postpaid_limit NUMERIC(10, 2) DEFAULT 100.00"))
 except Exception as e:
     print(f"[Database] Error creating/updating tables on startup: {e}")
 
@@ -73,10 +82,12 @@ async def websocket_endpoint(websocket: WebSocket, tenant_id: str):
         manager.disconnect(tenant_id, websocket)
 
 # Include Routers
+from app.routers import billing
 app.include_router(auth.router)
 app.include_router(webhook.router)
 app.include_router(inbox.router)
 app.include_router(superadmin.router)
+app.include_router(billing.router)
 
 # Mount frontend static files at root
 frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")

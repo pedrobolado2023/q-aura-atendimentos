@@ -657,6 +657,9 @@ const appRouter = {
         } catch (e) {
             console.log("Erro ao carregar URL do n8n: " + e.message);
         }
+
+        // Carrega os dados de faturamento do hotel
+        this.loadBillingSummary();
     },
 
     async loadBotConfig() {
@@ -850,6 +853,70 @@ const appRouter = {
 
         } catch (e) {
             console.error(e);
+        }
+    },
+
+    async loadBillingSummary() {
+        try {
+            const summary = await api.get("/api/billing/summary");
+            if (summary) {
+                // Atualiza campos de consolidado financeiro
+                const modeEl = document.getElementById("billing-active-mode");
+                const balanceEl = document.getElementById("billing-balance");
+                const spendEl = document.getElementById("billing-monthly-spend");
+                const limitEl = document.getElementById("billing-postpaid-limit");
+                const selectModeEl = document.getElementById("select-billing-mode");
+                const rechargeSection = document.getElementById("prepaid-recharge-section");
+
+                if (modeEl) {
+                    modeEl.innerText = summary.billing_mode === "postpaid" ? "PÓS-PAGO" : "PRÉ-PAGO";
+                    modeEl.style.color = summary.billing_mode === "postpaid" ? "var(--color-info)" : "var(--color-success)";
+                }
+                if (balanceEl) balanceEl.innerText = `R$ ${summary.balance.toFixed(2)}`;
+                if (spendEl) spendEl.innerText = `R$ ${summary.monthly_spend.toFixed(2)}`;
+                if (limitEl) limitEl.innerText = `R$ ${summary.postpaid_limit.toFixed(2)}`;
+                if (selectModeEl) selectModeEl.value = summary.billing_mode;
+
+                // Mostra recarga apenas se for pré-pago
+                if (rechargeSection) {
+                    rechargeSection.style.display = summary.billing_mode === "prepaid" ? "flex" : "none";
+                }
+            }
+
+            // Carrega transações
+            const txsList = document.getElementById("billing-transactions-list");
+            if (txsList) {
+                txsList.innerHTML = "<tr><td colspan='4' style='padding:12px; text-align:center;'><i class='fa-solid fa-spinner fa-spin'></i> Carregando...</td></tr>";
+                const txs = await api.get("/api/billing/transactions");
+                txsList.innerHTML = "";
+                if (!txs || txs.length === 0) {
+                    txsList.innerHTML = "<tr><td colspan='4' style='padding:20px; text-align:center; opacity:0.5;'>Nenhum lançamento financeiro registrado.</td></tr>";
+                } else {
+                    txs.forEach(t => {
+                        const tr = document.createElement("tr");
+                        const date = new Date(t.created_at).toLocaleString("pt-BR");
+                        
+                        let categoryText = "Serviço";
+                        if (t.category === "marketing") categoryText = "Marketing";
+                        if (t.category === "utility") categoryText = "Utilidade";
+                        if (t.category === "recharge") categoryText = "Recarga / Entrada";
+
+                        const amountColor = t.category === "recharge" ? "color: var(--color-success);" : "color: var(--text-primary);";
+                        const amountPrefix = t.category === "recharge" ? "+" : "-";
+
+                        tr.innerHTML = `
+                            <td>${date}</td>
+                            <td><span class="badge" style="font-weight: 700;">${categoryText}</span></td>
+                            <td>${t.description || "-"}</td>
+                            <td style="${amountColor} font-weight:700;">${amountPrefix} R$ ${t.amount.toFixed(2)}</td>
+                        `;
+                        txsList.appendChild(tr);
+                    });
+                }
+            }
+
+        } catch (e) {
+            console.error("Erro ao carregar faturamento:", e);
         }
     },
 
@@ -2311,6 +2378,50 @@ if (crmTabSendBtn && crmTabReportsBtn && crmSendPanel && crmReportsPanel) {
         crmReportsPanel.style.display = "flex";
         
         appRouter.loadCampaigns();
+    });
+}
+
+
+// Billing Action Event Listeners
+const selectBillingMode = document.getElementById("select-billing-mode");
+if (selectBillingMode) {
+    selectBillingMode.addEventListener("change", async (e) => {
+        const billing_mode = e.target.value;
+        try {
+            await api.post("/api/billing/mode", { billing_mode });
+            showToast("Método de cobrança atualizado com sucesso!", "success");
+            appRouter.loadBillingSummary();
+        } catch (err) {
+            showToast("Erro ao alterar método de faturamento: " + err.message, "error");
+        }
+    });
+}
+
+const btnBillingRecharge = document.getElementById("btn-billing-recharge");
+if (btnBillingRecharge) {
+    btnBillingRecharge.addEventListener("click", async () => {
+        const amountInput = document.getElementById("billing-recharge-amount");
+        const amount = parseFloat(amountInput.value) || 0;
+
+        if (amount <= 0) {
+            showToast("Insira um valor maior que zero para recarga.", "error");
+            return;
+        }
+
+        const originalText = btnBillingRecharge.innerHTML;
+        btnBillingRecharge.disabled = true;
+        btnBillingRecharge.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i> Processando...";
+
+        try {
+            const res = await api.post(`/api/billing/recharge?amount=${amount}`, {});
+            showToast(`Recarga de R$ ${amount.toFixed(2)} efetuada com sucesso!`, "success");
+            appRouter.loadBillingSummary();
+        } catch (err) {
+            showToast("Erro ao processar recarga: " + err.message, "error");
+        } finally {
+            btnBillingRecharge.disabled = false;
+            btnBillingRecharge.innerHTML = originalText;
+        }
     });
 }
 

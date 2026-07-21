@@ -51,6 +51,9 @@ class Tenant(Base):
     custom_modules = Column(ArrayType, default=[])
     logo_url = Column(Text)
     max_users = Column(Integer, default=5)
+    billing_mode = Column(String(20), default="prepaid")  # prepaid ou postpaid
+    balance = Column(Numeric(10, 2), default=0.00)
+    postpaid_limit = Column(Numeric(10, 2), default=100.00)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -233,5 +236,20 @@ class CampaignRecipient(Base):
 
     campaign = relationship("MarketingCampaign")
     contact = relationship("Contact")
+
+
+class BillingTransaction(Base):
+    __tablename__ = "qa_billing_transactions"
+    id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
+    tenant_id = Column(UuidCol, ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    conversation_id = Column(UuidCol, ForeignKey("qa_conversations.id", ondelete="SET NULL"), nullable=True)
+    category = Column(String(50), nullable=False) # marketing, utility, service, recharge
+    amount = Column(Numeric(10, 2), nullable=False, default=0.00)
+    cost_meta = Column(Numeric(10, 2), nullable=False, default=0.00)
+    description = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    tenant = relationship("Tenant")
+
 
 
