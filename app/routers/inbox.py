@@ -50,7 +50,8 @@ def get_conversations(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
-    query = db.query(Conversation).filter(Conversation.tenant_id == current_tenant.id)
+    from sqlalchemy.orm import joinedload
+    query = db.query(Conversation).options(joinedload(Conversation.contact)).filter(Conversation.tenant_id == current_tenant.id)
     if status_filter:
         if status_filter == "waiting":
             query = query.filter(Conversation.status.in_(["waiting", "bot"]))
@@ -96,6 +97,40 @@ def get_conversations(
             d.last_message_sender_type = lm.sender_type
         result.append(d)
     return result
+
+@router.get("/conversations/{conversation_id}/detail", response_model=ConversationResponse)
+def get_conversation_detail(
+    conversation_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    """Retorna detalhes completos de uma conversa incluindo contato aninhado."""
+    from sqlalchemy.orm import joinedload
+    convo = (
+        db.query(Conversation)
+        .options(joinedload(Conversation.contact))
+        .filter(
+            Conversation.id == conversation_id,
+            Conversation.tenant_id == current_tenant.id
+        )
+        .first()
+    )
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    d = ConversationResponse.from_orm(convo)
+    # Preview da última mensagem
+    lm = (
+        db.query(Message)
+        .filter(Message.conversation_id == conversation_id)
+        .order_by(Message.created_at.desc())
+        .first()
+    )
+    if lm:
+        d.last_message_body = (lm.body or "")[:80]
+        d.last_message_sender_type = lm.sender_type
+    return d
 
 @router.get("/conversations/{conversation_id}/messages", response_model=List[MessageResponse])
 def get_messages(

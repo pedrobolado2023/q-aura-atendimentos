@@ -465,7 +465,7 @@ const appRouter = {
     async selectConversation(convoId) {
         state.activeConversationId = convoId;
         
-        // Remove unread dots locally on click
+        // Marca item como ativo na lista
         document.querySelectorAll(".convo-item").forEach(item => {
             item.classList.remove("active");
             if (item.getAttribute("data-id") === convoId) {
@@ -476,27 +476,23 @@ const appRouter = {
             }
         });
         
-        const convo = state.conversations.find(c => c.id === convoId);
+        let convo = state.conversations.find(c => c.id === convoId);
         if (convo) {
             convo.unread = false;
             convo.unread_count = 0;
         }
         
-        // Show conversation pane
+        // Mostrar painel de chat imediatamente (antes de carregar dados)
         const activeArea = document.getElementById("active-chat-area");
         activeArea.classList.remove("empty");
         activeArea.querySelector(".no-chat-selected").style.display = "none";
         activeArea.querySelector(".chat-wrapper").style.display = "flex";
 
-        // Show guest context panel based on state setting
+        // Painel de contexto
         const guestContext = document.getElementById("guest-context");
         const layout = document.querySelector(".inbox-layout");
         const showContextBtn = document.getElementById("btn-show-context");
-        
-        if (state.isContextPanelVisible === undefined) {
-            state.isContextPanelVisible = true;
-        }
-        
+        if (state.isContextPanelVisible === undefined) state.isContextPanelVisible = true;
         if (state.isContextPanelVisible) {
             guestContext.style.display = "block";
             if (layout) layout.classList.remove("hide-context");
@@ -507,18 +503,30 @@ const appRouter = {
             if (showContextBtn) showContextBtn.style.display = "block";
         }
 
-        // Update contact details in Right panel and Active header
+        // Se não tiver contato no state, buscar da API
+        if (!convo || !convo.contact) {
+            try {
+                convo = await api.get(`/api/inbox/conversations/${convoId}/detail`);
+                // Atualiza no state também
+                const idx = state.conversations.findIndex(c => c.id === convoId);
+                if (idx >= 0) state.conversations[idx] = convo;
+                else state.conversations.push(convo);
+            } catch (e) {
+                console.warn("[inbox] Falha ao buscar detalhes da conversa:", e);
+            }
+        }
+
+        // Atualizar header e painel lateral com dados do contato
         if (convo && convo.contact) {
             const contactName = convo.contact.name || convo.contact.phone_number || "Hóspede";
             document.getElementById("active-contact-name").innerText = contactName;
             
             const nameInput = document.getElementById("guest-name-input");
-            if (nameInput) {
-                nameInput.value = convo.contact.name || "";
-            }
+            if (nameInput) nameInput.value = convo.contact.name || "";
             
-            document.getElementById("guest-phone").innerText = convo.contact.phone_number;
-            document.getElementById("guest-lang").innerText = convo.contact.language === "pt-BR" ? "Português" : convo.contact.language;
+            document.getElementById("guest-phone").innerText = convo.contact.phone_number || "";
+            const lang = convo.contact.language;
+            document.getElementById("guest-lang").innerText = lang === "pt-BR" || lang === "pt_BR" ? "Português" : (lang || "—");
             
             const loyalty = convo.contact.loyalty_level || "none";
             document.getElementById("guest-loyalty").innerText = loyalty.charAt(0).toUpperCase() + loyalty.slice(1);
@@ -532,16 +540,15 @@ const appRouter = {
                 "lost": "Perdido"
             };
             const stage = convo.contact.sales_funnel_stage;
-            document.getElementById("guest-funnel-stage").innerText = stageLabels[stage] || stage.toUpperCase();
+            document.getElementById("guest-funnel-stage").innerText = stageLabels[stage] || (stage || "—").toUpperCase();
 
-            // Set Avatar image
             const avatarUrl = convo.contact.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(contactName)}`;
             const activeAvatar = document.getElementById("active-avatar");
             if (activeAvatar) {
-                activeAvatar.innerHTML = `<img class="avatar" src="${avatarUrl}" alt="${contactName}">`;
+                activeAvatar.innerHTML = `<img class="avatar" src="${avatarUrl}" alt="${contactName}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">`;
             }
 
-            // Update flag toggle icon color in header
+            // Flag
             const flagToggle = document.getElementById("chat-flag-toggle");
             if (flagToggle) {
                 let color = "var(--text-muted)";
@@ -549,52 +556,64 @@ const appRouter = {
                 else if (convo.flag_type === "yellow") color = "#fbbf24";
                 else if (convo.flag_type === "blue") color = "#3b82f6";
                 else if (convo.flag_type === "green") color = "#10b981";
-
                 flagToggle.style.color = color;
-                flagToggle.title = convo.flag_type && convo.flag_type !== "none" ? `Flag: ${convo.flag_type.toUpperCase()}` : "Flegar Cliente";
             }
-            
-            // Toggle Assumir Atendimento vs Transferir button
+        } else if (convo) {
+            // Sem contato mas tem conversa — usar ID como fallback
+            document.getElementById("active-contact-name").innerText = "Contato Desconhecido";
+        }
+
+        // Atualizar status no header
+        if (convo) {
+            const statusEl = document.getElementById("active-contact-status");
+            if (statusEl) {
+                const statusMap = {
+                    "waiting": "⏳ Aguardando Atendente",
+                    "bot": "🤖 Em Atendimento pelo Bot",
+                    "active": "✅ Em Atendimento",
+                    "resolved": "✔ Resolvida"
+                };
+                statusEl.innerText = statusMap[convo.status] || convo.status;
+            }
+
+            // Botão Assumir vs Transferir
             const transferBtn = document.getElementById("btn-transfer-chat");
             if (transferBtn) {
                 if (convo.status === "waiting" || convo.status === "bot") {
                     transferBtn.innerHTML = `<i class="fa-solid fa-headset"></i> Assumir Atendimento`;
-                    transferBtn.classList.remove("btn-secondary");
-                    transferBtn.classList.add("btn-primary");
+                    transferBtn.className = "btn btn-primary btn-sm";
                 } else {
                     transferBtn.innerHTML = `<i class="fa-solid fa-arrow-right-arrow-left"></i> Transferir`;
-                    transferBtn.classList.remove("btn-primary");
-                    transferBtn.classList.add("btn-secondary");
+                    transferBtn.className = "btn btn-secondary btn-sm";
                 }
             }
 
-            // Toggle Enviar para o Bot button
+            // Botão Enviar para o Bot
             const transferToBotBtn = document.getElementById("btn-transfer-to-bot");
             if (transferToBotBtn) {
-                if (convo.status === "bot") {
-                    transferToBotBtn.style.display = "none";
-                } else {
-                    transferToBotBtn.style.display = "block";
-                }
+                transferToBotBtn.style.display = convo.status === "bot" ? "none" : "inline-flex";
             }
         }
 
-        // Load Messages
+        // Carregar mensagens
         try {
-            const messages = await api.get(`/api/inbox/conversations/${convoId}/messages`);
             const scroll = document.getElementById("message-scroll");
+            scroll.innerHTML = `<div style="text-align:center;padding:20px;opacity:0.5;font-size:13px;">Carregando mensagens...</div>`;
+            const messages = await api.get(`/api/inbox/conversations/${convoId}/messages`);
             scroll.innerHTML = "";
-            
-            messages.forEach(m => {
-                const bubble = renderMessageBubble(m);
-                scroll.appendChild(bubble);
-            });
-            scroll.scrollTop = scroll.scrollHeight;
+            if (messages.length === 0) {
+                scroll.innerHTML = `<div style="text-align:center;padding:40px;opacity:0.5;font-size:13px;">Nenhuma mensagem ainda.</div>`;
+            } else {
+                messages.forEach(m => {
+                    const bubble = renderMessageBubble(m);
+                    scroll.appendChild(bubble);
+                });
+                scroll.scrollTop = scroll.scrollHeight;
+            }
         } catch (e) {
-            console.error(e);
+            console.error("[inbox] Erro ao carregar mensagens:", e);
         }
     },
-
 
 
     async loadMetaSettings() {

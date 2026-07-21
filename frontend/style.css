@@ -146,6 +146,16 @@ body {
     font-size: 12px;
 }
 
+.btn-info {
+    background: var(--color-info);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2);
+}
+.btn-info:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
 /* --- Login Card & Onboarding --- */
 .login-card {
     background: rgba(255, 255, 255, 0.85);
@@ -385,6 +395,15 @@ body {
 
 .workspace-view.active {
     display: block;
+}
+
+/* Inbox view tem layout especial - não tem padding e precisa de flex */
+#inbox-view.active {
+    display: flex;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
 }
 
 .workspace-header {
