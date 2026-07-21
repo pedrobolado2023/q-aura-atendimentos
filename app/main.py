@@ -49,10 +49,16 @@ try:
     # Check qa_tenants columns for billing
     columns_tenants = [col["name"] for col in inspector.get_columns("qa_tenants")]
     if "billing_mode" not in columns_tenants:
-        print("[Database] Adding billing columns to qa_tenants table...")
+        print("[Database] Adding billing_mode column to qa_tenants table...")
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE qa_tenants ADD COLUMN billing_mode VARCHAR(20) DEFAULT 'prepaid'"))
+    if "balance" not in columns_tenants:
+        print("[Database] Adding balance column to qa_tenants table...")
+        with engine.begin() as conn:
             conn.execute(text("ALTER TABLE qa_tenants ADD COLUMN balance NUMERIC(10, 2) DEFAULT 0.00"))
+    if "postpaid_limit" not in columns_tenants:
+        print("[Database] Adding postpaid_limit column to qa_tenants table...")
+        with engine.begin() as conn:
             conn.execute(text("ALTER TABLE qa_tenants ADD COLUMN postpaid_limit NUMERIC(10, 2) DEFAULT 100.00"))
 except Exception as e:
     print(f"[Database] Error creating/updating tables on startup: {e}")
