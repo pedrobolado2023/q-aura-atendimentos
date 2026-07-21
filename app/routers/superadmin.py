@@ -211,6 +211,19 @@ def create_tenant(
         status="offline",
     )
     db.add(admin_user)
+
+    # Create default BotConfig for the tenant
+    from app.models import BotConfig
+    bot_conf = BotConfig(
+        tenant_id=tenant.id,
+        is_active=True,
+        welcome_message="Olá! Seja bem-vindo ao nosso hotel. Como posso ajudar você hoje?",
+        fallback_message="Desculpe, não consegui entender. Digite *Atendente* a qualquer momento para falar com um humano.",
+        out_of_hours_message="Olá! Nosso horário de atendimento é das 08h às 22h. Deixe sua mensagem que responderemos o mais breve possível.",
+        transfer_keywords="atendente,humano,falar,suporte,ajuda"
+    )
+    db.add(bot_conf)
+
     db.commit()
     db.refresh(tenant)
     return _tenant_to_response(tenant)
