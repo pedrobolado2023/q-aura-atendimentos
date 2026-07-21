@@ -612,6 +612,10 @@ const appRouter = {
             }
         } catch (e) {
             console.error("[inbox] Erro ao carregar mensagens:", e);
+            const scroll = document.getElementById("message-scroll");
+            if (scroll) {
+                scroll.innerHTML = `<div style="text-align:center;padding:20px;color:var(--color-danger);font-size:13px;">Erro ao carregar histórico da conversa: ${e.message}</div>`;
+            }
         }
     },
 

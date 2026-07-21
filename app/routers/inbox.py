@@ -230,9 +230,31 @@ async def send_message(
     db.add(msg)
     
     # Update last message timestamp
-    convo.last_message_at = convo.updated_at
+    convo.last_message_at = func.now()
     db.commit()
     db.refresh(msg)
+
+    # Broadcast via WebSocket Manager
+    from app.services.websocket_manager import manager
+    broadcast_data = {
+        "type": "new_message",
+        "id": msg.id,
+        "conversation_id": convo.id,
+        "sender_type": "agent",
+        "body": formatted_body,
+        "message_type": "text",
+        "media_url": None,
+        "unread": False,
+        "unread_count": convo.unread_count,
+        "contact_name": contact.name or contact.phone_number,
+        "contact_phone": contact.phone_number,
+        "contact_avatar": contact.avatar_url,
+        "preview": formatted_body[:60] if formatted_body else "",
+        "last_message_at": convo.last_message_at.isoformat() if convo.last_message_at else None,
+        "created_at": msg.created_at.isoformat() if msg.created_at else None
+    }
+    await manager.broadcast_to_tenant(current_tenant.id, broadcast_data)
+
     return msg
 
 
