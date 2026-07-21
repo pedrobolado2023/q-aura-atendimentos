@@ -1885,7 +1885,7 @@ if (startChatForm) {
         
         const phone = document.getElementById("start-chat-phone").value.trim();
         const name = document.getElementById("start-chat-name").value.trim();
-        const body = document.getElementById("start-chat-body").value.trim();
+        const body = "primeiro_contato"; // Utiliza a string correspondente ao Template
         
         const submitBtn = startChatForm.querySelector("button[type='submit']");
         const originalText = submitBtn.innerText;

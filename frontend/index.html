@@ -787,11 +787,12 @@
                     <label for="start-chat-name" style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Nome do Hóspede (Opcional)</label>
                     <input type="text" id="start-chat-name" placeholder="Ex: João Silva" style="width: 100%; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); box-sizing: border-box;">
                 </div>
-                <div class="input-group" style="display: flex; flex-direction: column; gap: 6px;">
-                    <label for="start-chat-body" style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Mensagem de Abertura</label>
-                    <textarea id="start-chat-body" required rows="4" placeholder="Olá! Gostaria de falar sobre sua reserva..." style="width: 100%; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); resize: vertical; box-sizing: border-box;"></textarea>
+                <!-- O campo de texto livre foi removido para usar apenas o Template primeiro_contato -->
+                <div style="background: var(--bg-tertiary); padding: 12px; border-radius: var(--radius-sm); font-size: 12px; color: var(--text-secondary); text-align: center; border: 1px solid var(--border-color);">
+                    <i class="fa-solid fa-circle-info" style="color: var(--color-brand); margin-right: 4px;"></i> 
+                    Será enviada a mensagem oficial aprovada (Template: <strong>primeiro_contato</strong>).
                 </div>
-                <button type="submit" class="btn btn-primary btn-block" style="margin-top: 10px; padding: 12px; font-weight: 600;">Enviar Mensagem</button>
+                <button type="submit" class="btn btn-primary btn-block" style="margin-top: 10px; padding: 12px; font-weight: 600;">Iniciar Conversa</button>
             </form>
         </div>
     </div>
