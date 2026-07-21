@@ -595,6 +595,33 @@ const appRouter = {
             }
         }
 
+        // Mostrar / Ocultar campo de texto com base na janela de 24h
+        const chatInputForm = document.getElementById("chat-input-form");
+        const chatBlockedArea = document.getElementById("chat-blocked-area");
+        
+        if (chatInputForm && chatBlockedArea) {
+            if (convo && convo.has_active_window) {
+                chatInputForm.style.display = "flex";
+                chatBlockedArea.style.display = "none";
+            } else {
+                chatInputForm.style.display = "none";
+                chatBlockedArea.style.display = "flex";
+                
+                // Vincula comportamento ao botão alternativo
+                const altBtn = document.getElementById("btn-start-conversation-alternative");
+                if (altBtn && convo && convo.contact) {
+                    altBtn.onclick = () => {
+                        const startModal = document.getElementById("start-chat-modal");
+                        const startPhoneInput = document.getElementById("start-chat-phone");
+                        if (startModal && startPhoneInput) {
+                            startPhoneInput.value = convo.contact.phone_number || "";
+                            startModal.style.display = "flex";
+                        }
+                    };
+                }
+            }
+        }
+
         // Carregar mensagens
         try {
             const scroll = document.getElementById("message-scroll");

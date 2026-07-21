@@ -205,6 +205,7 @@ class ConversationResponse(BaseModel):
     contact: Optional[ContactResponse] = None
     last_message_body: Optional[str] = None
     last_message_sender_type: Optional[str] = None
+    has_active_window: Optional[bool] = True
 
     class Config:
         from_attributes = True

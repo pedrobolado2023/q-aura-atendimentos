@@ -87,14 +87,32 @@ def get_conversations(
     else:
         last_msg_map = {}
 
-    # Enriquece cada conversa com preview da última mensagem
+    # Enriquece cada conversa com preview da última mensagem e status da janela de 24 horas
     result = []
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
     for c in convos:
         d = ConversationResponse.from_orm(c)
         lm = last_msg_map.get(str(c.id))
         if lm:
             d.last_message_body = (lm.body or "")[:80]
             d.last_message_sender_type = lm.sender_type
+            
+        # Busca última mensagem enviada pelo contato (cliente) para calcular a janela de 24 horas
+        last_contact_msg = (
+            db.query(Message)
+            .filter(Message.conversation_id == str(c.id), Message.sender_type == "contact")
+            .order_by(Message.created_at.desc())
+            .first()
+        )
+        if last_contact_msg and last_contact_msg.created_at:
+            # Garante comparação com timezone
+            created_at_tz = last_contact_msg.created_at.replace(tzinfo=timezone.utc) if last_contact_msg.created_at.tzinfo is None else last_contact_msg.created_at
+            diff_hours = (now - created_at_tz).total_seconds() / 3600
+            d.has_active_window = diff_hours <= 24.0
+        else:
+            d.has_active_window = False
+            
         result.append(d)
     return result
 
@@ -132,6 +150,23 @@ def get_conversation_detail(
     if lm:
         d.last_message_body = (lm.body or "")[:80]
         d.last_message_sender_type = lm.sender_type
+
+    # Calcula janela de 24 horas
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    last_contact_msg = (
+        db.query(Message)
+        .filter(Message.conversation_id == convo_id_str, Message.sender_type == "contact")
+        .order_by(Message.created_at.desc())
+        .first()
+    )
+    if last_contact_msg and last_contact_msg.created_at:
+        created_at_tz = last_contact_msg.created_at.replace(tzinfo=timezone.utc) if last_contact_msg.created_at.tzinfo is None else last_contact_msg.created_at
+        diff_hours = (now - created_at_tz).total_seconds() / 3600
+        d.has_active_window = diff_hours <= 24.0
+    else:
+        d.has_active_window = False
+
     return d
 
 @router.get("/conversations/{conversation_id}/messages", response_model=List[MessageResponse])
