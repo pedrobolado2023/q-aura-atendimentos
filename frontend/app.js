@@ -606,19 +606,6 @@ const appRouter = {
             } else {
                 chatInputForm.style.display = "none";
                 chatBlockedArea.style.display = "flex";
-                
-                // Vincula comportamento ao botão alternativo
-                const altBtn = document.getElementById("btn-start-conversation-alternative");
-                if (altBtn && convo && convo.contact) {
-                    altBtn.onclick = () => {
-                        const startModal = document.getElementById("start-chat-modal");
-                        const startPhoneInput = document.getElementById("start-chat-phone");
-                        if (startModal && startPhoneInput) {
-                            startPhoneInput.value = convo.contact.phone_number || "";
-                            startModal.style.display = "flex";
-                        }
-                    };
-                }
             }
         }
 
