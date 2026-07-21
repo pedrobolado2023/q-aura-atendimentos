@@ -5,6 +5,7 @@ import os
 from app.routers import auth, webhook, inbox, superadmin
 from app.services.websocket_manager import manager
 from app.database import Base, engine
+from app import models
 
 from sqlalchemy import inspect, text
 
