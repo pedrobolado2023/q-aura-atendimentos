@@ -85,6 +85,9 @@ class TenantDetailResponse(BaseModel):
     created_at: datetime
     plan: Optional[PlanResponse] = None
     enabled_modules: Optional[List[str]] = []
+    billing_mode: Optional[str] = "prepaid"
+    balance: Optional[float] = 0.0
+    postpaid_limit: Optional[float] = 100.0
 
     class Config:
         from_attributes = True
