@@ -36,7 +36,7 @@ class ChangeBillingModeRequest(BaseModel):
 def get_billing_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("meta_settings"))
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
     tenant = db.query(Tenant).filter(Tenant.id == current_tenant.id).first()
     if not tenant:
@@ -62,7 +62,7 @@ def get_billing_summary(
 def get_billing_transactions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("meta_settings"))
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
     txs = db.query(BillingTransaction).filter(
         BillingTransaction.tenant_id == current_tenant.id
@@ -84,7 +84,7 @@ def change_billing_mode(
     payload: ChangeBillingModeRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("meta_settings"))
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
     if current_user.role not in ["administrator", "manager"]:
         raise HTTPException(status_code=403, detail="Apenas administradores podem alterar o método de faturamento.")
@@ -108,7 +108,7 @@ async def create_mp_pix_recharge(
     amount: float,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("meta_settings"))
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
     """
     Cria uma cobrança real PIX no Mercado Pago para adicionar saldo pré-pago.
@@ -198,7 +198,7 @@ def check_recharge_status(
     payment_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("meta_settings"))
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
     """
     Consulta o status de um pagamento Pix de recarga.
