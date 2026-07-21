@@ -139,10 +139,13 @@ def get_messages(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
+    convo_id_str = str(conversation_id)
+    tenant_id_str = str(current_tenant.id)
+
     # Verify conversation belongs to tenant
     convo = db.query(Conversation).filter(
-        Conversation.id == conversation_id,
-        Conversation.tenant_id == current_tenant.id
+        Conversation.id == convo_id_str,
+        Conversation.tenant_id == tenant_id_str
     ).first()
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -153,7 +156,7 @@ def get_messages(
         convo.unread_count = 0
         db.commit()
         
-    return db.query(Message).filter(Message.conversation_id == conversation_id).order_by(Message.created_at.asc()).all()
+    return db.query(Message).filter(Message.conversation_id == convo_id_str).order_by(Message.created_at.asc()).all()
 
 @router.post("/send-message", response_model=MessageResponse)
 async def send_message(

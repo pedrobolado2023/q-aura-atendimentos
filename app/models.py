@@ -7,16 +7,18 @@ from app.database import Base, db_url
 # Dynamic type selection for local sqlite and production postgresql
 if db_url.startswith("sqlite"):
     ArrayType = JSON
+    UuidCol = String(36)  # SQLite usa String para UUID
 else:
     from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
     ArrayType = PG_ARRAY(String)
+    UuidCol = Uuid(as_uuid=False)  # PostgreSQL usa tipo nativo UUID
 
 def generate_uuid_str():
     return str(uuid.uuid4())
 
 class Plan(Base):
     __tablename__ = "qa_plans"
-    id = Column(String(36), primary_key=True, default=generate_uuid_str)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
     name = Column(String(100), nullable=False)
     description = Column(Text)
     price_monthly = Column(Numeric(10, 2), default=0)
@@ -31,17 +33,17 @@ class Plan(Base):
 qa_agents_departments = Table(
     'qa_agents_departments',
     Base.metadata,
-    Column('user_id', String(36), ForeignKey('qa_users.id', ondelete='CASCADE'), primary_key=True),
-    Column('department_id', String(36), ForeignKey('qa_departments.id', ondelete='CASCADE'), primary_key=True)
+    Column('user_id', UuidCol, ForeignKey('qa_users.id', ondelete='CASCADE'), primary_key=True),
+    Column('department_id', UuidCol, ForeignKey('qa_departments.id', ondelete='CASCADE'), primary_key=True)
 )
 
 class Tenant(Base):
     __tablename__ = "qa_tenants"
-    id = Column(String(36), primary_key=True, default=generate_uuid_str)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
     name = Column(String(255), nullable=False)
     subdomain = Column(String(100), unique=True, nullable=False, index=True)
     plan_type = Column(String(50), default="free")  # kept for backward compat
-    plan_id = Column(String(36), ForeignKey("qa_plans.id", ondelete="SET NULL"), nullable=True)
+    plan_id = Column(UuidCol, ForeignKey("qa_plans.id", ondelete="SET NULL"), nullable=True)
     cnpj = Column(String(20))
     segment = Column(String(100), default="hotel")
     status = Column(String(50), default="active")  # active, suspended, trial
@@ -62,8 +64,8 @@ class Tenant(Base):
 
 class User(Base):
     __tablename__ = "qa_users"
-    id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    tenant_id = Column(String(36), ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=True, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
+    tenant_id = Column(UuidCol, ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=True, index=True)
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     name = Column(String(255), nullable=False)
@@ -77,8 +79,8 @@ class User(Base):
 
 class MetaCredential(Base):
     __tablename__ = "qa_meta_credentials"
-    id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    tenant_id = Column(String(36), ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, unique=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
+    tenant_id = Column(UuidCol, ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, unique=True)
     phone_number_id = Column(String(100), nullable=False)
     waba_id = Column(String(100), nullable=False)
     permanent_access_token = Column(Text, nullable=False)
@@ -91,8 +93,8 @@ class MetaCredential(Base):
 
 class BotConfig(Base):
     __tablename__ = "qa_bot_configs"
-    id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    tenant_id = Column(String(36), ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, unique=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
+    tenant_id = Column(UuidCol, ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, unique=True)
     is_active = Column(Boolean, default=True)
     welcome_message = Column(Text, default="Olá! Seja bem-vindo ao nosso hotel. Como posso ajudar você hoje?")
     fallback_message = Column(Text, default="Desculpe, não consegui entender. Digite *Atendente* a qualquer momento para falar com um humano.")
@@ -106,8 +108,8 @@ class BotConfig(Base):
 
 class Department(Base):
     __tablename__ = "qa_departments"
-    id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    tenant_id = Column(String(36), ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
+    tenant_id = Column(UuidCol, ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
     color = Column(String(7), default="#3B82F6")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -118,8 +120,8 @@ class Department(Base):
 
 class Contact(Base):
     __tablename__ = "qa_contacts"
-    id = Column(Uuid(as_uuid=False), primary_key=True, default=generate_uuid_str)
-    tenant_id = Column(Uuid(as_uuid=False), ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
+    tenant_id = Column(UuidCol, ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False)
     phone_number = Column(String(30), nullable=False)
     name = Column(String(255))
     email = Column(String(255))
@@ -137,11 +139,11 @@ class Contact(Base):
 
 class Conversation(Base):
     __tablename__ = "qa_conversations"
-    id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    tenant_id = Column(String(36), ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    contact_id = Column(String(36), ForeignKey("qa_contacts.id", ondelete="CASCADE"), nullable=False)
-    assigned_user_id = Column(String(36), ForeignKey("qa_users.id", ondelete="SET NULL"))
-    assigned_department_id = Column(String(36), ForeignKey("qa_departments.id", ondelete="SET NULL"))
+    id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
+    tenant_id = Column(UuidCol, ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    contact_id = Column(UuidCol, ForeignKey("qa_contacts.id", ondelete="CASCADE"), nullable=False)
+    assigned_user_id = Column(UuidCol, ForeignKey("qa_users.id", ondelete="SET NULL"))
+    assigned_department_id = Column(UuidCol, ForeignKey("qa_departments.id", ondelete="SET NULL"))
     status = Column(String(50), default="waiting") # bot, waiting, active, resolved, archived
     routing_mode = Column(String(50), default="queue") # round_robin, queue, fixed, department
     unread = Column(Boolean, default=True)
@@ -158,10 +160,10 @@ class Conversation(Base):
 
 class Message(Base):
     __tablename__ = "qa_messages"
-    id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    conversation_id = Column(String(36), ForeignKey("qa_conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
+    conversation_id = Column(UuidCol, ForeignKey("qa_conversations.id", ondelete="CASCADE"), nullable=False, index=True)
     sender_type = Column(String(20), nullable=False) # bot, agent, contact, system
-    sender_id = Column(String(36))
+    sender_id = Column(UuidCol)
     message_type = Column(String(50), nullable=False) # text, image, audio, video, document, location, interactive_button, interactive_list, template
     body = Column(Text)
     media_url = Column(Text)
@@ -175,8 +177,8 @@ class Message(Base):
 
 class WebhookEvent(Base):
     __tablename__ = "qa_webhook_events"
-    id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    tenant_id = Column(String(36), ForeignKey("qa_tenants.id", ondelete="SET NULL"))
+    id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
+    tenant_id = Column(UuidCol, ForeignKey("qa_tenants.id", ondelete="SET NULL"))
     provider = Column(String(50), default="meta")
     payload = Column(JSON, nullable=False)
     processed = Column(Boolean, default=False)
@@ -185,9 +187,9 @@ class WebhookEvent(Base):
 
 class QuickMessage(Base):
     __tablename__ = "qa_quick_messages"
-    id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    tenant_id = Column(String(36), ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_id = Column(String(36), ForeignKey("qa_users.id", ondelete="CASCADE"), nullable=True, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
+    tenant_id = Column(UuidCol, ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(UuidCol, ForeignKey("qa_users.id", ondelete="CASCADE"), nullable=True, index=True)
     shortcut = Column(String(50), nullable=False)
     body = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -198,8 +200,8 @@ class QuickMessage(Base):
 
 class MarketingCampaign(Base):
     __tablename__ = "qa_marketing_campaigns"
-    id = Column(String(36), primary_key=True, default=generate_uuid_str)
-    tenant_id = Column(String(36), ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
+    tenant_id = Column(UuidCol, ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     body = Column(Text, nullable=False)
     media_type = Column(String(50), default="text") # 'text', 'image', 'video', 'audio'
@@ -221,9 +223,9 @@ class MarketingCampaign(Base):
 
 class CampaignRecipient(Base):
     __tablename__ = "qa_campaign_recipients"
-    id = Column(Uuid(as_uuid=False), primary_key=True, default=generate_uuid_str)
-    campaign_id = Column(Uuid(as_uuid=False), ForeignKey("qa_marketing_campaigns.id", ondelete="CASCADE"), nullable=False, index=True)
-    contact_id = Column(Uuid(as_uuid=False), ForeignKey("qa_contacts.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
+    campaign_id = Column(UuidCol, ForeignKey("qa_marketing_campaigns.id", ondelete="CASCADE"), nullable=False, index=True)
+    contact_id = Column(UuidCol, ForeignKey("qa_contacts.id", ondelete="CASCADE"), nullable=False, index=True)
     meta_message_id = Column(String(255), nullable=True, index=True)
     status = Column(String(50), default="sent") # 'sent', 'delivered', 'read', 'failed'
     clicked = Column(Boolean, default=False)
