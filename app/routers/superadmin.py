@@ -216,7 +216,12 @@ def create_tenant(
         # Check subdomain uniqueness
         existing = db.query(Tenant).filter(Tenant.subdomain == subdomain).first()
         if existing:
-            raise HTTPException(status_code=400, detail=f"O subdomínio '{subdomain}' já está em uso pela empresa '{existing.name}'.")
+            if not existing.users or len(existing.users) == 0:
+                # Incomplete / orphan tenant record from prior failed creation - clean it up!
+                db.delete(existing)
+                db.flush()
+            else:
+                raise HTTPException(status_code=400, detail=f"O subdomínio '{subdomain}' já está em uso pela empresa '{existing.name}'.")
 
         # Check admin email uniqueness
         existing_user = db.query(User).filter(User.email == admin_email).first()
