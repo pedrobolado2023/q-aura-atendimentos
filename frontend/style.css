@@ -568,6 +568,10 @@ body {
     padding: 30px;
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .settings-card h3 {
