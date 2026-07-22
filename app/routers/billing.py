@@ -38,6 +38,9 @@ def get_billing_summary(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
+    if current_user.role not in ["administrator", "manager", "superadmin"]:
+        raise HTTPException(status_code=403, detail="Acesso não autorizado. Apenas supervisores e administradores podem visualizar dados de faturamento.")
+
     tenant = db.query(Tenant).filter(Tenant.id == current_tenant.id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
@@ -64,6 +67,9 @@ def get_billing_transactions(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
+    if current_user.role not in ["administrator", "manager", "superadmin"]:
+        raise HTTPException(status_code=403, detail="Acesso não autorizado. Apenas supervisores e administradores podem visualizar o histórico financeiro.")
+
     txs = db.query(BillingTransaction).filter(
         BillingTransaction.tenant_id == current_tenant.id
     ).order_by(BillingTransaction.created_at.desc()).limit(100).all()
