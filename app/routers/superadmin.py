@@ -14,9 +14,20 @@ from app.schemas import (
 from app.auth import get_password_hash, get_current_user
 
 import json
+import uuid
 from sqlalchemy.exc import IntegrityError
 
 router = APIRouter(prefix="/api/superadmin", tags=["superadmin"])
+
+
+def _is_valid_uuid(val: str) -> bool:
+    if not val or not isinstance(val, str):
+        return False
+    try:
+        uuid.UUID(val.strip())
+        return True
+    except Exception:
+        return False
 
 
 def require_superadmin(current_user: User = Depends(get_current_user)):
@@ -234,15 +245,14 @@ def create_tenant(
             db.delete(existing_user)
             db.flush()
 
-        # Resolve plan
+        # Resolve plan (safely by UUID or by Plan Name)
         plan = None
         plan_id = payload.plan_id.strip() if payload.plan_id and isinstance(payload.plan_id, str) and payload.plan_id.strip() else None
         if plan_id:
-            try:
+            if _is_valid_uuid(plan_id):
                 plan = db.query(Plan).filter(Plan.id == plan_id).first()
-            except Exception:
-                db.rollback()
-                plan = None
+            else:
+                plan = db.query(Plan).filter(Plan.name.ilike(plan_id)).first()
 
         # Create tenant
         tenant = Tenant(
