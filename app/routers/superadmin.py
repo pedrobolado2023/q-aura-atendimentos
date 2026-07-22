@@ -224,31 +224,6 @@ def create_tenant(
         subdomain = payload.subdomain.strip().lower()
         admin_email = payload.admin_email.strip().lower()
 
-        # Check subdomain uniqueness
-        existing = db.query(Tenant).filter(Tenant.subdomain == subdomain).first()
-        deleted_tenant_id = None
-        if existing:
-            # If the tenant is an unused test record (0 contacts and 0 conversations), clean it up and its users!
-            if len(existing.contacts or []) == 0 and len(existing.conversations or []) == 0:
-                deleted_tenant_id = existing.id
-                for u in list(existing.users or []):
-                    db.delete(u)
-                db.delete(existing)
-                db.flush()
-            else:
-                raise HTTPException(status_code=400, detail=f"O subdomínio '{subdomain}' já está em uso pela empresa '{existing.name}'.")
-
-        # Check admin email uniqueness
-        existing_user = db.query(User).filter(User.email == admin_email).first()
-        if existing_user:
-            if existing_user.tenant_id and existing_user.tenant_id != deleted_tenant_id:
-                user_tenant = db.query(Tenant).filter(Tenant.id == existing_user.tenant_id).first()
-                if user_tenant and user_tenant.id != deleted_tenant_id:
-                    raise HTTPException(status_code=400, detail=f"O e-mail '{admin_email}' já está em uso pela empresa '{user_tenant.name}'.")
-            # Orphan user from deleted tenant - clean it up
-            db.delete(existing_user)
-            db.flush()
-
         # Resolve plan (safely by UUID or by Plan Name)
         plan = None
         plan_id = payload.plan_id.strip() if payload.plan_id and isinstance(payload.plan_id, str) and payload.plan_id.strip() else None
@@ -258,33 +233,51 @@ def create_tenant(
             else:
                 plan = db.query(Plan).filter(Plan.name.ilike(plan_id)).first()
 
-        # Create tenant
-        tenant = Tenant(
-            name=payload.name.strip(),
-            subdomain=subdomain,
-            cnpj=payload.cnpj.strip() if payload.cnpj else None,
-            segment=payload.segment or "hotel",
-            plan_id=plan.id if plan else None,
-            plan_type=plan.name if plan else "custom",
-            status="active",
-            max_users=payload.max_users or (plan.max_users if plan else 5),
-            custom_modules=[],
-        )
-        db.add(tenant)
-        db.flush()  # get tenant.id before creating user
+        # Create or Update tenant (Upsert mode for superadmin)
+        tenant = db.query(Tenant).filter(Tenant.subdomain == subdomain).first()
+        if tenant:
+            tenant.name = payload.name.strip()
+            tenant.cnpj = payload.cnpj.strip() if payload.cnpj else None
+            tenant.segment = payload.segment or "hotel"
+            tenant.plan_id = plan.id if plan else tenant.plan_id
+            tenant.plan_type = plan.name if plan else (tenant.plan_type or "custom")
+            tenant.status = "active"
+            tenant.max_users = payload.max_users or (plan.max_users if plan else 5)
+        else:
+            tenant = Tenant(
+                name=payload.name.strip(),
+                subdomain=subdomain,
+                cnpj=payload.cnpj.strip() if payload.cnpj else None,
+                segment=payload.segment or "hotel",
+                plan_id=plan.id if plan else None,
+                plan_type=plan.name if plan else "custom",
+                status="active",
+                max_users=payload.max_users or (plan.max_users if plan else 5),
+                custom_modules=[],
+            )
+            db.add(tenant)
 
-        # Create admin user for the tenant
-        admin_user = User(
-            email=admin_email,
-            password_hash=get_password_hash(payload.admin_password),
-            name=payload.admin_name.strip(),
-            tenant_id=tenant.id,
-            role="administrator",
-            status="offline",
-        )
-        db.add(admin_user)
+        db.flush()  # get tenant.id before creating/updating user
 
-        # Create default BotConfig for the tenant
+        # Create or Update admin user for the tenant (Upsert mode)
+        admin_user = db.query(User).filter(User.email == admin_email).first()
+        if admin_user:
+            admin_user.name = payload.admin_name.strip()
+            admin_user.password_hash = get_password_hash(payload.admin_password)
+            admin_user.tenant_id = tenant.id
+            admin_user.role = "administrator"
+        else:
+            admin_user = User(
+                email=admin_email,
+                password_hash=get_password_hash(payload.admin_password),
+                name=payload.admin_name.strip(),
+                tenant_id=tenant.id,
+                role="administrator",
+                status="offline",
+            )
+            db.add(admin_user)
+
+        # Create default BotConfig for the tenant if missing
         try:
             from app.models import BotConfig
             bot_conf = db.query(BotConfig).filter(BotConfig.tenant_id == tenant.id).first()
@@ -307,14 +300,10 @@ def create_tenant(
     except HTTPException:
         db.rollback()
         raise
-    except IntegrityError as ie:
-        db.rollback()
-        print(f"[IntegrityError in create_tenant]: {ie}")
-        raise HTTPException(status_code=400, detail="Subdomínio ou E-mail do administrador já cadastrado no sistema.")
     except Exception as e:
         db.rollback()
         print(f"[Superadmin create_tenant error]: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro ao criar empresa: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar empresa: {str(e)}")
 
 
 @router.put("/tenants/{tenant_id}", response_model=TenantDetailResponse)
