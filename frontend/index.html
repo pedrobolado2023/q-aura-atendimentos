@@ -66,11 +66,10 @@
                                 <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
                             </button>
                         </form>
-                        <!-- Sign Up Link -->
+                        <!-- Footer Note -->
                         <div class="mt-8 text-center pt-6 border-t border-slate-100">
-                            <p class="text-sm text-slate-500">
-                                Seu estabelecimento ainda não usa Q-aura? 
-                                <button type="button" onclick="appRouter.navigate('onboard')" class="font-semibold text-blue-600 hover:text-blue-700 cursor-pointer ml-1">Cadastrar Hotel</button>
+                            <p class="text-xs text-slate-400">
+                                Acesso restrito a usuários e gestores credenciados.
                             </p>
                         </div>
                     </div>
@@ -870,11 +869,18 @@
                                     <textarea id="chat-message-input" placeholder="Digite uma mensagem ou digite / para respostas rápidas..." autocomplete="off"></textarea>
                                     <button type="submit" class="btn-send"><i class="fa-solid fa-paper-plane"></i></button>
                                 </form>
-                                <div id="chat-blocked-area" style="display: none; padding: 24px; background: var(--bg-secondary); border-top: 1px solid var(--border-color); text-align: center; flex-direction: column; gap: 8px; align-items: center; justify-content: center; min-height: 80px;">
-                                    <p style="font-size: 14px; color: var(--text-secondary); font-weight: 600; margin: 0; display: flex; align-items: center; gap: 8px;">
-                                        <i class="fa-solid fa-hourglass-half" style="color: var(--color-warning);"></i>
-                                        Você precisa aguardar o cliente responder a sua primeira mensagem.
+                                <div id="chat-blocked-area" style="display: none; padding: 20px 24px; background: #0f172a; border-top: 1px solid #1e293b; text-align: center; flex-direction: column; gap: 10px; align-items: center; justify-content: center; min-height: 100px;">
+                                    <p style="font-size: 13px; color: #fbbf24; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 8px;">
+                                        <i class="fa-solid fa-hourglass-half"></i>
+                                        Janela de 24 horas encerrada aguardando resposta do cliente.
                                     </p>
+                                    <p style="font-size: 12px; color: #94a3b8; margin: 0; max-width: 480px; line-height: 1.4;">
+                                        O atendimento direto foi pausado pela regra de 24h do WhatsApp. Envie uma mensagem de reativação para convidar o cliente a reabrir o chat.
+                                    </p>
+                                    <button type="button" id="btn-send-reactivation-msg" onclick="appRouter.sendReactivationMessage()" style="margin-top: 4px; background: #2563eb; color: #ffffff; font-weight: 600; padding: 8px 16px; border-radius: 8px; font-size: 12px; display: inline-flex; align-items: center; gap: 8px; border: none; cursor: pointer; transition: all 0.2s ease;">
+                                        <i class="fa-solid fa-paper-plane"></i>
+                                        Enviar Mensagem de Reativação
+                                    </button>
                                 </div>
                             </div>
                         </div>

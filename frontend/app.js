@@ -633,6 +633,47 @@ const appRouter = {
         }
     },
 
+    async sendReactivationMessage() {
+        if (!this.currentConversationId) {
+            this.showToast("Nenhuma conversa selecionada", "warning");
+            return;
+        }
+
+        const defaultMessage = "Olá! Nosso atendimento via WhatsApp foi encerrado por inatividade. Gostaria de continuar nosso atendimento? Por favor, responda a esta mensagem para reabrir o chat!";
+
+        const text = prompt("Digite a mensagem de reativação a ser enviada ao cliente:", defaultMessage);
+        if (!text || !text.trim()) return;
+
+        const btn = document.getElementById("btn-send-reactivation-msg");
+        const originalText = btn ? btn.innerHTML : "";
+
+        try {
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Enviando...`;
+            }
+
+            await api.post(`/api/inbox/conversations/${this.currentConversationId}/messages`, {
+                body: text.trim()
+            });
+
+            this.showToast("Mensagem de reativação enviada com sucesso!");
+            
+            // Reload conversation messages
+            if (this.currentConversationId) {
+                this.loadConversation(this.currentConversationId);
+            }
+        } catch (err) {
+            console.error("Erro ao enviar mensagem de reativação:", err);
+            this.showToast("Erro ao enviar mensagem: " + (err.message || err), "error");
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+    },
+
 
     async loadMetaSettings() {
         try {
