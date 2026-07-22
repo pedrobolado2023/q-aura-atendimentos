@@ -76,6 +76,20 @@ try:
                 conn.execute(text("ALTER TABLE qa_tenants DROP CONSTRAINT IF EXISTS qa_tenants_plan_type_check"))
         except Exception as constraint_err:
             print(f"[Database] Could not drop constraint qa_tenants_plan_type_check: {constraint_err}")
+
+    # Auto-migration check: If target DB has 0 tenants, automatically pull and import historical data from Supabase!
+    try:
+        with engine.begin() as conn:
+            cnt = conn.execute(text("SELECT COUNT(*) FROM qa_tenants")).scalar() or 0
+            if cnt == 0:
+                print("[Auto-Migration] Target database has 0 tenants. Triggering automated migration from Supabase...")
+                try:
+                    from migrate_supabase_to_easypanel import run_migration
+                    run_migration(target_engine=engine)
+                except Exception as mig_err:
+                    print(f"[Auto-Migration] Migration process error: {mig_err}")
+    except Exception as check_err:
+        print(f"[Auto-Migration] Could not check tenant count: {check_err}")
 except Exception as e:
     print(f"[Database] Error creating/updating tables on startup: {e}")
 
