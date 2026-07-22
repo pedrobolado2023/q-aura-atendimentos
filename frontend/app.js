@@ -902,6 +902,7 @@ const appRouter = {
             const summary = await api.get("/api/billing/summary");
             if (summary) {
                 // Atualiza campos de consolidado financeiro
+                const planNameEl = document.getElementById("billing-plan-name");
                 const modeEl = document.getElementById("billing-active-mode");
                 const balanceEl = document.getElementById("billing-balance");
                 const spendEl = document.getElementById("billing-monthly-spend");
@@ -909,6 +910,9 @@ const appRouter = {
                 const selectModeEl = document.getElementById("select-billing-mode");
                 const rechargeSection = document.getElementById("prepaid-recharge-section");
 
+                if (planNameEl) {
+                    planNameEl.innerText = summary.plan_name || "Pro";
+                }
                 if (modeEl) {
                     modeEl.innerText = summary.billing_mode === "postpaid" ? "PÓS-PAGO" : "PRÉ-PAGO";
                     modeEl.style.color = summary.billing_mode === "postpaid" ? "var(--color-info)" : "var(--color-success)";

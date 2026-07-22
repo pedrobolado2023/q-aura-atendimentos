@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
 from app.database import get_db, SessionLocal
-from app.models import Tenant, BillingTransaction, User
+from app.models import Tenant, BillingTransaction, User, Plan
 from app.auth import get_current_user, get_current_tenant, ModuleRequired
 from app.config import settings
 
@@ -18,6 +18,7 @@ class BillingSummaryResponse(BaseModel):
     balance: float
     postpaid_limit: float
     monthly_spend: float
+    plan_name: str
 
 class TransactionResponse(BaseModel):
     id: str
@@ -45,6 +46,21 @@ def get_billing_summary(
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
 
+    plan_name = "Pro"
+    if tenant.plan_id:
+        plan = db.query(Plan).filter(Plan.id == tenant.plan_id).first()
+        if plan:
+            plan_name = plan.name
+    elif tenant.plan_type:
+        plan_type_names = {
+            "free": "Gratuito",
+            "basic": "Básico",
+            "pro": "Pro",
+            "enterprise": "Enterprise",
+            "custom": "Personalizado"
+        }
+        plan_name = plan_type_names.get(str(tenant.plan_type).lower(), str(tenant.plan_type).capitalize())
+
     first_day = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     monthly_spend = db.query(BillingTransaction).filter(
         BillingTransaction.tenant_id == tenant.id,
@@ -58,7 +74,8 @@ def get_billing_summary(
         billing_mode=tenant.billing_mode or "prepaid",
         balance=float(tenant.balance or 0.0),
         postpaid_limit=float(tenant.postpaid_limit or 100.0),
-        monthly_spend=float(monthly_spend)
+        monthly_spend=float(monthly_spend),
+        plan_name=plan_name
     )
 
 @router.get("/transactions", response_model=List[TransactionResponse])
