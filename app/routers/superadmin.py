@@ -226,9 +226,13 @@ def create_tenant(
 
         # Check subdomain uniqueness
         existing = db.query(Tenant).filter(Tenant.subdomain == subdomain).first()
+        deleted_tenant_id = None
         if existing:
-            # If the tenant is an unused test record (0 contacts and 0 conversations), clean it up automatically!
+            # If the tenant is an unused test record (0 contacts and 0 conversations), clean it up and its users!
             if len(existing.contacts or []) == 0 and len(existing.conversations or []) == 0:
+                deleted_tenant_id = existing.id
+                for u in list(existing.users or []):
+                    db.delete(u)
                 db.delete(existing)
                 db.flush()
             else:
@@ -237,9 +241,9 @@ def create_tenant(
         # Check admin email uniqueness
         existing_user = db.query(User).filter(User.email == admin_email).first()
         if existing_user:
-            if existing_user.tenant_id:
+            if existing_user.tenant_id and existing_user.tenant_id != deleted_tenant_id:
                 user_tenant = db.query(Tenant).filter(Tenant.id == existing_user.tenant_id).first()
-                if user_tenant:
+                if user_tenant and user_tenant.id != deleted_tenant_id:
                     raise HTTPException(status_code=400, detail=f"O e-mail '{admin_email}' já está em uso pela empresa '{user_tenant.name}'.")
             # Orphan user from deleted tenant - clean it up
             db.delete(existing_user)
