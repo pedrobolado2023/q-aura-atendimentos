@@ -147,8 +147,13 @@ def list_tenants(
     db: Session = Depends(get_db),
     _: User = Depends(require_superadmin),
 ):
-    tenants = db.query(Tenant).order_by(Tenant.created_at.desc()).all()
-    return [_tenant_to_response(t) for t in tenants]
+    try:
+        tenants = db.query(Tenant).order_by(Tenant.created_at.desc()).all()
+        return [_tenant_to_response(t) for t in tenants]
+    except Exception as e:
+        db.rollback()
+        print(f"[Superadmin list_tenants error]: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao listar empresas: {str(e)}")
 
 
 @router.get("/tenants/{tenant_id}", response_model=TenantDetailResponse)
@@ -169,64 +174,77 @@ def create_tenant(
     db: Session = Depends(get_db),
     _: User = Depends(require_superadmin),
 ):
-    # Check subdomain uniqueness
-    existing = db.query(Tenant).filter(Tenant.subdomain == payload.subdomain).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Subdomínio já cadastrado.")
+    try:
+        # Normalize plan_id (empty string or whitespace becomes None)
+        plan_id = payload.plan_id.strip() if payload.plan_id and isinstance(payload.plan_id, str) and payload.plan_id.strip() else None
 
-    # Check admin email uniqueness
-    existing_user = db.query(User).filter(User.email == payload.admin_email).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Email do administrador já cadastrado.")
+        # Check subdomain uniqueness
+        existing = db.query(Tenant).filter(Tenant.subdomain == payload.subdomain).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Subdomínio já cadastrado.")
 
-    # Resolve plan
-    plan = None
-    if payload.plan_id:
-        plan = db.query(Plan).filter(Plan.id == payload.plan_id).first()
-        if not plan:
-            raise HTTPException(status_code=404, detail="Plano não encontrado.")
+        # Check admin email uniqueness
+        existing_user = db.query(User).filter(User.email == payload.admin_email).first()
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Email do administrador já cadastrado.")
 
-    # Create tenant
-    tenant = Tenant(
-        name=payload.name,
-        subdomain=payload.subdomain,
-        cnpj=payload.cnpj,
-        segment=payload.segment or "hotel",
-        plan_id=payload.plan_id,
-        plan_type=plan.name if plan else "custom",
-        status="active",
-        max_users=payload.max_users or (plan.max_users if plan else 5),
-        custom_modules=[],
-    )
-    db.add(tenant)
-    db.flush()  # get tenant.id before creating user
+        # Resolve plan
+        plan = None
+        if plan_id:
+            try:
+                plan = db.query(Plan).filter(Plan.id == plan_id).first()
+            except Exception:
+                db.rollback()
+                plan = None
 
-    # Create admin user for the tenant
-    admin_user = User(
-        email=payload.admin_email,
-        password_hash=get_password_hash(payload.admin_password),
-        name=payload.admin_name,
-        tenant_id=tenant.id,
-        role="administrator",
-        status="offline",
-    )
-    db.add(admin_user)
+        # Create tenant
+        tenant = Tenant(
+            name=payload.name,
+            subdomain=payload.subdomain,
+            cnpj=payload.cnpj,
+            segment=payload.segment or "hotel",
+            plan_id=plan.id if plan else None,
+            plan_type=plan.name if plan else "custom",
+            status="active",
+            max_users=payload.max_users or (plan.max_users if plan else 5),
+            custom_modules=[],
+        )
+        db.add(tenant)
+        db.flush()  # get tenant.id before creating user
 
-    # Create default BotConfig for the tenant
-    from app.models import BotConfig
-    bot_conf = BotConfig(
-        tenant_id=tenant.id,
-        is_active=True,
-        welcome_message="Olá! Seja bem-vindo ao nosso hotel. Como posso ajudar você hoje?",
-        fallback_message="Desculpe, não consegui entender. Digite *Atendente* a qualquer momento para falar com um humano.",
-        out_of_hours_message="Olá! Nosso horário de atendimento é das 08h às 22h. Deixe sua mensagem que responderemos o mais breve possível.",
-        transfer_keywords="atendente,humano,falar,suporte,ajuda"
-    )
-    db.add(bot_conf)
+        # Create admin user for the tenant
+        admin_user = User(
+            email=payload.admin_email,
+            password_hash=get_password_hash(payload.admin_password),
+            name=payload.admin_name,
+            tenant_id=tenant.id,
+            role="administrator",
+            status="offline",
+        )
+        db.add(admin_user)
 
-    db.commit()
-    db.refresh(tenant)
-    return _tenant_to_response(tenant)
+        # Create default BotConfig for the tenant
+        from app.models import BotConfig
+        bot_conf = BotConfig(
+            tenant_id=tenant.id,
+            is_active=True,
+            welcome_message="Olá! Seja bem-vindo ao nosso hotel. Como posso ajudar você hoje?",
+            fallback_message="Desculpe, não consegui entender. Digite *Atendente* a qualquer momento para falar com um humano.",
+            out_of_hours_message="Olá! Nosso horário de atendimento é das 08h às 22h. Deixe sua mensagem que responderemos o mais breve possível.",
+            transfer_keywords="atendente,humano,falar,suporte,ajuda"
+        )
+        db.add(bot_conf)
+
+        db.commit()
+        db.refresh(tenant)
+        return _tenant_to_response(tenant)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"[Superadmin create_tenant error]: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao criar empresa: {str(e)}")
 
 
 @router.put("/tenants/{tenant_id}", response_model=TenantDetailResponse)
@@ -236,25 +254,41 @@ def update_tenant(
     db: Session = Depends(get_db),
     _: User = Depends(require_superadmin),
 ):
-    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Empresa não encontrada.")
+    try:
+        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Empresa não encontrada.")
 
-    update_data = payload.dict(exclude_none=True)
+        update_data = payload.dict(exclude_none=True)
 
-    # If plan changed, update plan_type label too
-    if "plan_id" in update_data:
-        plan = db.query(Plan).filter(Plan.id == update_data["plan_id"]).first()
-        if not plan:
-            raise HTTPException(status_code=404, detail="Plano não encontrado.")
-        tenant.plan_type = plan.name
+        # If plan changed, update plan_type label too
+        if "plan_id" in update_data:
+            pid = update_data["plan_id"]
+            if pid and isinstance(pid, str) and pid.strip():
+                plan = db.query(Plan).filter(Plan.id == pid.strip()).first()
+                if plan:
+                    tenant.plan_type = plan.name
+                    update_data["plan_id"] = plan.id
+                else:
+                    update_data["plan_id"] = None
+                    tenant.plan_type = "custom"
+            else:
+                update_data["plan_id"] = None
+                tenant.plan_type = "custom"
 
-    for field, value in update_data.items():
-        setattr(tenant, field, value)
+        for field, value in update_data.items():
+            setattr(tenant, field, value)
 
-    db.commit()
-    db.refresh(tenant)
-    return _tenant_to_response(tenant)
+        db.commit()
+        db.refresh(tenant)
+        return _tenant_to_response(tenant)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"[Superadmin update_tenant error]: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao atualizar empresa: {str(e)}")
 
 
 @router.post("/tenants/{tenant_id}/suspend")

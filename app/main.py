@@ -46,20 +46,29 @@ try:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE qa_messages ADD COLUMN internal_note BOOLEAN DEFAULT FALSE"))
 
-    # Check qa_tenants columns for billing
-    columns_tenants = [col["name"] for col in inspector.get_columns("qa_tenants")]
-    if "billing_mode" not in columns_tenants:
-        print("[Database] Adding billing_mode column to qa_tenants table...")
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE qa_tenants ADD COLUMN billing_mode VARCHAR(20) DEFAULT 'prepaid'"))
-    if "balance" not in columns_tenants:
-        print("[Database] Adding balance column to qa_tenants table...")
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE qa_tenants ADD COLUMN balance NUMERIC(10, 2) DEFAULT 0.00"))
-    if "postpaid_limit" not in columns_tenants:
-        print("[Database] Adding postpaid_limit column to qa_tenants table...")
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE qa_tenants ADD COLUMN postpaid_limit NUMERIC(10, 2) DEFAULT 100.00"))
+    # Check qa_tenants columns for all tenant fields and billing
+    if inspector.has_table("qa_tenants"):
+        columns_tenants = [col["name"] for col in inspector.get_columns("qa_tenants")]
+        tenant_cols_to_add = {
+            "billing_mode": "VARCHAR(20) DEFAULT 'prepaid'",
+            "balance": "NUMERIC(10, 2) DEFAULT 0.00",
+            "postpaid_limit": "NUMERIC(10, 2) DEFAULT 100.00",
+            "cnpj": "VARCHAR(20)",
+            "segment": "VARCHAR(100) DEFAULT 'hotel'",
+            "status": "VARCHAR(50) DEFAULT 'active'",
+            "plan_type": "VARCHAR(50) DEFAULT 'free'",
+            "plan_id": "VARCHAR(36)",
+            "max_users": "INTEGER DEFAULT 5",
+            "logo_url": "TEXT"
+        }
+        for col_name, col_def in tenant_cols_to_add.items():
+            if col_name not in columns_tenants:
+                print(f"[Database] Adding {col_name} column to qa_tenants table...")
+                try:
+                    with engine.begin() as conn:
+                        conn.execute(text(f"ALTER TABLE qa_tenants ADD COLUMN {col_name} {col_def}"))
+                except Exception as col_err:
+                    print(f"[Database] Could not add column {col_name}: {col_err}")
 except Exception as e:
     print(f"[Database] Error creating/updating tables on startup: {e}")
 

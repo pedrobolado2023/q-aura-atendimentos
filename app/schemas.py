@@ -26,7 +26,7 @@ class PlanUpdate(BaseModel):
 
 class PlanResponse(PlanBase):
     id: UUID
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -43,7 +43,7 @@ class TenantResponse(TenantBase):
     id: UUID
     plan_type: str
     status: str
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -75,14 +75,14 @@ class TenantDetailResponse(BaseModel):
     id: UUID
     name: str
     subdomain: str
-    cnpj: Optional[str]
-    segment: Optional[str]
-    plan_type: str
-    status: str
-    max_users: Optional[int]
-    custom_modules: Optional[List[str]]
-    logo_url: Optional[str]
-    created_at: datetime
+    cnpj: Optional[str] = None
+    segment: Optional[str] = None
+    plan_type: Optional[str] = "free"
+    status: Optional[str] = "active"
+    max_users: Optional[int] = 5
+    custom_modules: Optional[List[str]] = []
+    logo_url: Optional[str] = None
+    created_at: Optional[datetime] = None
     plan: Optional[PlanResponse] = None
     enabled_modules: Optional[List[str]] = []
     billing_mode: Optional[str] = "prepaid"
