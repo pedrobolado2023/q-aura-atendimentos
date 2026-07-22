@@ -13,6 +13,9 @@ from app.schemas import (
 )
 from app.auth import get_password_hash, get_current_user
 
+import json
+from sqlalchemy.exc import IntegrityError
+
 router = APIRouter(prefix="/api/superadmin", tags=["superadmin"])
 
 
@@ -26,16 +29,47 @@ def require_superadmin(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+def _parse_list(val) -> List[str]:
+    if not val:
+        return []
+    if isinstance(val, list):
+        return [str(x) for x in val]
+    if isinstance(val, str):
+        try:
+            parsed = json.loads(val)
+            if isinstance(parsed, list):
+                return [str(x) for x in parsed]
+        except Exception:
+            pass
+        return [val]
+    return []
+
+
 def _get_enabled_modules(tenant: Tenant) -> List[str]:
     """Returns the effective enabled modules for a tenant (plan + custom overrides)."""
-    base_modules = list(tenant.plan.modules or []) if tenant.plan else []
-    custom = list(tenant.custom_modules or [])
+    base_modules = _parse_list(tenant.plan.modules) if tenant.plan else []
+    custom = _parse_list(tenant.custom_modules)
     return list(set(base_modules + custom))
+
+
+def _plan_to_response(plan: Optional[Plan]) -> Optional[dict]:
+    if not plan:
+        return None
+    return {
+        "id": str(plan.id),
+        "name": plan.name,
+        "description": plan.description,
+        "price_monthly": float(plan.price_monthly or 0.0),
+        "modules": _parse_list(plan.modules),
+        "max_users": plan.max_users or 5,
+        "is_active": bool(plan.is_active) if plan.is_active is not None else True,
+        "created_at": plan.created_at,
+    }
 
 
 def _tenant_to_response(tenant: Tenant) -> dict:
     return {
-        "id": tenant.id,
+        "id": str(tenant.id),
         "name": tenant.name,
         "subdomain": tenant.subdomain,
         "cnpj": tenant.cnpj,
@@ -43,10 +77,10 @@ def _tenant_to_response(tenant: Tenant) -> dict:
         "plan_type": tenant.plan_type,
         "status": tenant.status,
         "max_users": tenant.max_users,
-        "custom_modules": tenant.custom_modules or [],
+        "custom_modules": _parse_list(tenant.custom_modules),
         "logo_url": tenant.logo_url,
         "created_at": tenant.created_at,
-        "plan": tenant.plan,
+        "plan": _plan_to_response(tenant.plan),
         "enabled_modules": _get_enabled_modules(tenant),
         "billing_mode": tenant.billing_mode or "prepaid",
         "balance": float(tenant.balance or 0.0),
@@ -86,7 +120,8 @@ def list_plans(
     db: Session = Depends(get_db),
     _: User = Depends(require_superadmin),
 ):
-    return db.query(Plan).order_by(Plan.price_monthly).all()
+    plans = db.query(Plan).order_by(Plan.price_monthly).all()
+    return [_plan_to_response(p) for p in plans]
 
 
 @router.post("/plans", response_model=PlanResponse)
@@ -106,7 +141,7 @@ def create_plan(
     db.add(plan)
     db.commit()
     db.refresh(plan)
-    return plan
+    return _plan_to_response(plan)
 
 
 @router.put("/plans/{plan_id}", response_model=PlanResponse)
@@ -123,7 +158,7 @@ def update_plan(
         setattr(plan, field, value)
     db.commit()
     db.refresh(plan)
-    return plan
+    return _plan_to_response(plan)
 
 
 @router.delete("/plans/{plan_id}")
@@ -175,21 +210,22 @@ def create_tenant(
     _: User = Depends(require_superadmin),
 ):
     try:
-        # Normalize plan_id (empty string or whitespace becomes None)
-        plan_id = payload.plan_id.strip() if payload.plan_id and isinstance(payload.plan_id, str) and payload.plan_id.strip() else None
+        subdomain = payload.subdomain.strip().lower()
+        admin_email = payload.admin_email.strip().lower()
 
         # Check subdomain uniqueness
-        existing = db.query(Tenant).filter(Tenant.subdomain == payload.subdomain).first()
+        existing = db.query(Tenant).filter(Tenant.subdomain == subdomain).first()
         if existing:
             raise HTTPException(status_code=400, detail="Subdomínio já cadastrado.")
 
         # Check admin email uniqueness
-        existing_user = db.query(User).filter(User.email == payload.admin_email).first()
+        existing_user = db.query(User).filter(User.email == admin_email).first()
         if existing_user:
             raise HTTPException(status_code=400, detail="Email do administrador já cadastrado.")
 
         # Resolve plan
         plan = None
+        plan_id = payload.plan_id.strip() if payload.plan_id and isinstance(payload.plan_id, str) and payload.plan_id.strip() else None
         if plan_id:
             try:
                 plan = db.query(Plan).filter(Plan.id == plan_id).first()
@@ -199,9 +235,9 @@ def create_tenant(
 
         # Create tenant
         tenant = Tenant(
-            name=payload.name,
-            subdomain=payload.subdomain,
-            cnpj=payload.cnpj,
+            name=payload.name.strip(),
+            subdomain=subdomain,
+            cnpj=payload.cnpj.strip() if payload.cnpj else None,
             segment=payload.segment or "hotel",
             plan_id=plan.id if plan else None,
             plan_type=plan.name if plan else "custom",
@@ -214,9 +250,9 @@ def create_tenant(
 
         # Create admin user for the tenant
         admin_user = User(
-            email=payload.admin_email,
+            email=admin_email,
             password_hash=get_password_hash(payload.admin_password),
-            name=payload.admin_name,
+            name=payload.admin_name.strip(),
             tenant_id=tenant.id,
             role="administrator",
             status="offline",
@@ -224,16 +260,21 @@ def create_tenant(
         db.add(admin_user)
 
         # Create default BotConfig for the tenant
-        from app.models import BotConfig
-        bot_conf = BotConfig(
-            tenant_id=tenant.id,
-            is_active=True,
-            welcome_message="Olá! Seja bem-vindo ao nosso hotel. Como posso ajudar você hoje?",
-            fallback_message="Desculpe, não consegui entender. Digite *Atendente* a qualquer momento para falar com um humano.",
-            out_of_hours_message="Olá! Nosso horário de atendimento é das 08h às 22h. Deixe sua mensagem que responderemos o mais breve possível.",
-            transfer_keywords="atendente,humano,falar,suporte,ajuda"
-        )
-        db.add(bot_conf)
+        try:
+            from app.models import BotConfig
+            bot_conf = db.query(BotConfig).filter(BotConfig.tenant_id == tenant.id).first()
+            if not bot_conf:
+                bot_conf = BotConfig(
+                    tenant_id=tenant.id,
+                    is_active=True,
+                    welcome_message="Olá! Seja bem-vindo ao nosso hotel. Como posso ajudar você hoje?",
+                    fallback_message="Desculpe, não consegui entender. Digite *Atendente* a qualquer momento para falar com um humano.",
+                    out_of_hours_message="Olá! Nosso horário de atendimento é das 08h às 22h. Deixe sua mensagem que responderemos o mais breve possível.",
+                    transfer_keywords="atendente,humano,falar,suporte,ajuda"
+                )
+                db.add(bot_conf)
+        except Exception as bot_err:
+            print(f"[Warning]: Failed to create BotConfig: {bot_err}")
 
         db.commit()
         db.refresh(tenant)
@@ -241,6 +282,10 @@ def create_tenant(
     except HTTPException:
         db.rollback()
         raise
+    except IntegrityError as ie:
+        db.rollback()
+        print(f"[IntegrityError in create_tenant]: {ie}")
+        raise HTTPException(status_code=400, detail="Subdomínio ou E-mail do administrador já cadastrado no sistema.")
     except Exception as e:
         db.rollback()
         print(f"[Superadmin create_tenant error]: {e}")
