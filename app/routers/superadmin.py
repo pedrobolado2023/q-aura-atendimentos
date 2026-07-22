@@ -227,8 +227,8 @@ def create_tenant(
         # Check subdomain uniqueness
         existing = db.query(Tenant).filter(Tenant.subdomain == subdomain).first()
         if existing:
-            if not existing.users or len(existing.users) == 0:
-                # Incomplete / orphan tenant record from prior failed creation - clean it up!
+            # If the tenant is an unused test record (0 contacts and 0 conversations), clean it up automatically!
+            if len(existing.contacts or []) == 0 and len(existing.conversations or []) == 0:
                 db.delete(existing)
                 db.flush()
             else:
