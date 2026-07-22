@@ -69,7 +69,11 @@ class SuperadminRouter {
             const response = await fetch(`${this.apiUrl}${endpoint}`, options);
             if (response.status === 401 || response.status === 403) {
                 const data = await response.json();
-                this.showToast(data.detail || "Não autorizado", "error");
+                let detailMsg = data.detail || "Login ou senha incorretos, tente novamente.";
+                if (detailMsg.includes("Invalid Credentials") || detailMsg.includes("Invalid credentials")) {
+                    detailMsg = "Login ou senha incorretos, tente novamente.";
+                }
+                this.showToast(detailMsg, "error");
                 if (endpoint !== "/api/auth/login") {
                     this.logout();
                 }

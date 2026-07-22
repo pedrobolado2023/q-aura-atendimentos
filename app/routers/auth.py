@@ -52,10 +52,10 @@ def signup_user(user_in: UserCreate, db: Session = Depends(get_db)):
 def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == user_credentials.email).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Credentials")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Login ou senha incorretos, tente novamente.")
     
     if not verify_password(user_credentials.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Credentials")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Login ou senha incorretos, tente novamente.")
 
     # Silent hash upgrade for legacy SHA-256 passwords
     if not user.password_hash.startswith("$2"):

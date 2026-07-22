@@ -1095,7 +1095,11 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
         appRouter.showMainLayout();
         appRouter.init();
     } catch (err) {
-        showToast("Falha no login: " + err.message, "error");
+        let msg = err.message || "Login ou senha incorretos, tente novamente.";
+        if (msg.includes("Invalid Credentials") || msg.includes("Invalid credentials") || msg.includes("Falha no login")) {
+            msg = "Login ou senha incorretos, tente novamente.";
+        }
+        showToast(msg, "error");
     }
 });
 
