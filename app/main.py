@@ -69,6 +69,13 @@ try:
                         conn.execute(text(f"ALTER TABLE qa_tenants ADD COLUMN {col_name} {col_def}"))
                 except Exception as col_err:
                     print(f"[Database] Could not add column {col_name}: {col_err}")
+
+        # Drop legacy restrictive plan_type check constraint if present on PostgreSQL
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE qa_tenants DROP CONSTRAINT IF EXISTS qa_tenants_plan_type_check"))
+        except Exception as constraint_err:
+            print(f"[Database] Could not drop constraint qa_tenants_plan_type_check: {constraint_err}")
 except Exception as e:
     print(f"[Database] Error creating/updating tables on startup: {e}")
 

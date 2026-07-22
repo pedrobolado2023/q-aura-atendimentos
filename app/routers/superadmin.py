@@ -20,6 +20,21 @@ from sqlalchemy.exc import IntegrityError
 router = APIRouter(prefix="/api/superadmin", tags=["superadmin"])
 
 
+def _normalize_plan_type(plan_name: Optional[str]) -> str:
+    if not plan_name:
+        return "custom"
+    name_clean = str(plan_name).lower().strip()
+    if "pro" in name_clean:
+        return "pro"
+    if "enterp" in name_clean:
+        return "enterprise"
+    if "basic" in name_clean or "básico" in name_clean or "basico" in name_clean:
+        return "basic"
+    if "free" in name_clean or "gratis" in name_clean or "grátis" in name_clean:
+        return "free"
+    return "custom"
+
+
 def _is_valid_uuid(val: str) -> bool:
     if not val or not isinstance(val, str):
         return False
@@ -240,7 +255,7 @@ def create_tenant(
             tenant.cnpj = payload.cnpj.strip() if payload.cnpj else None
             tenant.segment = payload.segment or "hotel"
             tenant.plan_id = plan.id if plan else tenant.plan_id
-            tenant.plan_type = plan.name if plan else (tenant.plan_type or "custom")
+            tenant.plan_type = _normalize_plan_type(plan.name) if plan else (tenant.plan_type or "custom")
             tenant.status = "active"
             tenant.max_users = payload.max_users or (plan.max_users if plan else 5)
         else:
@@ -250,7 +265,7 @@ def create_tenant(
                 cnpj=payload.cnpj.strip() if payload.cnpj else None,
                 segment=payload.segment or "hotel",
                 plan_id=plan.id if plan else None,
-                plan_type=plan.name if plan else "custom",
+                plan_type=_normalize_plan_type(plan.name) if plan else "custom",
                 status="active",
                 max_users=payload.max_users or (plan.max_users if plan else 5),
                 custom_modules=[],
@@ -326,7 +341,7 @@ def update_tenant(
             if pid and isinstance(pid, str) and pid.strip():
                 plan = db.query(Plan).filter(Plan.id == pid.strip()).first()
                 if plan:
-                    tenant.plan_type = plan.name
+                    tenant.plan_type = _normalize_plan_type(plan.name)
                     update_data["plan_id"] = plan.id
                 else:
                     update_data["plan_id"] = None
