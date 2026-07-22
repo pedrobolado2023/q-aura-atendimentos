@@ -541,9 +541,10 @@ body {
 
 /* --- Settings Views --- */
 .settings-container {
-    display: grid;
-    grid-template-columns: 2fr 1.2fr;
-    gap: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    width: 100%;
 }
 
 .team-settings-container {
