@@ -676,6 +676,9 @@ const appRouter = {
 
 
     async loadMetaSettings() {
+        if (state.currentUser && state.currentUser.role !== "administrator") {
+            return;
+        }
         try {
             const creds = await api.get("/api/auth/meta-credentials");
             if (creds) {
@@ -687,7 +690,6 @@ const appRouter = {
             }
         } catch (e) {
             document.getElementById("webhook-generated-url").innerText = `${API_URL}/api/webhook/${state.tenant_id}`;
-            console.log("Credenciais Meta não encontradas ou não configuradas.");
         }
 
         try {
@@ -696,7 +698,7 @@ const appRouter = {
                 document.getElementById("n8n-webhook-url").value = botConfig.n8n_webhook_url || "";
             }
         } catch (e) {
-            console.log("Erro ao carregar URL do n8n: " + e.message);
+            // Silently ignore if botConfig isn't loaded
         }
 
         // Carrega os dados de faturamento do hotel
@@ -898,6 +900,9 @@ const appRouter = {
     },
 
     async loadBillingSummary() {
+        if (state.currentUser && !["administrator", "manager", "superadmin"].includes(state.currentUser.role)) {
+            return;
+        }
         try {
             const summary = await api.get("/api/billing/summary");
             if (summary) {
