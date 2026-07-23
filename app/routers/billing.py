@@ -62,21 +62,26 @@ def get_billing_summary(
         plan_name = plan_type_names.get(str(tenant.plan_type).lower(), str(tenant.plan_type).capitalize())
 
     first_day = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    monthly_spend = db.query(BillingTransaction).filter(
-        BillingTransaction.tenant_id == tenant.id,
-        BillingTransaction.category.in_(["marketing", "utility", "service"]),
-        BillingTransaction.created_at >= first_day
-    ).with_entities(
-        db.func.sum(BillingTransaction.amount)
-    ).scalar() or Decimal("0.00")
+    try:
+        monthly_spend = db.query(BillingTransaction).filter(
+            BillingTransaction.tenant_id == str(tenant.id),
+            BillingTransaction.category.in_(["marketing", "utility", "service"]),
+            BillingTransaction.created_at >= first_day
+        ).with_entities(
+            db.func.sum(BillingTransaction.amount)
+        ).scalar()
+        monthly_spend = monthly_spend if monthly_spend is not None else Decimal("0.00")
+    except Exception:
+        monthly_spend = Decimal("0.00")
 
     return BillingSummaryResponse(
         billing_mode=tenant.billing_mode or "prepaid",
-        balance=float(tenant.balance or 0.0),
-        postpaid_limit=float(tenant.postpaid_limit or 100.0),
+        balance=float(tenant.balance if tenant.balance is not None else 0.0),
+        postpaid_limit=float(tenant.postpaid_limit if tenant.postpaid_limit is not None else 100.0),
         monthly_spend=float(monthly_spend),
         plan_name=plan_name
     )
+
 
 @router.get("/transactions", response_model=List[TransactionResponse])
 def get_billing_transactions(

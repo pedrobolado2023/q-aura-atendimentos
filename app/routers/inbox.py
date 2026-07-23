@@ -480,13 +480,14 @@ async def start_conversation(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
+    tenant_id_str = str(current_tenant.id)
     cleaned_phone = format_brazilian_phone(payload.phone_number)
     if not cleaned_phone:
         raise HTTPException(status_code=400, detail="Número de telefone inválido.")
 
     # Validar saldo / limite antes de abrir nova conversa ativa
     from app.services.charge_service import can_initiate_conversation, charge_tenant_conversation
-    if not can_initiate_conversation(db, current_tenant.id):
+    if not can_initiate_conversation(db, tenant_id_str):
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail="Saldo insuficiente ou limite pós-pago atingido. Efetue uma recarga para continuar enviando mensagens ativas."
@@ -495,13 +496,13 @@ async def start_conversation(
     # 2. Get/Create contact
     contact = db.query(Contact).filter(
         Contact.phone_number == cleaned_phone,
-        Contact.tenant_id == current_tenant.id
+        Contact.tenant_id == tenant_id_str
     ).first()
 
     if not contact:
         contact_name = payload.name if payload.name else f"Hóspede {cleaned_phone[-4:]}"
         contact = Contact(
-            tenant_id=current_tenant.id,
+            tenant_id=tenant_id_str,
             phone_number=cleaned_phone,
             name=contact_name,
             language="pt-BR",
@@ -517,12 +518,12 @@ async def start_conversation(
     # 3. Get/Create conversation
     convo = db.query(Conversation).filter(
         Conversation.contact_id == contact.id,
-        Conversation.tenant_id == current_tenant.id
+        Conversation.tenant_id == tenant_id_str
     ).first()
 
     if not convo:
         convo = Conversation(
-            tenant_id=current_tenant.id,
+            tenant_id=tenant_id_str,
             contact_id=contact.id,
             assigned_user_id=current_user.id,
             status="active",
@@ -538,9 +539,12 @@ async def start_conversation(
         convo.unread_count = 0
 
     # 4. Get Meta Credentials
-    creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == current_tenant.id).first()
+    creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == tenant_id_str).first()
     if not creds:
-        raise HTTPException(status_code=400, detail="Meta credentials not configured for this tenant")
+        raise HTTPException(
+            status_code=400,
+            detail="Credenciais da Meta WhatsApp não estão configuradas para esta empresa. Configure em Configurações > Conexão WhatsApp."
+        )
 
     # Format body
     formatted_body = f"*Atendente {current_user.name}:* {payload.body}"
@@ -551,30 +555,66 @@ async def start_conversation(
         "Authorization": f"Bearer {creds.permanent_access_token}",
         "Content-Type": "application/json"
     }
-    meta_payload = {
-        "messaging_product": "whatsapp",
-        "recipient_type": "individual",
-        "to": contact.phone_number,
-        "type": "text",
-        "text": {
-            "preview_url": False,
-            "body": formatted_body
-        }
-    }
 
     meta_message_id = None
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(meta_url, headers=headers, json=meta_payload)
-            if response.status_code == 200:
-                res_data = response.json()
-                meta_message_id = res_data.get("messages", [{}])[0].get("id")
+            if payload.body == "primeiro_contato":
+                meta_payload = {
+                    "messaging_product": "whatsapp",
+                    "recipient_type": "individual",
+                    "to": contact.phone_number,
+                    "type": "template",
+                    "template": {
+                        "name": "primeiro_contato",
+                        "language": {"code": "pt_BR"}
+                    }
+                }
             else:
-                err_data = response.json()
-                error_msg = err_data.get("error", {}).get("message", "Erro desconhecido da API da Meta")
-                raise HTTPException(status_code=400, detail=f"Erro Meta: {error_msg}")
-        except httpx.HTTPError as e:
-            raise HTTPException(status_code=500, detail=f"Erro de conexão com a Meta: {str(e)}")
+                meta_payload = {
+                    "messaging_product": "whatsapp",
+                    "recipient_type": "individual",
+                    "to": contact.phone_number,
+                    "type": "text",
+                    "text": {
+                        "preview_url": False,
+                        "body": formatted_body
+                    }
+                }
+
+            response = await client.post(meta_url, headers=headers, json=meta_payload)
+
+            # Se a chamada via template primeiro_contato falhar, faz fallback para texto simples
+            if response.status_code != 200 and payload.body == "primeiro_contato":
+                text_payload = {
+                    "messaging_product": "whatsapp",
+                    "recipient_type": "individual",
+                    "to": contact.phone_number,
+                    "type": "text",
+                    "text": {
+                        "preview_url": False,
+                        "body": f"Olá! Sou o atendente {current_user.name}. Como posso ajudar?"
+                    }
+                }
+                response = await client.post(meta_url, headers=headers, json=text_payload)
+
+            if response.status_code == 200:
+                try:
+                    res_data = response.json()
+                    meta_message_id = res_data.get("messages", [{}])[0].get("id")
+                except Exception:
+                    meta_message_id = None
+            else:
+                try:
+                    err_data = response.json()
+                    error_msg = err_data.get("error", {}).get("message", f"Erro HTTP {response.status_code} da Meta")
+                except Exception:
+                    error_msg = f"Erro HTTP {response.status_code} da API da Meta"
+                raise HTTPException(status_code=400, detail=f"Erro Meta WhatsApp: {error_msg}")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Erro de conexão com a API da Meta: {str(e)}")
 
     # 6. Save message
     msg = Message(
@@ -596,17 +636,17 @@ async def start_conversation(
 
     # Executa tarifação se a mensagem foi enviada com sucesso
     if meta_message_id:
-        # Se contiver a palavra "primeiro_contato" ou template, é cobrado como utility
-        category = "utility" if "primeiro_contato" in payload.body else "marketing"
+        category = "utility" if "primeiro_contato" in (payload.body or "") else "marketing"
         charge_tenant_conversation(
             db,
-            tenant_id=str(current_tenant.id),
+            tenant_id=tenant_id_str,
             conversation_id=str(convo.id),
             category=category,
             custom_description=f"Primeira Conversa de {category.capitalize()} iniciada de forma ativa com {contact.phone_number}"
         )
 
     return msg
+
 
 
 @router.post("/conversations/{conversation_id}/assign", response_model=ConversationResponse)
