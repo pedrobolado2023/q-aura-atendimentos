@@ -20,6 +20,10 @@ try:
         print("[Database] Adding n8n_webhook_url column to qa_bot_configs table...")
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE qa_bot_configs ADD COLUMN n8n_webhook_url TEXT"))
+    if "flow_data" not in columns_bot:
+        print("[Database] Adding flow_data column to qa_bot_configs table...")
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE qa_bot_configs ADD COLUMN flow_data JSON"))
             
     # Check qa_contacts columns
     columns_contacts = [col["name"] for col in inspector.get_columns("qa_contacts")]
