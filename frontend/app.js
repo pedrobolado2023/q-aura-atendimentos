@@ -2790,3 +2790,298 @@ const uiHelpers = {
 };
 
 window.uiHelpers = uiHelpers;
+
+// ============================================================
+// TYPEBOT FLOW BUILDER ENGINE
+// ============================================================
+appRouter.switchBotMode = function(mode) {
+    document.querySelectorAll(".bot-mode-tab-btn").forEach(b => {
+        b.classList.remove("active");
+        b.style.color = "var(--text-muted)";
+        b.style.borderBottomColor = "transparent";
+    });
+
+    const activeBtn = document.getElementById(`bot-mode-${mode}`);
+    if (activeBtn) {
+        activeBtn.classList.add("active");
+        activeBtn.style.color = "var(--color-brand)";
+        activeBtn.style.borderBottomColor = "var(--color-brand)";
+    }
+
+    document.getElementById("bot-panel-builder").style.display = mode === "builder" ? "flex" : "none";
+    document.getElementById("bot-panel-simple").style.display = mode === "simple" ? "block" : "none";
+
+    if (mode === "builder" && !window.botFlowBuilder.initialized) {
+        window.botFlowBuilder.init();
+    }
+};
+
+const botFlowBuilder = {
+    initialized: false,
+    nodes: [],
+    connections: [],
+    selectedNodeId: null,
+    nextId: 1,
+
+    init() {
+        this.initialized = true;
+        this.loadFlow();
+    },
+
+    async loadFlow() {
+        try {
+            const config = await api.get("/api/inbox/bot-config");
+            if (config && config.flow_data && config.flow_data.nodes && config.flow_data.nodes.length > 0) {
+                this.nodes = config.flow_data.nodes;
+                this.connections = config.flow_data.connections || [];
+                this.nextId = Math.max(...this.nodes.map(n => parseInt(n.id) || 0), 0) + 1;
+            } else {
+                // Initialize default flow
+                this.nodes = [
+                    { id: "1", type: "start", title: "Início", x: 60, y: 100, content: "Cliente envia primeira mensagem" },
+                    { id: "2", type: "text", title: "Mensagem de Boas-Vindas", x: 320, y: 100, content: config ? config.welcome_message : "Olá! Seja bem-vindo ao nosso atendimento." }
+                ];
+                this.connections = [{ from: "1", to: "2" }];
+                this.nextId = 3;
+            }
+            this.render();
+        } catch (e) {
+            console.error("Erro ao carregar fluxo do bot:", e);
+        }
+    },
+
+    addNode(type) {
+        const typesConfig = {
+            text:      { title: "Mensagem de Texto", color: "#3b82f6", icon: "fa-comment-dots", content: "Olá! Como posso ajudar você hoje?" },
+            buttons:   { title: "Menu de Opções",     color: "#8b5cf6", icon: "fa-list-check",   content: "Escolha uma opção:\n1. Reservas\n2. Recepção\n3. Falar com Atendente" },
+            input:     { title: "Capturar Resposta", color: "#f59e0b", icon: "fa-pen-to-square", content: "Aguardar nome ou data de entrada" },
+            condition: { title: "Regra Condicional",  color: "#ec4899", icon: "fa-code-branch",  content: "Se mensagem contém 'reserva'" },
+            transfer:  { title: "Transferir Fila",    color: "#10b981", icon: "fa-headset",      content: "Encaminhar para atendimento humano" }
+        };
+
+        const cfg = typesConfig[type] || typesConfig.text;
+        const newId = String(this.nextId++);
+        const offset = (this.nodes.length * 30) % 200;
+
+        const newNode = {
+            id: newId,
+            type: type,
+            title: cfg.title,
+            color: cfg.color,
+            icon: cfg.icon,
+            x: 100 + offset,
+            y: 150 + offset,
+            content: cfg.content
+        };
+
+        this.nodes.push(newNode);
+        this.render();
+        this.selectNode(newId);
+    },
+
+    selectNode(id) {
+        this.selectedNodeId = id;
+        document.querySelectorAll(".flow-node").forEach(n => n.classList.remove("selected"));
+        const el = document.getElementById(`node-${id}`);
+        if (el) el.classList.add("selected");
+        this.openInspector(id);
+    },
+
+    openInspector(id) {
+        const node = this.nodes.find(n => n.id === id);
+        if (!node) return;
+
+        const inspector = document.getElementById("flow-inspector");
+        const titleEl = document.getElementById("inspector-title");
+        const contentEl = document.getElementById("inspector-content");
+
+        titleEl.innerText = `Editar ${node.title}`;
+        inspector.style.display = "flex";
+
+        contentEl.innerHTML = `
+            <div class="input-group">
+                <label style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Título do Bloco</label>
+                <input type="text" id="insp-title-input" value="${node.title}" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-primary);color:var(--text-primary);font-size:13px;" oninput="botFlowBuilder.updateNodeProp('${id}', 'title', this.value)">
+            </div>
+            <div class="input-group" style="margin-top:12px;">
+                <label style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Conteúdo / Mensagem</label>
+                <textarea id="insp-content-input" rows="5" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-primary);color:var(--text-primary);font-size:13px;" oninput="botFlowBuilder.updateNodeProp('${id}', 'content', this.value)">${node.content || ""}</textarea>
+            </div>
+            ${node.type !== "start" ? `
+            <button class="btn btn-secondary btn-sm" style="margin-top:20px;color:#ef4444;border-color:#ef4444;" onclick="botFlowBuilder.deleteNode('${id}')">
+                <i class="fa-solid fa-trash"></i> Excluir Bloco
+            </button>` : ""}
+        `;
+    },
+
+    closeInspector() {
+        document.getElementById("flow-inspector").style.display = "none";
+        this.selectedNodeId = null;
+        document.querySelectorAll(".flow-node").forEach(n => n.classList.remove("selected"));
+    },
+
+    updateNodeProp(id, prop, val) {
+        const node = this.nodes.find(n => n.id === id);
+        if (!node) return;
+        node[prop] = val;
+        const textEl = document.getElementById(`node-body-${id}`);
+        const headerTitleEl = document.getElementById(`node-header-title-${id}`);
+        if (prop === "content" && textEl) textEl.innerText = val;
+        if (prop === "title" && headerTitleEl) headerTitleEl.innerText = val;
+    },
+
+    deleteNode(id) {
+        this.nodes = this.nodes.filter(n => n.id !== id);
+        this.connections = this.connections.filter(c => c.from !== id && c.to !== id);
+        this.closeInspector();
+        this.render();
+    },
+
+    clearFlow() {
+        if (confirm("Deseja realmente limpar todo o fluxo de nós?")) {
+            this.nodes = [{ id: "1", type: "start", title: "Início", x: 60, y: 100, content: "Cliente envia primeira mensagem" }];
+            this.connections = [];
+            this.nextId = 2;
+            this.closeInspector();
+            this.render();
+        }
+    },
+
+    async saveFlow() {
+        try {
+            const flowData = {
+                nodes: this.nodes,
+                connections: this.connections
+            };
+            const firstTextNode = this.nodes.find(n => n.type === "text");
+            const payload = {
+                flow_data: flowData,
+                welcome_message: firstTextNode ? firstTextNode.content : undefined
+            };
+            await api.post("/api/inbox/bot-config", payload);
+            showToast("Fluxo visual do Bot salvo com sucesso!", "success");
+        } catch (e) {
+            console.error("Erro ao salvar fluxo:", e);
+            showToast("Erro ao salvar o fluxo visual do bot.", "error");
+        }
+    },
+
+    render() {
+        const container = document.getElementById("flow-nodes-container");
+        const svg = document.getElementById("flow-svg");
+        if (!container || !svg) return;
+
+        container.innerHTML = "";
+        svg.innerHTML = "";
+
+        // Render Connections (Lines)
+        this.connections.forEach(conn => {
+            const fromNode = this.nodes.find(n => n.id === conn.from);
+            const toNode = this.nodes.find(n => n.id === conn.to);
+            if (fromNode && toNode) {
+                const x1 = fromNode.x + 110;
+                const y1 = fromNode.y + 110;
+                const x2 = toNode.x + 110;
+                const y2 = toNode.y;
+
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                const dx = Math.abs(x2 - x1) / 2;
+                const d = `M ${x1} ${y1} C ${x1} ${y1 + 50}, ${x2} ${y2 - 50}, ${x2} ${y2}`;
+                path.setAttribute("d", d);
+                path.setAttribute("stroke", "#6366f1");
+                path.setAttribute("stroke-width", "3");
+                path.setAttribute("fill", "none");
+                path.setAttribute("stroke-dasharray", "6 4");
+                svg.appendChild(path);
+            }
+        });
+
+        // Render Nodes
+        this.nodes.forEach(node => {
+            const el = document.createElement("div");
+            el.className = `flow-node ${this.selectedNodeId === node.id ? "selected" : ""}`;
+            el.id = `node-${node.id}`;
+            el.style.left = `${node.x}px`;
+            el.style.top = `${node.y}px`;
+
+            const iconClass = node.icon || (node.type === "start" ? "fa-play" : "fa-cube");
+            const headerColor = node.color || "#475569";
+
+            el.innerHTML = `
+                <div class="flow-node-header" style="background:${headerColor};">
+                    <span style="display:flex;align-items:center;gap:6px;" id="node-header-title-${node.id}">
+                        <i class="fa-solid ${iconClass}"></i> ${node.title}
+                    </span>
+                    <span style="opacity:0.6;font-size:10px;">#${node.id}</span>
+                </div>
+                <div class="flow-node-body" id="node-body-${node.id}">${node.content || ""}</div>
+                ${node.type !== "start" ? `<div class="flow-node-port input-port"></div>` : ""}
+                <div class="flow-node-port output-port"></div>
+            `;
+
+            // Node Dragging Logic
+            let isDragging = false;
+            let startX, startY, initialNodeX, initialNodeY;
+
+            el.addEventListener("mousedown", (e) => {
+                if (e.target.classList.contains("flow-node-port")) return;
+                this.selectNode(node.id);
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                initialNodeX = node.x;
+                initialNodeY = node.y;
+                
+                const onMouseMove = (ev) => {
+                    if (!isDragging) return;
+                    const dx = ev.clientX - startX;
+                    const dy = ev.clientY - startY;
+                    node.x = Math.max(0, initialNodeX + dx);
+                    node.y = Math.max(0, initialNodeY + dy);
+                    el.style.left = `${node.x}px`;
+                    el.style.top = `${node.y}px`;
+                    this.renderConnectionsOnly();
+                };
+
+                const onMouseUp = () => {
+                    isDragging = false;
+                    document.removeEventListener("mousemove", onMouseMove);
+                    document.removeEventListener("mouseup", onMouseUp);
+                };
+
+                document.addEventListener("mousemove", onMouseMove);
+                document.addEventListener("mouseup", onMouseUp);
+            });
+
+            container.appendChild(el);
+        });
+    },
+
+    renderConnectionsOnly() {
+        const svg = document.getElementById("flow-svg");
+        if (!svg) return;
+        svg.innerHTML = "";
+        this.connections.forEach(conn => {
+            const fromNode = this.nodes.find(n => n.id === conn.from);
+            const toNode = this.nodes.find(n => n.id === conn.to);
+            if (fromNode && toNode) {
+                const x1 = fromNode.x + 110;
+                const y1 = fromNode.y + 110;
+                const x2 = toNode.x + 110;
+                const y2 = toNode.y;
+
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                const d = `M ${x1} ${y1} C ${x1} ${y1 + 50}, ${x2} ${y2 - 50}, ${x2} ${y2}`;
+                path.setAttribute("d", d);
+                path.setAttribute("stroke", "#6366f1");
+                path.setAttribute("stroke-width", "3");
+                path.setAttribute("fill", "none");
+                path.setAttribute("stroke-dasharray", "6 4");
+                svg.appendChild(path);
+            }
+        });
+    }
+};
+
+window.botFlowBuilder = botFlowBuilder;
+

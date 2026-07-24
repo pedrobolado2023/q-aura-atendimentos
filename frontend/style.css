@@ -1567,6 +1567,81 @@ img.avatar {
 }
 .modal-overlay.active { display: flex; animation: fadeIn 0.2s ease-out; }
 
+/* ============================================================
+   TYPEBOT FLOW BUILDER (VISUAL BOT CANVAS)
+   ============================================================ */
+.flow-node {
+    position: absolute;
+    width: 220px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
+    color: #f8fafc;
+    user-select: none;
+    transition: box-shadow 0.2s, border-color 0.2s;
+    font-family: inherit;
+}
+
+.flow-node:hover {
+    border-color: #64748b;
+    box-shadow: 0 14px 20px -3px rgba(0, 0, 0, 0.5);
+}
+
+.flow-node.selected {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.4), 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+}
+
+.flow-node-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid #334155;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-radius: 10px 10px 0 0;
+}
+
+.flow-node-body {
+    padding: 12px 14px;
+    font-size: 13px;
+    color: #cbd5e1;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.flow-node-port {
+    width: 12px;
+    height: 12px;
+    background: #6366f1;
+    border: 2px solid #0f172a;
+    border-radius: 50%;
+    position: absolute;
+    cursor: crosshair;
+    transition: transform 0.15s, background-color 0.15s;
+}
+
+.flow-node-port:hover {
+    transform: scale(1.4);
+    background: #818cf8;
+}
+
+.flow-node-port.input-port {
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.flow-node-port.output-port {
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
 .modal-card {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);

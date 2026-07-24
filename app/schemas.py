@@ -264,6 +264,7 @@ class BotConfigResponse(BaseModel):
     out_of_hours_message: str
     transfer_keywords: str
     n8n_webhook_url: Optional[str] = None
+    flow_data: Optional[dict] = None
 
     class Config:
         from_attributes = True
@@ -275,6 +276,7 @@ class BotConfigUpdate(BaseModel):
     out_of_hours_message: Optional[str] = None
     transfer_keywords: Optional[str] = None
     n8n_webhook_url: Optional[str] = None
+    flow_data: Optional[dict] = None
 
 # Dashboard Metrics Schemas
 class DepartmentMetric(BaseModel):

@@ -104,6 +104,7 @@ class BotConfig(Base):
     out_of_hours_message = Column(Text, default="Olá! Nosso horário de atendimento é das 08h às 22h. Deixe sua mensagem que responderemos o mais breve possível.")
     transfer_keywords = Column(Text, default="atendente,humano,falar,suporte,ajuda")
     n8n_webhook_url = Column(Text, nullable=True)
+    flow_data = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

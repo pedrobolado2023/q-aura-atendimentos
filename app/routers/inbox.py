@@ -1379,6 +1379,8 @@ def update_bot_config(
         config.transfer_keywords = payload.transfer_keywords
     if payload.n8n_webhook_url is not None:
         config.n8n_webhook_url = payload.n8n_webhook_url
+    if payload.flow_data is not None:
+        config.flow_data = payload.flow_data
         
     db.commit()
     db.refresh(config)
