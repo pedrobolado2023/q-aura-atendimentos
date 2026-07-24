@@ -457,8 +457,71 @@ const appRouter = {
                 `;
                 listContainer.appendChild(item);
             });
+
+            // Re-aplica busca se houver texto digitado
+            const searchInput = document.getElementById("convo-search-input");
+            if (searchInput && searchInput.value.trim() !== "") {
+                this.filterConversations(searchInput.value);
+            }
         } catch (e) {
-            console.error(e);
+            console.error("Erro ao carregar conversas:", e);
+        }
+    },
+
+    filterConversations(query) {
+        const term = (query || "").toLowerCase().trim();
+        const listContainer = document.getElementById("convo-list");
+        if (!listContainer) return;
+
+        const items = listContainer.querySelectorAll(".convo-item");
+        let visibleCount = 0;
+
+        items.forEach(item => {
+            const convoId = item.getAttribute("data-id");
+            const convo = (state.conversations || []).find(c => c.id === convoId);
+
+            if (!term) {
+                item.style.display = "flex";
+                visibleCount++;
+                return;
+            }
+
+            let match = false;
+            if (convo) {
+                const name = (convo.contact && convo.contact.name) ? convo.contact.name.toLowerCase() : "";
+                const phone = (convo.contact && convo.contact.phone_number) ? convo.contact.phone_number.toLowerCase() : "";
+                const lastMsg = (convo.last_message_body) ? convo.last_message_body.toLowerCase() : "";
+
+                if (name.includes(term) || phone.includes(term) || lastMsg.includes(term)) {
+                    match = true;
+                }
+            } else {
+                // Fallback via texto do elemento HTML
+                const text = item.innerText.toLowerCase();
+                if (text.includes(term)) match = true;
+            }
+
+            if (match) {
+                item.style.display = "flex";
+                visibleCount++;
+            } else {
+                item.style.display = "none";
+            }
+        });
+
+        // Feedback se nenhum contato for encontrado
+        let emptyMsg = listContainer.querySelector(".convo-search-empty");
+        if (visibleCount === 0 && term !== "") {
+            if (!emptyMsg) {
+                emptyMsg = document.createElement("p");
+                emptyMsg.className = "subtitle convo-search-empty";
+                emptyMsg.style.cssText = "padding: 20px; text-align: center; opacity: 0.7; font-size: 13px;";
+                listContainer.appendChild(emptyMsg);
+            }
+            emptyMsg.innerText = `Nenhum contato encontrado para "${query}".`;
+            emptyMsg.style.display = "block";
+        } else if (emptyMsg) {
+            emptyMsg.style.display = "none";
         }
     },
 

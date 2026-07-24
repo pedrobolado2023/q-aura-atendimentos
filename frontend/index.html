@@ -815,7 +815,7 @@
                             </div>
                             <div class="conversation-search">
                                 <i class="fa-solid fa-magnifying-glass"></i>
-                                <input type="text" placeholder="Pesquisar conversa...">
+                                <input type="text" id="convo-search-input" placeholder="Pesquisar conversa..." oninput="appRouter.filterConversations(this.value)">
                             </div>
                             <div class="conversation-list" id="convo-list">
                                 <!-- Loaded dynamically -->
