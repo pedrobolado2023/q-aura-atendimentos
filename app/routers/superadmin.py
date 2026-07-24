@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
-from app.models import Tenant, User, Plan
+from app.models import Tenant, User, Plan, PricingConfig
 from app.schemas import (
     SuperadminTenantCreate,
     SuperadminTenantUpdate,
@@ -502,3 +502,103 @@ def superadmin_set_billing_mode(
     db.commit()
     return {"message": "Método de faturamento atualizado com sucesso.", "billing_mode": tenant.billing_mode}
 
+
+# ─── Pricing Config (Tabela de preços global) ────────────────────────────────
+
+from app.services.charge_service import _DEFAULT_RATES
+
+class PricingUpdateItem(BaseModel):
+    category: str
+    price_tenant: float
+    cost_meta: float
+    label: Optional[str] = None
+
+class PricingUpdateRequest(BaseModel):
+    items: List[PricingUpdateItem]
+
+
+def _ensure_pricing_defaults(db: Session):
+    """Inicializa a tabela de preços com os valores padrão se estiver vazia."""
+    existing = db.query(PricingConfig).count()
+    if existing == 0:
+        for cat, vals in _DEFAULT_RATES.items():
+            db.add(PricingConfig(
+                category=cat,
+                price_tenant=vals["price_tenant"],
+                cost_meta=vals["cost_meta"],
+                label=vals.get("label", cat.capitalize()),
+            ))
+        db.commit()
+
+
+@router.get("/pricing")
+def get_pricing(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """
+    Retorna a tabela de preços atual (visível somente ao Superadmin).
+    price_tenant = valor cobrado do cliente
+    cost_meta    = custo real da Meta (nunca exposto ao cliente)
+    """
+    _ensure_pricing_defaults(db)
+    rows = db.query(PricingConfig).order_by(PricingConfig.id).all()
+    return [
+        {
+            "id": row.id,
+            "category": row.category,
+            "label": row.label or row.category.capitalize(),
+            "price_tenant": float(row.price_tenant),
+            "cost_meta": float(row.cost_meta),
+            "margin": round(float(row.price_tenant) - float(row.cost_meta), 4),
+            "margin_pct": round(
+                ((float(row.price_tenant) - float(row.cost_meta)) / float(row.cost_meta) * 100)
+                if float(row.cost_meta) > 0 else 0,
+                1
+            ),
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        }
+        for row in rows
+    ]
+
+
+@router.put("/pricing")
+def update_pricing(
+    payload: PricingUpdateRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """
+    Atualiza os preços cobrados por categoria de conversa.
+    Somente o Superadmin pode alterar esses valores.
+    O cliente NUNCA tem acesso a este endpoint nem ao custo real da Meta.
+    """
+    _ensure_pricing_defaults(db)
+
+    updated = []
+    for item in payload.items:
+        if item.price_tenant < 0 or item.cost_meta < 0:
+            raise HTTPException(status_code=400, detail=f"Valores negativos não são permitidos para '{item.category}'.")
+        if item.price_tenant < item.cost_meta:
+            raise HTTPException(
+                status_code=400,
+                detail=f"O preço cobrado ({item.price_tenant}) não pode ser menor que o custo Meta ({item.cost_meta}) para '{item.category}'."
+            )
+
+        row = db.query(PricingConfig).filter(PricingConfig.category == item.category).first()
+        if row:
+            row.price_tenant = item.price_tenant
+            row.cost_meta = item.cost_meta
+            if item.label:
+                row.label = item.label
+        else:
+            db.add(PricingConfig(
+                category=item.category,
+                price_tenant=item.price_tenant,
+                cost_meta=item.cost_meta,
+                label=item.label or item.category.capitalize(),
+            ))
+        updated.append(item.category)
+
+    db.commit()
+    return {"message": f"Preços atualizados com sucesso para: {', '.join(updated)}.", "updated": updated}

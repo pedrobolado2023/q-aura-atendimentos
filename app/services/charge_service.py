@@ -1,26 +1,61 @@
 from decimal import Decimal
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from app.models import Tenant, BillingTransaction, Conversation, Message
+from app.models import Tenant, BillingTransaction, Conversation, Message, PricingConfig
 
-# Tarifas do Q-Aura (Custo Meta + Margem de Lucro)
-RATES = {
+# Valores-padrão hardcoded usados como fallback se a tabela estiver vazia
+_DEFAULT_RATES = {
     "marketing": {
-        "amount": Decimal("0.45"),
-        "cost_meta": Decimal("0.35"),
-        "description": "Conversa de Marketing iniciada (Meta Cloud API)"
+        "price_tenant": Decimal("0.45"),
+        "cost_meta":    Decimal("0.35"),
+        "label":        "Conversa de Marketing",
     },
     "utility": {
-        "amount": Decimal("0.15"),
-        "cost_meta": Decimal("0.08"),
-        "description": "Conversa de Utilidade iniciada (Meta Cloud API)"
+        "price_tenant": Decimal("0.15"),
+        "cost_meta":    Decimal("0.08"),
+        "label":        "Conversa de Utilidade",
     },
     "service": {
-        "amount": Decimal("0.25"),
-        "cost_meta": Decimal("0.16"),
-        "description": "Conversa de Serviço iniciada (Meta Cloud API)"
-    }
+        "price_tenant": Decimal("0.25"),
+        "cost_meta":    Decimal("0.16"),
+        "label":        "Conversa de Serviço",
+    },
 }
+
+
+def get_rates(db: Session) -> dict:
+    """
+    Carrega as tarifas de precificação do banco (tabela qa_pricing_config).
+    Se não houver registros, insere os valores padrão e retorna eles.
+    O campo price_tenant é o que o cliente vê; cost_meta fica oculto.
+    """
+    try:
+        rows = db.query(PricingConfig).all()
+
+        if not rows:
+            # Primeira execução: inicializa a tabela com os valores padrão
+            for cat, vals in _DEFAULT_RATES.items():
+                db.add(PricingConfig(
+                    category=cat,
+                    price_tenant=vals["price_tenant"],
+                    cost_meta=vals["cost_meta"],
+                    label=vals["label"],
+                ))
+            db.commit()
+            rows = db.query(PricingConfig).all()
+
+        return {
+            row.category: {
+                "price_tenant": Decimal(str(row.price_tenant)),
+                "cost_meta":    Decimal(str(row.cost_meta)),
+                "label":        row.label or row.category.capitalize(),
+            }
+            for row in rows
+        }
+    except Exception as e:
+        print(f"[get_rates] Erro ao carregar preços do banco, usando fallback: {e}")
+        return _DEFAULT_RATES
+
 
 def can_initiate_conversation(db: Session, tenant_id: str) -> bool:
     """
@@ -38,12 +73,9 @@ def can_initiate_conversation(db: Session, tenant_id: str) -> bool:
         mode = tenant.billing_mode or "prepaid"
 
         if mode == "prepaid":
-            # Se for pré-pago, precisa ter saldo maior que zero
             return balance > Decimal("0.00")
         else:
-            # Se for pós-pago, calcula o consumo do mês e valida se está dentro do limite
             first_day_of_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            
             try:
                 monthly_spend = db.query(BillingTransaction).filter(
                     BillingTransaction.tenant_id == tenant_id_str,
@@ -59,13 +91,15 @@ def can_initiate_conversation(db: Session, tenant_id: str) -> bool:
             return monthly_spend < postpaid_limit
     except Exception as e:
         print(f"[can_initiate_conversation] Error: {e}")
-        # Retorna True em caso de falha de leitura de saldo para não bloquear a operação por falha técnica
         return True
+
 
 def charge_tenant_conversation(db: Session, tenant_id: str, conversation_id: str, category: str, custom_description: str = None) -> bool:
     """
     Registra o débito de uma conversa no balance da empresa ou na fatura pós-paga.
-    Retorna True em caso de sucesso ou False se o débito falhar (falta de saldo).
+    Usa os preços definidos pelo Superadmin na tabela qa_pricing_config.
+    O campo amount é o preço que o cliente vê; cost_meta é o custo real da Meta.
+    Retorna True em caso de sucesso ou False se o débito falhar.
     """
     try:
         tenant_id_str = str(tenant_id)
@@ -73,31 +107,34 @@ def charge_tenant_conversation(db: Session, tenant_id: str, conversation_id: str
         if not tenant:
             return False
 
-        rate = RATES.get(category)
+        # Carrega tarifas atualizadas do banco
+        rates = get_rates(db)
+        rate = rates.get(category)
         if not rate:
             return False
 
-        amount = rate["amount"]
-        cost_meta = rate["cost_meta"]
-        description = custom_description or rate["description"]
+        amount    = rate["price_tenant"]   # valor cobrado do cliente
+        cost_meta = rate["cost_meta"]      # custo real da Meta (interno)
+        label     = rate.get("label", category.capitalize())
+        description = custom_description or f"{label} iniciada (Meta Cloud API)"
 
-        # 1. Valida se o cliente tem limite/saldo
+        # Valida se o cliente tem limite/saldo
         if not can_initiate_conversation(db, tenant_id_str):
             return False
 
-        # 2. Desconta o saldo em caso de pré-pago
+        # Desconta o saldo em caso de pré-pago
         mode = tenant.billing_mode or "prepaid"
         if mode == "prepaid":
             current_bal = Decimal(str(tenant.balance if tenant.balance is not None else 0.0))
             tenant.balance = current_bal - amount
 
-        # 3. Registra a transação no extrato financeiro
+        # Registra a transação no extrato financeiro
         transaction = BillingTransaction(
             tenant_id=tenant_id_str,
             conversation_id=str(conversation_id) if conversation_id else None,
             category=category,
-            amount=amount,
-            cost_meta=cost_meta,
+            amount=amount,        # o cliente vê este valor
+            cost_meta=cost_meta,  # custo real (oculto)
             description=description
         )
         db.add(transaction)
@@ -107,4 +144,3 @@ def charge_tenant_conversation(db: Session, tenant_id: str, conversation_id: str
         print(f"[charge_tenant_conversation] Error: {e}")
         db.rollback()
         return False
-

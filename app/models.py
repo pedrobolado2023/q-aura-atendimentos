@@ -252,4 +252,17 @@ class BillingTransaction(Base):
     tenant = relationship("Tenant")
 
 
-
+class PricingConfig(Base):
+    """
+    Tabela global de precificação controlada pelo Superadmin.
+    - price_tenant: valor cobrado do cliente (o que aparece no extrato dele)
+    - cost_meta:    custo real da Meta (invisível para o cliente)
+    Sem tenant_id — é uma configuração global da plataforma.
+    """
+    __tablename__ = "qa_pricing_config"
+    id       = Column(Integer, primary_key=True, autoincrement=True)
+    category = Column(String(50), unique=True, nullable=False)   # marketing | utility | service
+    price_tenant = Column(Numeric(10, 4), nullable=False, default=0.00)
+    cost_meta    = Column(Numeric(10, 4), nullable=False, default=0.00)
+    label        = Column(String(100))   # nome amigável para exibição
+    updated_at   = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

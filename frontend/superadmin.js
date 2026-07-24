@@ -157,6 +157,7 @@ class SuperadminRouter {
         if (target === "dashboard-view") this.loadDashboard();
         if (target === "tenants-view") this.loadTenants();
         if (target === "plans-view") this.loadPlans();
+        if (target === "pricing-view") this.loadPricing();
     }
 
     // Dashboard loader
@@ -548,6 +549,169 @@ class SuperadminRouter {
             this.showToast("Limite pós-pago atualizado com sucesso!");
             this.closeBillingModal();
             this.loadTenants();
+        }
+    }
+
+    // ─── PRICING MANAGEMENT ──────────────────────────────────────────
+    async loadPricing() {
+        const loadingEl = document.getElementById("pricing-loading");
+        const tableEl = document.getElementById("pricing-table");
+        const tbodyEl = document.getElementById("pricing-tbody");
+        const summaryEl = document.getElementById("pricing-summary");
+        const summaryContentEl = document.getElementById("pricing-summary-content");
+
+        if (loadingEl) loadingEl.style.display = "block";
+        if (tableEl) tableEl.style.display = "none";
+        if (summaryEl) summaryEl.style.display = "none";
+
+        const items = await this.request("/api/superadmin/pricing");
+        if (!items) return;
+
+        tbodyEl.innerHTML = "";
+        summaryContentEl.innerHTML = "";
+
+        items.forEach(item => {
+            const tr = document.createElement("tr");
+            tr.style.borderBottom = "1px solid var(--border-color)";
+            tr.dataset.category = item.category;
+
+            tr.innerHTML = `
+                <td style="padding: 16px; font-weight: 600; font-size: 14px;">
+                    <div>${item.label}</div>
+                    <span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">ID: ${item.category}</span>
+                </td>
+                <td style="padding: 16px; text-align: center;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+                        <span style="font-size: 13px; color: var(--text-muted);">R$</span>
+                        <input type="number" step="0.01" min="0" value="${item.cost_meta.toFixed(2)}" class="pricing-cost-meta" 
+                            style="width: 100px; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 6px; text-align: right; font-size: 13px; font-weight: 600; background: var(--bg-tertiary);"
+                            oninput="superadminRouter.recalculateRow(this)">
+                    </div>
+                </td>
+                <td style="padding: 16px; text-align: center;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+                        <span style="font-size: 13px; font-weight: 700; color: var(--color-brand);">R$</span>
+                        <input type="number" step="0.01" min="0" value="${item.price_tenant.toFixed(2)}" class="pricing-price-tenant" 
+                            style="width: 100px; padding: 6px 10px; border: 1.5px solid var(--color-brand); border-radius: 6px; text-align: right; font-size: 14px; font-weight: 700; color: var(--color-brand); background: #fff;"
+                            oninput="superadminRouter.recalculateRow(this)">
+                    </div>
+                </td>
+                <td style="padding: 16px; text-align: center; font-weight: 700; font-size: 14px; color: var(--color-success);" class="pricing-margin-cell">
+                    R$ ${item.margin.toFixed(2)}
+                </td>
+                <td style="padding: 16px; text-align: center;" class="pricing-margin-pct-cell">
+                    <span style="background: rgba(13,148,136,0.12); color: var(--color-success); border: 1px solid rgba(13,148,136,0.25); padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 700;">
+                        +${item.margin_pct}%
+                    </span>
+                </td>
+            `;
+            tbodyEl.appendChild(tr);
+
+            // Fill summary item
+            const sumCard = document.createElement("div");
+            sumCard.style.padding = "10px 12px";
+            sumCard.style.background = "#fff";
+            sumCard.style.borderRadius = "8px";
+            sumCard.style.border = "1px solid rgba(13,148,136,0.2)";
+            sumCard.id = `summary-card-${item.category}`;
+            sumCard.innerHTML = `
+                <span style="font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">${item.label}</span>
+                <div style="font-size: 15px; font-weight: 700; color: var(--color-success); margin-top: 2px;">
+                    Lucro: R$ ${item.margin.toFixed(2)} <span style="font-size: 11px; font-weight: 600;">(${item.margin_pct}%)</span>
+                </div>
+            `;
+            summaryContentEl.appendChild(sumCard);
+        });
+
+        if (loadingEl) loadingEl.style.display = "none";
+        if (tableEl) tableEl.style.display = "table";
+        if (summaryEl) summaryEl.style.display = "block";
+    }
+
+    recalculateRow(inputEl) {
+        const tr = inputEl.closest("tr");
+        const category = tr.dataset.category;
+
+        const costMetaInput = tr.querySelector(".pricing-cost-meta");
+        const priceTenantInput = tr.querySelector(".pricing-price-tenant");
+        const marginCell = tr.querySelector(".pricing-margin-cell");
+        const marginPctCell = tr.querySelector(".pricing-margin-pct-cell");
+
+        const costMeta = parseFloat(costMetaInput.value) || 0;
+        const priceTenant = parseFloat(priceTenantInput.value) || 0;
+
+        const margin = priceTenant - costMeta;
+        const marginPct = costMeta > 0 ? ((margin / costMeta) * 100).toFixed(1) : "0.0";
+
+        marginCell.innerText = `R$ ${margin.toFixed(2)}`;
+        if (margin < 0) {
+            marginCell.style.color = "var(--color-danger)";
+            marginPctCell.innerHTML = `
+                <span style="background: rgba(225,29,72,0.12); color: var(--color-danger); border: 1px solid rgba(225,29,72,0.25); padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 700;">
+                    ${marginPct}%
+                </span>
+            `;
+        } else {
+            marginCell.style.color = "var(--color-success)";
+            marginPctCell.innerHTML = `
+                <span style="background: rgba(13,148,136,0.12); color: var(--color-success); border: 1px solid rgba(13,148,136,0.25); padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 700;">
+                    +${marginPct}%
+                </span>
+            `;
+        }
+
+        // Update summary card
+        const sumCard = document.getElementById(`summary-card-${category}`);
+        if (sumCard) {
+            sumCard.querySelector("div").innerHTML = `
+                Lucro: R$ ${margin.toFixed(2)} <span style="font-size: 11px; font-weight: 600;">(${marginPct}%)</span>
+            `;
+        }
+    }
+
+    async savePricing() {
+        const rows = document.querySelectorAll("#pricing-tbody tr");
+        const items = [];
+
+        for (const tr of rows) {
+            const category = tr.dataset.category;
+            const costMeta = parseFloat(tr.querySelector(".pricing-cost-meta").value);
+            const priceTenant = parseFloat(tr.querySelector(".pricing-price-tenant").value);
+            const label = tr.querySelector("td div").innerText.trim();
+
+            if (isNaN(costMeta) || isNaN(priceTenant)) {
+                this.showToast("Preencha valores numéricos válidos.", "error");
+                return;
+            }
+            if (priceTenant < costMeta) {
+                this.showToast(`O preço cobrado (R$ ${priceTenant.toFixed(2)}) não pode ser menor que o custo Meta (R$ ${costMeta.toFixed(2)}) na categoria ${label}.`, "error");
+                return;
+            }
+
+            items.push({
+                category,
+                price_tenant: priceTenant,
+                cost_meta: costMeta,
+                label
+            });
+        }
+
+        const btnSave = document.getElementById("btn-save-pricing");
+        if (btnSave) {
+            btnSave.disabled = true;
+            btnSave.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Salvando...`;
+        }
+
+        const res = await this.request("/api/superadmin/pricing", "PUT", { items });
+
+        if (btnSave) {
+            btnSave.disabled = false;
+            btnSave.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Salvar Preços`;
+        }
+
+        if (res) {
+            this.showToast("Tabela de precificação salva com sucesso!");
+            this.loadPricing();
         }
     }
 }
