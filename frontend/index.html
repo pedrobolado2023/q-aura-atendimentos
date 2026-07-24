@@ -179,6 +179,12 @@
                     <a href="#" class="menu-item admin-manager-only" data-target="settings-view" data-module="inbox" onclick="appRouter.selectTab(event)">
                         <i class="fa-solid fa-sliders"></i> <span>Configurações</span>
                     </a>
+                    <a href="#" class="menu-item admin-manager-only" data-target="integrations-view" data-module="integrations" onclick="appRouter.selectTab(event)">
+                        <i class="fa-solid fa-plug-circle-bolt"></i> <span>Integrações</span>
+                    </a>
+                    <a href="#" class="menu-item admin-manager-only" data-target="email-view" data-module="email" onclick="appRouter.selectTab(event)">
+                        <i class="fa-solid fa-envelope-open-text"></i> <span>E-mail</span>
+                    </a>
 
                 </nav>
                 <div class="sidebar-footer">
@@ -981,6 +987,233 @@
         </div>
     </div>
     <div id="toast-container" class="toast-container"></div>
+    <!-- ===== MODAL: Em Desenvolvimento ===== -->
+    <div id="dev-modal-overlay" class="modal-overlay" onclick="uiHelpers.closeDevModal()">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="modal-icon">
+                    <i class="fa-solid fa-code-branch"></i>
+                </div>
+                <button class="modal-close" onclick="uiHelpers.closeDevModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-badge">🚧 Em Desenvolvimento</div>
+                <h2 id="dev-modal-title">Funcionalidade em Desenvolvimento</h2>
+                <p id="dev-modal-description">Esta funcionalidade está sendo desenvolvida e em breve estará disponível.</p>
+                <div class="modal-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 65%"></div>
+                    </div>
+                    <span class="progress-label">65% concluído</span>
+                </div>
+                <div class="modal-timeline">
+                    <div class="timeline-item done"><i class="fa-solid fa-check"></i><span>Arquitetura definida</span></div>
+                    <div class="timeline-item done"><i class="fa-solid fa-check"></i><span>Integração com 360Dialog iniciada</span></div>
+                    <div class="timeline-item active"><i class="fa-solid fa-spinner fa-spin"></i><span>Embedded Signup Flow</span></div>
+                    <div class="timeline-item pending"><i class="fa-regular fa-circle"></i><span>Testes e validação</span></div>
+                    <div class="timeline-item pending"><i class="fa-regular fa-circle"></i><span>Lançamento para clientes</span></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="uiHelpers.closeDevModal()">Fechar</button>
+                <button class="btn btn-primary" onclick="uiHelpers.closeDevModal()"><i class="fa-solid fa-bell"></i> Quero ser notificado</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== INTEGRATIONS VIEW ===== -->
+    <!-- (Renderizado como workspace-view via JS, inserido aqui como template inline) -->
+    <script id="tpl-integrations-view" type="text/template">
+    <header class="workspace-header">
+        <h1>Integrações de Canal</h1>
+        <span class="subtitle">Conecte sua plataforma a provedores oficiais de mensageria</span>
+    </header>
+    <div class="integrations-grid">
+        <div class="integration-card active-integration">
+            <div class="integration-card-header">
+                <div class="integration-icon" style="background:rgba(24,119,242,0.15);color:#1877f2;"><i class="fa-brands fa-meta"></i></div>
+                <div><h3>Meta Cloud API</h3><p class="settings-desc" style="margin:0">Conexão direta com o painel Meta for Developers</p></div>
+                <span class="integration-badge badge-active">Ativo</span>
+            </div>
+            <p class="integration-desc">Você gerencia suas próprias credenciais (Phone Number ID, WABA ID, Token) diretamente no painel da Meta. Ideal para quem já tem acesso ao Meta Business.</p>
+            <div class="integration-footer">
+                <button class="btn btn-primary btn-sm" onclick="appRouter.selectTabByName('settings-view')"><i class="fa-solid fa-sliders"></i> Gerenciar Credenciais</button>
+            </div>
+        </div>
+        <div class="integration-card standby-integration">
+            <div class="integration-card-header">
+                <div class="integration-icon" style="background:rgba(99,102,241,0.15);color:var(--color-brand);"><i class="fa-solid fa-network-wired"></i></div>
+                <div><h3>BSP 360Dialog <span class="badge-coming-soon">Em Breve</span></h3><p class="settings-desc" style="margin:0">Acesso à API Oficial via provedor parceiro certificado</p></div>
+                <span class="integration-badge badge-standby">Standby</span>
+            </div>
+            <p class="integration-desc">Com o BSP 360Dialog, seus clientes se cadastram diretamente na plataforma sem precisar acessar o Meta for Developers. O número é aprovado e conectado automaticamente via <strong>Embedded Signup</strong>.</p>
+            <div class="integration-features">
+                <div class="feature-item"><i class="fa-solid fa-check" style="color:var(--color-success)"></i> Auto-registro sem acesso ao Meta</div>
+                <div class="feature-item"><i class="fa-solid fa-check" style="color:var(--color-success)"></i> API Oficial com SLA garantido</div>
+                <div class="feature-item"><i class="fa-solid fa-check" style="color:var(--color-success)"></i> Gerenciamento multi-tenant centralizado</div>
+                <div class="feature-item"><i class="fa-solid fa-clock" style="color:var(--color-warning)"></i> Revenue share sobre mensagens</div>
+            </div>
+            <div class="integration-footer">
+                <button class="btn btn-secondary btn-sm" onclick="uiHelpers.showDevModal('BSP 360Dialog — Embedded Signup','Estamos finalizando a integração com o 360Dialog como Business Solution Provider (BSP) da Meta. Em breve, seus clientes poderão conectar seus números de WhatsApp diretamente pela plataforma, sem precisar acessar o Meta for Developers.')"><i class="fa-solid fa-circle-info"></i> Saiba mais / Ativar</button>
+            </div>
+        </div>
+        <div class="integration-card planned-integration">
+            <div class="integration-card-header">
+                <div class="integration-icon" style="background:rgba(16,185,129,0.1);color:var(--color-success);"><i class="fa-solid fa-mobile-screen-button"></i></div>
+                <div><h3>SMS Gateway <span class="badge-coming-soon">Planejado</span></h3><p class="settings-desc" style="margin:0">Envio de SMS transacional e marketing</p></div>
+                <span class="integration-badge badge-planned">Planejado</span>
+            </div>
+            <p class="integration-desc">Canal de SMS para confirmações de reserva, códigos de verificação e notificações urgentes. Integração com provedores como Twilio e Zenvia.</p>
+            <div class="integration-footer">
+                <button class="btn btn-secondary btn-sm" disabled><i class="fa-solid fa-lock"></i> Em breve</button>
+            </div>
+        </div>
+    </div>
+    </script>
+
+    <!-- ===== EMAIL VIEW ===== -->
+    <script id="tpl-email-view" type="text/template">
+    <header class="workspace-header">
+        <h1>Central de E-mail</h1>
+        <span class="subtitle">Marketing, notificações de sistema e alertas automáticos</span>
+    </header>
+    <div class="email-tabs">
+        <button class="email-tab-btn active" data-email-tab="email-config-tab" onclick="uiHelpers.switchEmailTab(event)"><i class="fa-solid fa-gear"></i> Configuração SMTP</button>
+        <button class="email-tab-btn" data-email-tab="email-marketing-tab" onclick="uiHelpers.switchEmailTab(event)"><i class="fa-solid fa-bullhorn"></i> E-mail Marketing</button>
+        <button class="email-tab-btn" data-email-tab="email-notifications-tab" onclick="uiHelpers.switchEmailTab(event)"><i class="fa-solid fa-bell"></i> Notificações do Sistema</button>
+        <button class="email-tab-btn" data-email-tab="email-logs-tab" onclick="uiHelpers.switchEmailTab(event)"><i class="fa-solid fa-list-check"></i> Histórico de Envios</button>
+    </div>
+    <div id="email-config-tab" class="email-tab-content active">
+        <div class="email-section-grid">
+            <div class="settings-card">
+                <h3><i class="fa-solid fa-server" style="color:var(--color-brand);margin-right:8px"></i>Configuração do Servidor SMTP</h3>
+                <p class="settings-desc">Configure seu servidor de e-mail para envio de campanhas e notificações automáticas.</p>
+                <div class="input-group"><label>Provedor</label><select id="smtp-provider" class="settings-select" onchange="uiHelpers.onSmtpProviderChange()"><option value="custom">Servidor Customizado (SMTP)</option><option value="sendgrid">SendGrid</option><option value="mailgun">Mailgun</option><option value="ses">Amazon SES</option><option value="resend">Resend.dev</option></select></div>
+                <div class="input-group"><label>Host SMTP</label><input type="text" id="smtp-host" placeholder="Ex: smtp.sendgrid.net" class="settings-input"></div>
+                <div class="smtp-row">
+                    <div class="input-group"><label>Porta</label><input type="number" id="smtp-port" value="587" class="settings-input"></div>
+                    <div class="input-group"><label>Segurança</label><select id="smtp-security" class="settings-select"><option value="tls">TLS</option><option value="ssl">SSL</option><option value="none">Nenhuma</option></select></div>
+                </div>
+                <div class="input-group"><label>Usuário / API Key</label><input type="text" id="smtp-user" placeholder="apikey ou email@dominio.com" class="settings-input"></div>
+                <div class="input-group"><label>Senha / Secret</label><input type="password" id="smtp-pass" placeholder="••••••••••••" class="settings-input"></div>
+                <div class="smtp-row">
+                    <div class="input-group"><label>E-mail Remetente</label><input type="email" id="smtp-from-email" placeholder="noreply@seuhotel.com" class="settings-input"></div>
+                    <div class="input-group"><label>Nome Remetente</label><input type="text" id="smtp-from-name" placeholder="Hotel Q-aura" class="settings-input"></div>
+                </div>
+                <div class="email-action-row">
+                    <button class="btn btn-secondary btn-sm" onclick="uiHelpers.testSmtpConnection()"><i class="fa-solid fa-vial"></i> Testar</button>
+                    <button class="btn btn-primary" onclick="uiHelpers.saveSmtpConfig()"><i class="fa-solid fa-floppy-disk"></i> Salvar</button>
+                </div>
+            </div>
+            <div class="settings-card info-card">
+                <h3><i class="fa-solid fa-circle-check" style="color:var(--color-success);margin-right:8px"></i>Provedores Suportados</h3>
+                <div class="provider-list">
+                    <div class="provider-item"><i class="fa-solid fa-check" style="color:var(--color-success)"></i><span><strong>SendGrid</strong> — Até 100/dia grátis</span></div>
+                    <div class="provider-item"><i class="fa-solid fa-check" style="color:var(--color-success)"></i><span><strong>Mailgun</strong> — 5.000/mês grátis</span></div>
+                    <div class="provider-item"><i class="fa-solid fa-check" style="color:var(--color-success)"></i><span><strong>Amazon SES</strong> — US$ 0,10/1.000</span></div>
+                    <div class="provider-item"><i class="fa-solid fa-check" style="color:var(--color-success)"></i><span><strong>Resend.dev</strong> — 3.000/mês grátis</span></div>
+                    <div class="provider-item"><i class="fa-solid fa-check" style="color:var(--color-success)"></i><span><strong>SMTP Custom</strong> — Gmail, Outlook...</span></div>
+                </div>
+                <div style="margin-top:20px;padding:14px;background:var(--bg-tertiary);border-radius:var(--radius-md);border:1px solid var(--border-color);">
+                    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;"><i class="fa-solid fa-lightbulb" style="color:var(--color-warning)"></i> <strong>Status da Conexão</strong></p>
+                    <div class="smtp-status" id="smtp-status"><span class="status-dot status-unconfigured"></span><span style="font-size:13px;">Não configurado</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="email-marketing-tab" class="email-tab-content">
+        <div class="email-marketing-layout">
+            <div class="settings-card" style="flex:1">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                    <h3><i class="fa-solid fa-bullhorn" style="color:var(--color-brand);margin-right:8px"></i>Campanhas de E-mail</h3>
+                    <button class="btn btn-primary btn-sm" onclick="uiHelpers.openNewEmailCampaign()"><i class="fa-solid fa-plus"></i> Nova Campanha</button>
+                </div>
+                <div class="campaign-empty-state" id="email-campaign-list">
+                    <div class="empty-state-icon"><i class="fa-regular fa-envelope"></i></div>
+                    <h4>Nenhuma campanha criada</h4>
+                    <p>Crie sua primeira campanha de e-mail marketing para engajar seus hóspedes.</p>
+                    <button class="btn btn-primary btn-sm" onclick="uiHelpers.openNewEmailCampaign()"><i class="fa-solid fa-plus"></i> Criar Campanha</button>
+                </div>
+            </div>
+            <div class="settings-card email-builder" id="email-campaign-builder" style="display:none;flex:1.2;flex-direction:column">
+                <h3><i class="fa-solid fa-pencil" style="color:var(--color-brand);margin-right:8px"></i>Editor de Campanha</h3>
+                <div class="input-group"><label>Nome da Campanha</label><input type="text" id="email-campaign-name" placeholder="Ex: Promoção Julho 2026" class="settings-input"></div>
+                <div class="input-group"><label>Assunto</label><input type="text" id="email-campaign-subject" placeholder="Ex: 🌴 Ofertas Exclusivas para Você!" class="settings-input"></div>
+                <div class="input-group"><label>Lista de Destinatários</label><select id="email-campaign-list-select" class="settings-select"><option value="all">Todos os Hóspedes</option><option value="gold">Membros Gold</option><option value="leads">Leads</option><option value="inactive">Inativos (+6 meses)</option></select></div>
+                <div class="input-group"><label>Corpo do E-mail (HTML ou Texto)</label><textarea id="email-campaign-body" rows="8" class="settings-input" placeholder="&lt;h1&gt;Olá, {{nome}}!&lt;/h1&gt;"></textarea></div>
+                <div class="input-group"><label>Agendamento</label><select id="email-campaign-schedule" class="settings-select"><option value="now">Enviar imediatamente</option><option value="scheduled">Agendar para data específica</option></select></div>
+                <div class="email-action-row">
+                    <button class="btn btn-secondary btn-sm" onclick="uiHelpers.previewEmailCampaign()"><i class="fa-regular fa-eye"></i> Preview</button>
+                    <button class="btn btn-primary" onclick="uiHelpers.saveEmailCampaign()"><i class="fa-solid fa-paper-plane"></i> Salvar e Enviar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="email-notifications-tab" class="email-tab-content">
+        <div class="notifications-grid">
+            <div class="notification-card">
+                <div class="notification-card-header">
+                    <div class="notification-icon" style="background:rgba(245,158,11,0.15);color:var(--color-warning);"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                    <div><h4>Saldo Insuficiente</h4><p class="settings-desc" style="margin:0">Alerta quando o saldo de mensagens estiver acabando</p></div>
+                    <label class="toggle-switch"><input type="checkbox" id="notif-balance" checked><span class="toggle-slider"></span></label>
+                </div>
+                <div class="notification-config">
+                    <div class="smtp-row">
+                        <div class="input-group"><label>Notificar abaixo de</label><input type="number" id="notif-balance-threshold" value="50" class="settings-input"></div>
+                        <div class="input-group"><label>Enviar para</label><input type="email" id="notif-balance-email" placeholder="admin@seuhotel.com" class="settings-input"></div>
+                    </div>
+                    <div class="input-group"><label>Assunto</label><input type="text" id="notif-balance-subject" value="⚠️ Saldo de mensagens Q-aura quase esgotado" class="settings-input"></div>
+                    <div class="notification-preview"><p class="notification-preview-label">Preview da mensagem</p><div class="notification-preview-body">Olá, <strong>{{nome_hotel}}</strong>!<br><br>Seu saldo está em <strong>{{saldo_atual}} mensagens</strong>, abaixo de <strong>{{limite}}</strong>.<br><br>Recarregue agora: <span style="color:var(--color-brand)">acessar painel →</span></div></div>
+                </div>
+            </div>
+            <div class="notification-card">
+                <div class="notification-card-header">
+                    <div class="notification-icon" style="background:rgba(239,68,68,0.15);color:var(--color-danger);"><i class="fa-solid fa-calendar-xmark"></i></div>
+                    <div><h4>Mensalidade Vencendo</h4><p class="settings-desc" style="margin:0">Alerta quando a assinatura está próxima do vencimento</p></div>
+                    <label class="toggle-switch"><input type="checkbox" id="notif-subscription" checked><span class="toggle-slider"></span></label>
+                </div>
+                <div class="notification-config">
+                    <div class="smtp-row">
+                        <div class="input-group"><label>Avisar com X dias antes</label><select id="notif-sub-days" class="settings-select"><option value="7">7 dias</option><option value="5">5 dias</option><option value="3" selected>3 dias</option><option value="1">1 dia</option></select></div>
+                        <div class="input-group"><label>Enviar para</label><input type="email" id="notif-sub-email" placeholder="financeiro@seuhotel.com" class="settings-input"></div>
+                    </div>
+                    <div class="input-group"><label>Assunto</label><input type="text" id="notif-sub-subject" value="🔔 Sua assinatura Q-aura vence em breve" class="settings-input"></div>
+                    <div class="notification-preview"><p class="notification-preview-label">Preview da mensagem</p><div class="notification-preview-body">Olá, <strong>{{nome_hotel}}</strong>!<br><br>Sua assinatura <strong>{{nome_plano}}</strong> vence em <strong>{{dias}} dias</strong> ({{data_vencimento}}).<br><br>Renove agora: <span style="color:var(--color-brand)">renovar assinatura →</span></div></div>
+                </div>
+            </div>
+            <div class="notification-card">
+                <div class="notification-card-header">
+                    <div class="notification-icon" style="background:rgba(16,185,129,0.15);color:var(--color-success);"><i class="fa-solid fa-user-plus"></i></div>
+                    <div><h4>Boas-vindas ao Novo Cliente</h4><p class="settings-desc" style="margin:0">E-mail automático de boas-vindas após onboarding</p></div>
+                    <label class="toggle-switch"><input type="checkbox" id="notif-welcome" checked><span class="toggle-slider"></span></label>
+                </div>
+                <div class="notification-config">
+                    <div class="input-group"><label>Assunto</label><input type="text" id="notif-welcome-subject" value="🎉 Bem-vindo ao Q-aura! Seu hotel está pronto para decolar." class="settings-input"></div>
+                    <div class="notification-preview"><p class="notification-preview-label">Preview da mensagem</p><div class="notification-preview-body">Olá, <strong>{{nome_hotel}}</strong>!<br><br>Sua conta foi criada com sucesso. Configure suas credenciais Meta para começar a receber mensagens dos seus hóspedes em tempo real.<br><br><span style="color:var(--color-brand)">Acessar painel de configuração →</span></div></div>
+                </div>
+            </div>
+            <div class="notification-card">
+                <div class="notification-card-header">
+                    <div class="notification-icon" style="background:rgba(239,68,68,0.15);color:var(--color-danger);"><i class="fa-solid fa-circle-pause"></i></div>
+                    <div><h4>Conta Suspensa</h4><p class="settings-desc" style="margin:0">Notifica o cliente quando sua conta for suspensa</p></div>
+                    <label class="toggle-switch"><input type="checkbox" id="notif-suspended" checked><span class="toggle-slider"></span></label>
+                </div>
+                <div class="notification-config">
+                    <div class="input-group"><label>Assunto</label><input type="text" id="notif-suspended-subject" value="🚨 Sua conta Q-aura foi suspensa temporariamente" class="settings-input"></div>
+                    <div class="notification-preview"><p class="notification-preview-label">Preview da mensagem</p><div class="notification-preview-body">Olá, <strong>{{nome_hotel}}</strong>!<br><br>Sua conta foi suspensa por <strong>{{motivo}}</strong>. Para reativar, entre em contato com nosso suporte.<br><br><span style="color:var(--color-brand)">Falar com suporte →</span></div></div>
+                </div>
+            </div>
+        </div>
+        <div style="margin-top:20px;text-align:right;"><button class="btn btn-primary" onclick="uiHelpers.saveNotificationSettings()"><i class="fa-solid fa-floppy-disk"></i> Salvar Todas as Configurações</button></div>
+    </div>
+    <div id="email-logs-tab" class="email-tab-content">
+        <div class="settings-card">
+            <h3><i class="fa-solid fa-list-check" style="color:var(--color-brand);margin-right:8px"></i>Histórico de Envios de E-mail</h3>
+            <div class="email-log-empty"><div class="empty-state-icon"><i class="fa-solid fa-inbox"></i></div><h4>Nenhum envio registrado</h4><p>Os logs de envio aparecerão aqui após a configuração do SMTP e o primeiro disparo.</p></div>
+        </div>
+    </div>
+    </script>
+
     <script src="app.js?v=1.3.2"></script>
 </body>
 </html>

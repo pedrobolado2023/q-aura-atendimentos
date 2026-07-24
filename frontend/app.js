@@ -2539,3 +2539,168 @@ if (btnBillingRecharge) {
 window.appRouter = appRouter;
 appRouter.init();
 
+// ============================================================
+// Helper: Navegar para tab por nome (usado nos cards de integração)
+// ============================================================
+appRouter.selectTabByName = function(viewName) {
+    document.querySelectorAll(".menu-item").forEach(i => i.classList.remove("active"));
+    const target = document.querySelector(`[data-target="${viewName}"]`);
+    if (target) target.classList.add("active");
+    document.querySelectorAll(".workspace-view").forEach(v => v.classList.remove("active"));
+    const view = document.getElementById(viewName);
+    if (view) view.classList.add("active");
+    if (viewName === "settings-view") appRouter.loadSettings();
+};
+
+// ============================================================
+// Renderização de views a partir de <script type="text/template">
+// ============================================================
+function renderTemplateView(templateId, viewId) {
+    let view = document.getElementById(viewId);
+    if (!view) {
+        const tpl = document.getElementById(templateId);
+        if (!tpl) return;
+        view = document.createElement("div");
+        view.id = viewId;
+        view.className = "workspace-view";
+        view.innerHTML = tpl.innerHTML;
+        document.querySelector("main.workspace").appendChild(view);
+    }
+    document.querySelectorAll(".workspace-view").forEach(v => v.classList.remove("active"));
+    view.classList.add("active");
+}
+
+// Patch: intercept selectTab para views de template
+const _origSelectTab = appRouter.selectTab.bind(appRouter);
+appRouter.selectTab = function(event) {
+    const target = event.currentTarget.getAttribute("data-target");
+    if (target === "integrations-view") {
+        event.preventDefault();
+        document.querySelectorAll(".menu-item").forEach(i => i.classList.remove("active"));
+        event.currentTarget.classList.add("active");
+        renderTemplateView("tpl-integrations-view", "integrations-view");
+        return;
+    }
+    if (target === "email-view") {
+        event.preventDefault();
+        document.querySelectorAll(".menu-item").forEach(i => i.classList.remove("active"));
+        event.currentTarget.classList.add("active");
+        renderTemplateView("tpl-email-view", "email-view");
+        return;
+    }
+    _origSelectTab(event);
+};
+
+// ============================================================
+// UI Helpers — Modal, Email tabs, SMTP, Notifications
+// ============================================================
+const uiHelpers = {
+
+    // --- Modal "Em Desenvolvimento" ---
+    showDevModal(title, description) {
+        document.getElementById("dev-modal-title").innerText = title;
+        document.getElementById("dev-modal-description").innerText = description;
+        document.getElementById("dev-modal-overlay").classList.add("active");
+    },
+    closeDevModal() {
+        document.getElementById("dev-modal-overlay").classList.remove("active");
+    },
+
+    // --- Email Sub-tabs ---
+    switchEmailTab(event) {
+        const targetTabId = event.currentTarget.getAttribute("data-email-tab");
+        document.querySelectorAll(".email-tab-btn").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".email-tab-content").forEach(c => c.classList.remove("active"));
+        event.currentTarget.classList.add("active");
+        const tab = document.getElementById(targetTabId);
+        if (tab) tab.classList.add("active");
+    },
+
+    // --- SMTP ---
+    onSmtpProviderChange() {
+        const provider = document.getElementById("smtp-provider")?.value;
+        const presets = {
+            sendgrid: { host: "smtp.sendgrid.net",                      port: 587 },
+            mailgun:  { host: "smtp.mailgun.org",                       port: 587 },
+            ses:      { host: "email-smtp.us-east-1.amazonaws.com",     port: 587 },
+            resend:   { host: "smtp.resend.com",                        port: 587 },
+            custom:   { host: "",                                        port: 587 },
+        };
+        const p = presets[provider] || presets.custom;
+        const h = document.getElementById("smtp-host");
+        const po = document.getElementById("smtp-port");
+        if (h) h.value = p.host;
+        if (po) po.value = p.port;
+    },
+
+    testSmtpConnection() {
+        // TODO: POST /api/email/test-smtp
+        const el = document.getElementById("smtp-status");
+        if (!el) return;
+        el.innerHTML = `<span class="status-dot" style="background:var(--color-warning);"></span><span style="font-size:13px;">Testando conexão...</span>`;
+        setTimeout(() => {
+            el.innerHTML = `<span class="status-dot status-unconfigured"></span><span style="font-size:13px;">Configure o SMTP para testar</span>`;
+        }, 2000);
+    },
+
+    saveSmtpConfig() {
+        // TODO: POST /api/email/smtp-config
+        const config = {
+            provider:   document.getElementById("smtp-provider")?.value,
+            host:       document.getElementById("smtp-host")?.value,
+            port:       document.getElementById("smtp-port")?.value,
+            security:   document.getElementById("smtp-security")?.value,
+            user:       document.getElementById("smtp-user")?.value,
+            from_email: document.getElementById("smtp-from-email")?.value,
+            from_name:  document.getElementById("smtp-from-name")?.value,
+        };
+        console.log("[SMTP Config - Pendente Backend]", config);
+        showToast("Configuração SMTP salva! Integração com backend em breve.", "success");
+    },
+
+    // --- E-mail Marketing ---
+    openNewEmailCampaign() {
+        const list = document.getElementById("email-campaign-list");
+        const builder = document.getElementById("email-campaign-builder");
+        if (list) list.style.display = "none";
+        if (builder) { builder.style.display = "flex"; builder.style.flexDirection = "column"; }
+    },
+
+    previewEmailCampaign() {
+        const subject = document.getElementById("email-campaign-subject")?.value;
+        const body = document.getElementById("email-campaign-body")?.value;
+        if (!subject || !body) { showToast("Preencha o assunto e o corpo do e-mail.", "error"); return; }
+        alert(`📧 Preview:\n\nAssunto: ${subject}\n\nCorpo:\n${body.substring(0, 300)}...`);
+    },
+
+    saveEmailCampaign() {
+        // TODO: POST /api/email/campaigns
+        const campaign = {
+            name:           document.getElementById("email-campaign-name")?.value,
+            subject:        document.getElementById("email-campaign-subject")?.value,
+            recipient_list: document.getElementById("email-campaign-list-select")?.value,
+            body:           document.getElementById("email-campaign-body")?.value,
+            schedule:       document.getElementById("email-campaign-schedule")?.value,
+        };
+        if (!campaign.name || !campaign.subject || !campaign.body) {
+            showToast("Preencha todos os campos obrigatórios.", "error"); return;
+        }
+        console.log("[Email Campaign - Pendente Backend]", campaign);
+        showToast("Campanha salva! Envio via SMTP será integrado em breve.", "success");
+    },
+
+    // --- Notificações do Sistema ---
+    saveNotificationSettings() {
+        // TODO: POST /api/email/notification-settings
+        const settings = {
+            balance:      { enabled: document.getElementById("notif-balance")?.checked,      threshold: document.getElementById("notif-balance-threshold")?.value, email: document.getElementById("notif-balance-email")?.value,  subject: document.getElementById("notif-balance-subject")?.value },
+            subscription: { enabled: document.getElementById("notif-subscription")?.checked, days_before: document.getElementById("notif-sub-days")?.value,        email: document.getElementById("notif-sub-email")?.value,       subject: document.getElementById("notif-sub-subject")?.value },
+            welcome:      { enabled: document.getElementById("notif-welcome")?.checked,      subject: document.getElementById("notif-welcome-subject")?.value },
+            suspended:    { enabled: document.getElementById("notif-suspended")?.checked,    subject: document.getElementById("notif-suspended-subject")?.value },
+        };
+        console.log("[Notification Settings - Pendente Backend]", settings);
+        showToast("Configurações de notificação salvas com sucesso!", "success");
+    }
+};
+
+window.uiHelpers = uiHelpers;
