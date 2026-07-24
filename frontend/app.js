@@ -490,15 +490,15 @@ const appRouter = {
             if (convo) {
                 const name = (convo.contact && convo.contact.name) ? convo.contact.name.toLowerCase() : "";
                 const phone = (convo.contact && convo.contact.phone_number) ? convo.contact.phone_number.toLowerCase() : "";
-                const lastMsg = (convo.last_message_body) ? convo.last_message_body.toLowerCase() : "";
 
-                if (name.includes(term) || phone.includes(term) || lastMsg.includes(term)) {
+                if (name.includes(term) || phone.includes(term)) {
                     match = true;
                 }
             } else {
-                // Fallback via texto do elemento HTML
-                const text = item.innerText.toLowerCase();
-                if (text.includes(term)) match = true;
+                // Fallback via cabeçalho do elemento (somente nome do contato)
+                const titleEl = item.querySelector("h4");
+                const nameText = titleEl ? titleEl.innerText.toLowerCase() : "";
+                if (nameText.includes(term)) match = true;
             }
 
             if (match) {
