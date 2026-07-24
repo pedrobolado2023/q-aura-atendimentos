@@ -2821,6 +2821,7 @@ const botFlowBuilder = {
     nodes: [],
     connections: [],
     selectedNodeId: null,
+    connectingFromNodeId: null,
     nextId: 1,
 
     init() {
@@ -2836,10 +2837,10 @@ const botFlowBuilder = {
                 this.connections = config.flow_data.connections || [];
                 this.nextId = Math.max(...this.nodes.map(n => parseInt(n.id) || 0), 0) + 1;
             } else {
-                // Initialize default flow
+                // Default starter nodes
                 this.nodes = [
                     { id: "1", type: "start", title: "Início", x: 60, y: 100, content: "Cliente envia primeira mensagem" },
-                    { id: "2", type: "text", title: "Mensagem de Boas-Vindas", x: 320, y: 100, content: config ? config.welcome_message : "Olá! Seja bem-vindo ao nosso atendimento." }
+                    { id: "2", type: "text", title: "Mensagem de Boas-Vindas", x: 320, y: 100, content: (config && config.welcome_message) ? config.welcome_message : "Olá! Seja bem-vindo ao nosso atendimento." }
                 ];
                 this.connections = [{ from: "1", to: "2" }];
                 this.nextId = 3;
@@ -2907,8 +2908,12 @@ const botFlowBuilder = {
                 <label style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Conteúdo / Mensagem</label>
                 <textarea id="insp-content-input" rows="5" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-primary);color:var(--text-primary);font-size:13px;" oninput="botFlowBuilder.updateNodeProp('${id}', 'content', this.value)">${node.content || ""}</textarea>
             </div>
+            <div style="margin-top:16px;padding:10px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);border-radius:6px;font-size:12px;color:var(--text-secondary);">
+                <i class="fa-solid fa-circle-info" style="color:var(--color-brand);margin-right:4px;"></i>
+                Clique no bolinha inferior de saída e depois na bolinha superior de outro bloco para ligar.
+            </div>
             ${node.type !== "start" ? `
-            <button class="btn btn-secondary btn-sm" style="margin-top:20px;color:#ef4444;border-color:#ef4444;" onclick="botFlowBuilder.deleteNode('${id}')">
+            <button class="btn btn-secondary btn-sm" style="margin-top:20px;color:#ef4444;border-color:#ef4444;width:100%;" onclick="botFlowBuilder.deleteNode('${id}')">
                 <i class="fa-solid fa-trash"></i> Excluir Bloco
             </button>` : ""}
         `;
@@ -2947,6 +2952,33 @@ const botFlowBuilder = {
         }
     },
 
+    // Handle Output/Input Port Connection
+    onPortClick(nodeId, type) {
+        if (type === "output") {
+            this.connectingFromNodeId = nodeId;
+            showToast(`Clique na bolinha superior de outro bloco para conectar.`, "info");
+        } else if (type === "input" && this.connectingFromNodeId) {
+            if (this.connectingFromNodeId === nodeId) {
+                showToast("Não é possível conectar um bloco a ele mesmo.", "warning");
+                this.connectingFromNodeId = null;
+                return;
+            }
+            // Check if connection already exists
+            const exists = this.connections.some(c => c.from === this.connectingFromNodeId && c.to === nodeId);
+            if (!exists) {
+                this.connections.push({ from: this.connectingFromNodeId, to: nodeId });
+                showToast("Blocos conectados com sucesso!");
+            }
+            this.connectingFromNodeId = null;
+            this.render();
+        }
+    },
+
+    removeConnection(fromId, toId) {
+        this.connections = this.connections.filter(c => !(c.from === fromId && c.to === toId));
+        this.render();
+    },
+
     async saveFlow() {
         try {
             const flowData = {
@@ -2958,8 +2990,10 @@ const botFlowBuilder = {
                 flow_data: flowData,
                 welcome_message: firstTextNode ? firstTextNode.content : undefined
             };
-            await api.post("/api/inbox/bot-config", payload);
-            showToast("Fluxo visual do Bot salvo com sucesso!", "success");
+            const res = await api.post("/api/inbox/bot-config", payload);
+            if (res) {
+                showToast("Fluxo do Bot salvo com sucesso!", "success");
+            }
         } catch (e) {
             console.error("Erro ao salvar fluxo:", e);
             showToast("Erro ao salvar o fluxo visual do bot.", "error");
@@ -2984,15 +3018,27 @@ const botFlowBuilder = {
                 const x2 = toNode.x + 110;
                 const y2 = toNode.y;
 
+                const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                group.style.cursor = "pointer";
+
                 const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                const dx = Math.abs(x2 - x1) / 2;
-                const d = `M ${x1} ${y1} C ${x1} ${y1 + 50}, ${x2} ${y2 - 50}, ${x2} ${y2}`;
+                const d = `M ${x1} ${y1} C ${x1} ${y1 + 60}, ${x2} ${y2 - 60}, ${x2} ${y2}`;
                 path.setAttribute("d", d);
                 path.setAttribute("stroke", "#6366f1");
                 path.setAttribute("stroke-width", "3");
                 path.setAttribute("fill", "none");
                 path.setAttribute("stroke-dasharray", "6 4");
-                svg.appendChild(path);
+                path.style.pointerEvents = "all";
+
+                // Click connection line to delete
+                path.addEventListener("click", () => {
+                    if (confirm("Remover esta conexão entre os blocos?")) {
+                        this.removeConnection(conn.from, conn.to);
+                    }
+                });
+
+                group.appendChild(path);
+                svg.appendChild(group);
             }
         });
 
@@ -3015,8 +3061,8 @@ const botFlowBuilder = {
                     <span style="opacity:0.6;font-size:10px;">#${node.id}</span>
                 </div>
                 <div class="flow-node-body" id="node-body-${node.id}">${node.content || ""}</div>
-                ${node.type !== "start" ? `<div class="flow-node-port input-port"></div>` : ""}
-                <div class="flow-node-port output-port"></div>
+                ${node.type !== "start" ? `<div class="flow-node-port input-port" title="Entrada (Conectar aqui)" onclick="botFlowBuilder.onPortClick('${node.id}', 'input')"></div>` : ""}
+                <div class="flow-node-port output-port" title="Saída (Clique para ligar a outro bloco)" onclick="botFlowBuilder.onPortClick('${node.id}', 'output')"></div>
             `;
 
             // Node Dragging Logic
@@ -3071,12 +3117,18 @@ const botFlowBuilder = {
                 const y2 = toNode.y;
 
                 const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                const d = `M ${x1} ${y1} C ${x1} ${y1 + 50}, ${x2} ${y2 - 50}, ${x2} ${y2}`;
+                const d = `M ${x1} ${y1} C ${x1} ${y1 + 60}, ${x2} ${y2 - 60}, ${x2} ${y2}`;
                 path.setAttribute("d", d);
                 path.setAttribute("stroke", "#6366f1");
                 path.setAttribute("stroke-width", "3");
                 path.setAttribute("fill", "none");
                 path.setAttribute("stroke-dasharray", "6 4");
+                path.style.pointerEvents = "all";
+                path.addEventListener("click", () => {
+                    if (confirm("Remover esta conexão entre os blocos?")) {
+                        this.removeConnection(conn.from, conn.to);
+                    }
+                });
                 svg.appendChild(path);
             }
         });
