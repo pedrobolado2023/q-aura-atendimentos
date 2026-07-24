@@ -339,7 +339,7 @@ const appRouter = {
         const isCollapsed = sidebar.classList.contains("collapsed");
 
         if (icon) {
-            icon.className = isCollapsed ? "fa-solid fa-outdent" : "fa-solid fa-indent";
+            icon.className = isCollapsed ? "fa-solid fa-indent" : "fa-solid fa-bars-staggered";
         }
 
         localStorage.setItem("qa_sidebar_collapsed", isCollapsed ? "true" : "false");
