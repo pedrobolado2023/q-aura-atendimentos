@@ -714,7 +714,7 @@ body {
 
 .inbox-layout {
     display: grid;
-    grid-template-columns: 340px 1fr 320px;
+    grid-template-columns: 360px 1fr 320px;
     height: 100%;
     width: 100%;
     overflow: hidden;
@@ -722,11 +722,12 @@ body {
 }
 
 .inbox-layout.hide-context {
-    grid-template-columns: 340px 1fr;
+    grid-template-columns: 360px 1fr;
 }
 
 .inbox-layout > * {
     min-height: 0;
+    min-width: 0;
 }
 
 /* Inbox Sidebar */
@@ -800,10 +801,11 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 16px;
+    padding: 14px 16px;
     border-bottom: 1px solid var(--border-color);
     cursor: pointer;
     transition: var(--transition-smooth);
+    min-width: 0;
 }
 
 .convo-item:hover {
@@ -820,6 +822,8 @@ body {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .convo-meta h4 {
@@ -829,12 +833,16 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
+    margin: 0;
 }
 
 .convo-time {
     font-size: 11px;
     color: var(--text-muted);
     font-weight: 400;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .convo-meta p {
@@ -843,6 +851,7 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    margin: 0;
 }
 
 /* Chat Area */
