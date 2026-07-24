@@ -297,12 +297,78 @@ body {
     display: flex;
     flex-direction: column;
     height: 100%;
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    z-index: 50;
+    overflow: hidden;
+}
+
+/* Sidebar Collapsed State */
+.sidebar.collapsed {
+    width: 72px;
+}
+
+.sidebar.collapsed .logo-text,
+.sidebar.collapsed .menu-item span,
+.sidebar.collapsed .user-info,
+.sidebar.collapsed .btn-logout span {
+    display: none !important;
+}
+
+.sidebar.collapsed .sidebar-header {
+    padding: 20px 14px;
+    justify-content: space-between;
+}
+
+.sidebar.collapsed .menu-item {
+    justify-content: center;
+    padding: 12px 0;
+}
+
+.sidebar.collapsed .menu-item i {
+    font-size: 18px;
+    margin: 0;
+}
+
+.sidebar.collapsed .sidebar-footer {
+    padding: 16px 12px;
+    align-items: center;
+}
+
+.sidebar.collapsed .user-profile {
+    justify-content: center;
+}
+
+.sidebar.collapsed .btn-logout {
+    justify-content: center;
+    padding: 8px 0;
+}
+
+/* Toggle Sidebar Button */
+.btn-toggle-sidebar {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition-smooth);
+}
+
+.btn-toggle-sidebar:hover {
+    background: var(--bg-tertiary);
+    color: var(--color-brand);
 }
 
 .sidebar-header {
     padding: 24px;
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 10px;
     border-bottom: 1px solid var(--border-color);
 }
@@ -326,6 +392,7 @@ body {
     font-weight: 500;
     font-size: 14px;
     transition: var(--transition-smooth);
+    white-space: nowrap;
 }
 
 .menu-item:hover, .menu-item.active {

@@ -320,6 +320,29 @@ const appRouter = {
     showMainLayout() {
         document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
         document.getElementById("main-layout").classList.remove("layout-hidden");
+        
+        // Restore sidebar collapsed state
+        if (localStorage.getItem("qa_sidebar_collapsed") === "true") {
+            const sidebar = document.querySelector(".sidebar");
+            const icon = document.getElementById("toggle-sidebar-icon");
+            if (sidebar) sidebar.classList.add("collapsed");
+            if (icon) icon.className = "fa-solid fa-outdent";
+        }
+    },
+
+    toggleSidebar() {
+        const sidebar = document.querySelector(".sidebar");
+        const icon = document.getElementById("toggle-sidebar-icon");
+        if (!sidebar) return;
+
+        sidebar.classList.toggle("collapsed");
+        const isCollapsed = sidebar.classList.contains("collapsed");
+
+        if (icon) {
+            icon.className = isCollapsed ? "fa-solid fa-outdent" : "fa-solid fa-indent";
+        }
+
+        localStorage.setItem("qa_sidebar_collapsed", isCollapsed ? "true" : "false");
     },
 
     updateProfileUI() {
