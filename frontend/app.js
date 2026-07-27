@@ -316,6 +316,7 @@ const appRouter = {
                 
                 this.showMainLayout();
                 this.connectWebSocket();
+                this.startBackgroundSync();
                 this.updateProfileUI();
                 
                 // Pré-carrega as configurações da Meta, as Respostas Rápidas e as Métricas
@@ -419,19 +420,22 @@ const appRouter = {
     },
 
     // --- Data Loaders ---
-    async loadConversations(status) {
+    async loadConversations(status, silent = false) {
         try {
             const listContainer = document.getElementById("convo-list");
-            listContainer.innerHTML = "<p class='subtitle' style='padding: 20px;'>Carregando...</p>";
+            if (!listContainer) return;
             
             const activeTab = document.querySelector(".inbox-tabs .tab-btn.active");
             const statusFilter = status || (activeTab ? activeTab.getAttribute("data-status") : "waiting");
             
+            if (!silent && (!listContainer.children || listContainer.children.length === 0)) {
+                listContainer.innerHTML = "<p class='subtitle' style='padding: 20px;'>Carregando...</p>";
+            }
+            
             const convos = await api.get(`/api/inbox/conversations?status_filter=${statusFilter}`);
             state.conversations = convos;
             
-            listContainer.innerHTML = "";
-            if (convos.length === 0) {
+            if (!silent && convos.length === 0) {
                 listContainer.innerHTML = "<p class='subtitle' style='padding: 20px;'>Nenhuma conversa.</p>";
                 return;
             }
@@ -1081,10 +1085,47 @@ const appRouter = {
         }
     },
 
+    startBackgroundSync() {
+        if (state.syncInterval) clearInterval(state.syncInterval);
+        // Polling inteligente silencioso a cada 4 segundos como garantia extra contra atrasos
+        state.syncInterval = setInterval(async () => {
+            if (!state.token || !state.tenant_id) return;
+            try {
+                await this.loadConversations(null, true);
+                if (state.activeConversationId) {
+                    await this.refreshActiveMessagesSilent();
+                }
+            } catch (e) {}
+        }, 4000);
+    },
+
+    async refreshActiveMessagesSilent() {
+        if (!state.activeConversationId) return;
+        try {
+            const messages = await api.get(`/api/inbox/conversations/${state.activeConversationId}/messages`);
+            const scroll = document.getElementById("message-scroll");
+            if (!scroll) return;
+
+            let addedAny = false;
+            messages.forEach(m => {
+                const existing = m.id && scroll.querySelector(`[data-msg-id="${m.id}"]`);
+                if (!existing) {
+                    const bubble = renderMessageBubble(m);
+                    scroll.appendChild(bubble);
+                    addedAny = true;
+                }
+            });
+            if (addedAny) {
+                scroll.scrollTop = scroll.scrollHeight;
+            }
+        } catch (e) {}
+    },
+
     connectWebSocket(retryDelay = 1000) {
         if (state.ws) {
             try { state.ws.close(); } catch (e) {}
         }
+        if (state.pingInterval) clearInterval(state.pingInterval);
 
         const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
         const wsHost = window.location.port === "3000" ? "localhost:8000" : window.location.host;
@@ -1092,11 +1133,18 @@ const appRouter = {
         
         state.ws.onopen = () => {
             console.log("[WS] Conectado.");
-            retryDelay = 1000; // reset backoff
+            retryDelay = 1000;
+            // Heartbeat Ping a cada 15 segundos para manter conexao viva no Nginx/Easypanel
+            state.pingInterval = setInterval(() => {
+                if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                    state.ws.send("ping");
+                }
+            }, 15000);
         };
         
         state.ws.onmessage = (event) => {
             try {
+                if (event.data === "pong") return;
                 const msg = JSON.parse(event.data);
                 if (msg.type !== "new_message") return;
 

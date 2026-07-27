@@ -126,8 +126,10 @@ async def websocket_endpoint(websocket: WebSocket, tenant_id: str):
     await manager.connect(tenant_id, websocket)
     try:
         while True:
-            # Keep connection alive; receive messages from client if any
+            # Keep connection alive; receive ping/pong from client
             data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
     except WebSocketDisconnect:
         manager.disconnect(tenant_id, websocket)
 
