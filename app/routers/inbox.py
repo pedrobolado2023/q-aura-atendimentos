@@ -66,13 +66,16 @@ def get_conversations(
         if status_filter == "active" and current_user.role not in ["administrator", "manager"]:
             query = query.filter(Conversation.assigned_user_id == user_id_str)
             
+        # Aplica a ordenação ANTES do limite para atender às regras estritas do SQLAlchemy
+        query = query.order_by(Conversation.last_message_at.desc())
+
         # Limite inteligente para evitar travamento com milhares de conversas resolvidas antigas
         if status_filter == "resolved":
             query = query.limit(150)
         else:
             query = query.limit(300)
 
-        convos = query.order_by(Conversation.last_message_at.desc()).all()
+        convos = query.all()
 
         # Busca em LOTE (1 única query SQL direta, 100% compatível com PostgreSQL UUID e SQLite)
         last_msg_map = {}
