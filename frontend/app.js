@@ -68,7 +68,11 @@ function formatMessageBody(body) {
 // --- Relative Time Helper ---
 function formatRelativeTime(isoStr) {
     if (!isoStr) return "";
-    const d = new Date(isoStr);
+    let cleanStr = String(isoStr);
+    if (!cleanStr.endsWith("Z") && !cleanStr.includes("+") && !cleanStr.includes("-")) {
+        cleanStr += "Z";
+    }
+    const d = new Date(cleanStr);
     const now = new Date();
     const diffMs = now - d;
     const diffMin = Math.floor(diffMs / 60000);
@@ -83,6 +87,28 @@ function formatRelativeTime(isoStr) {
 
 // --- Render Message Bubble Helper ---
 function renderMessageBubble(m) {
+    // Renderização de Notas Internas e Eventos do Sistema (Visíveis apenas para os atendentes, nunca enviadas para o cliente)
+    if (m.internal_note || m.sender_type === "system" || m.message_type === "system") {
+        const sysEvent = document.createElement("div");
+        sysEvent.className = "chat-system-event";
+        if (m.id) sysEvent.setAttribute("data-msg-id", m.id);
+        
+        let cleanStr = m.created_at ? String(m.created_at) : "";
+        if (cleanStr && !cleanStr.endsWith("Z") && !cleanStr.includes("+") && !cleanStr.includes("-")) {
+            cleanStr += "Z";
+        }
+        const d = cleanStr ? new Date(cleanStr) : null;
+        const timeStr = d ? `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : "";
+        
+        sysEvent.innerHTML = `
+            <div class="system-event-pill">
+                <span>${m.body}</span>
+                ${timeStr ? `<small style="margin-left: 6px; opacity: 0.65; font-size: 10px;">${timeStr}</small>` : ''}
+            </div>
+        `;
+        return sysEvent;
+    }
+
     const bubble = document.createElement("div");
     bubble.className = `message-bubble ${m.sender_type === 'contact' ? 'incoming' : 'outgoing'}`;
     // Tag para deduplicação
@@ -183,10 +209,14 @@ function renderMessageBubble(m) {
         bubble.innerHTML = formatMessageBody(m.body);
     }
 
-    // Timestamp na bolha
+    // Timestamp na bolha (com tratamento UTC/local)
     if (m.created_at) {
         const ts = document.createElement("div");
-        const d = new Date(m.created_at);
+        let cleanStr = String(m.created_at);
+        if (!cleanStr.endsWith("Z") && !cleanStr.includes("+") && !cleanStr.includes("-")) {
+            cleanStr += "Z";
+        }
+        const d = new Date(cleanStr);
         ts.style.cssText = "font-size:10px;opacity:0.5;margin-top:4px;text-align:right;";
         ts.innerText = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
         bubble.appendChild(ts);

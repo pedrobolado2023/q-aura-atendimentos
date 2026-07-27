@@ -235,7 +235,19 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                     
                     is_any_bot_enabled = is_bot_active or bool(n8n_url)
 
+                    # Timestamp real da mensagem do Meta WhatsApp ou hora atual UTC
+                    meta_raw_ts = msg_data.get("timestamp")
+                    if meta_raw_ts:
+                        try:
+                            msg_created_at = datetime.fromtimestamp(int(meta_raw_ts), timezone.utc)
+                        except Exception:
+                            msg_created_at = datetime.now(timezone.utc)
+                    else:
+                        msg_created_at = datetime.now(timezone.utc)
+
+                    is_new_convo = False
                     if not convo:
+                        is_new_convo = True
                         convo = Conversation(
                             tenant_id=tenant_id,
                             contact_id=contact.id,
@@ -250,6 +262,28 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                         if convo.status == "resolved":
                             convo.status = "bot" if is_any_bot_enabled else "waiting"
                             convo.assigned_user_id = None # Clear previous assignment so it goes to queue!
+                            sys_text = "🤖 Conversa reaberta e enviada ao Robô Chatbot" if is_any_bot_enabled else "⏳ Conversa reaberta e enviada para a fila de atendimento"
+                            sys_msg = Message(
+                                conversation_id=convo.id,
+                                sender_type="system",
+                                message_type="system",
+                                body=sys_text,
+                                internal_note=True,
+                                created_at=msg_created_at
+                            )
+                            db.add(sys_msg)
+
+                    if is_new_convo:
+                        sys_text = "🤖 Conversa iniciada e enviada para o Robô Chatbot" if is_any_bot_enabled else "⏳ Conversa entrou na fila de atendimento"
+                        sys_msg = Message(
+                            conversation_id=convo.id,
+                            sender_type="system",
+                            message_type="system",
+                            body=sys_text,
+                            internal_note=True,
+                            created_at=msg_created_at
+                        )
+                        db.add(sys_msg)
 
                     # Check if message already exists
                     existing_msg = db.query(Message).filter(Message.meta_message_id == meta_msg_id).first()
@@ -266,12 +300,13 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                         media_url=media_url,
                         media_mime_type=media_mime,
                         meta_message_id=meta_msg_id,
-                        status="delivered"
+                        status="delivered",
+                        created_at=msg_created_at
                     )
                     db.add(new_msg)
                     
                     # Update conversation last message timestamp and increment unread count
-                    convo.last_message_at = datetime.utcnow()
+                    convo.last_message_at = msg_created_at
                     convo.unread = True
                     convo.unread_count = (convo.unread_count or 0) + 1
                     db.commit()

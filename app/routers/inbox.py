@@ -313,7 +313,22 @@ async def send_message(
     db.add(msg)
     
     # Update last message timestamp & assign human agent
-    convo.last_message_at = func.now()
+    old_status = convo.status
+    now_utc = datetime.now(timezone.utc)
+    convo.last_message_at = now_utc
+
+    if old_status in ["waiting", "bot"]:
+        user_disp_name = current_user.name or current_user.email
+        sys_msg = Message(
+            conversation_id=convo.id,
+            sender_type="system",
+            sender_id=current_user.id,
+            message_type="system",
+            body=f"👤 {user_disp_name} assumiu a conversa e iniciou o atendimento humano.",
+            internal_note=True
+        )
+        db.add(sys_msg)
+
     convo.status = "active"
     if not convo.assigned_user_id:
         convo.assigned_user_id = current_user.id
@@ -674,27 +689,67 @@ async def start_conversation(
 
 
 
+class AssignRequest(BaseModel):
+    user_id: Optional[UUID] = None
+
 @router.post("/conversations/{conversation_id}/assign", response_model=ConversationResponse)
 def assign_conversation(
     conversation_id: UUID,
+    payload: Optional[AssignRequest] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
     """
-    Assigns the conversation to the currently logged in user and marks it active.
+    Assigns the conversation to a user (or current user) and marks it active with a system note.
     """
     convo = db.query(Conversation).filter(
-        Conversation.id == conversation_id,
+        Conversation.id == str(conversation_id),
         Conversation.tenant_id == current_tenant.id
     ).first()
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
         
-    convo.assigned_user_id = current_user.id
+    target_user = current_user
+    if payload and payload.user_id:
+        u = db.query(User).filter(User.id == str(payload.user_id), User.tenant_id == current_tenant.id).first()
+        if u:
+            target_user = u
+
+    convo.assigned_user_id = target_user.id
     convo.status = "active"
+
+    user_disp_name = current_user.name or current_user.email
+    if target_user.id == current_user.id:
+        sys_text = f"👤 {user_disp_name} assumiu o atendimento."
+    else:
+        target_name = target_user.name or target_user.email
+        sys_text = f"🔄 {user_disp_name} transferiu o atendimento para {target_name}."
+
+    sys_msg = Message(
+        conversation_id=convo.id,
+        sender_type="system",
+        sender_id=current_user.id,
+        message_type="system",
+        body=sys_text,
+        internal_note=True
+    )
+    db.add(sys_msg)
     db.commit()
     db.refresh(convo)
+
+    from app.services.websocket_manager import manager
+    manager.broadcast_to_tenant(str(current_tenant.id), {
+        "type": "new_message",
+        "conversation_id": str(convo.id),
+        "id": str(sys_msg.id),
+        "sender_type": "system",
+        "message_type": "system",
+        "body": sys_text,
+        "internal_note": True,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
     return convo
 
 
@@ -717,8 +772,34 @@ def transfer_conversation_to_bot(
         
     convo.status = "bot"
     convo.assigned_user_id = None
+
+    user_disp_name = current_user.name or current_user.email
+    sys_text = f"🤖 {user_disp_name} transferiu a conversa para o Robô Chatbot."
+
+    sys_msg = Message(
+        conversation_id=convo.id,
+        sender_type="system",
+        sender_id=current_user.id,
+        message_type="system",
+        body=sys_text,
+        internal_note=True
+    )
+    db.add(sys_msg)
     db.commit()
     db.refresh(convo)
+
+    from app.services.websocket_manager import manager
+    manager.broadcast_to_tenant(str(current_tenant.id), {
+        "type": "new_message",
+        "conversation_id": str(convo.id),
+        "id": str(sys_msg.id),
+        "sender_type": "system",
+        "message_type": "system",
+        "body": sys_text,
+        "internal_note": True,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
     return convo
 
 
@@ -730,16 +811,29 @@ async def resolve_conversation(
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
     """
-    Marks the conversation as resolved and sends a final closing message to the contact.
+    Marks the conversation as resolved, creates system note, and sends closing message.
     """
     convo = db.query(Conversation).filter(
-        Conversation.id == conversation_id,
+        Conversation.id == str(conversation_id),
         Conversation.tenant_id == current_tenant.id
     ).first()
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
         
     convo.status = "resolved"
+
+    user_disp_name = current_user.name or current_user.email
+    sys_text = f"✅ {user_disp_name} encerrou o atendimento."
+
+    sys_msg = Message(
+        conversation_id=convo.id,
+        sender_type="system",
+        sender_id=current_user.id,
+        message_type="system",
+        body=sys_text,
+        internal_note=True
+    )
+    db.add(sys_msg)
     
     # Send closing message to the contact
     creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == current_tenant.id).first()
@@ -774,7 +868,6 @@ async def resolve_conversation(
                     res_data = response.json()
                     meta_message_id = res_data.get("messages", [{}])[0].get("id")
                     
-                    # Save to db
                     msg = Message(
                         conversation_id=convo.id,
                         sender_type="system",
@@ -785,14 +878,26 @@ async def resolve_conversation(
                         status="sent"
                     )
                     db.add(msg)
-                    
-                    from sqlalchemy.sql import func
-                    convo.last_message_at = func.now()
             except Exception as e:
                 print(f"[Resolve] Failed to send closing message: {e}")
                 
+    convo.last_message_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(convo)
+
+    from app.services.websocket_manager import manager
+    manager.broadcast_to_tenant(str(current_tenant.id), {
+        "type": "new_message",
+        "conversation_id": str(convo.id),
+        "id": str(sys_msg.id),
+        "sender_type": "system",
+        "message_type": "system",
+        "body": sys_text,
+        "internal_note": True,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
+    return convo
     return convo
 
 @router.post("/conversations/{conversation_id}/toggle-flag", response_model=ConversationResponse)
