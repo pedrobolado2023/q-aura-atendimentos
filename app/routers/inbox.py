@@ -52,7 +52,10 @@ def get_conversations(
 ):
     try:
         from sqlalchemy.orm import joinedload
-        query = db.query(Conversation).options(joinedload(Conversation.contact)).filter(Conversation.tenant_id == current_tenant.id)
+        tenant_id_str = str(current_tenant.id)
+        user_id_str = str(current_user.id)
+
+        query = db.query(Conversation).options(joinedload(Conversation.contact)).filter(Conversation.tenant_id == tenant_id_str)
         if status_filter:
             if status_filter == "waiting":
                 query = query.filter(Conversation.status.in_(["waiting", "bot"]))
@@ -61,7 +64,7 @@ def get_conversations(
             
         # Para atendentes normais (agentes), filtra apenas as conversas atribuídas a eles na aba Minhas
         if status_filter == "active" and current_user.role not in ["administrator", "manager"]:
-            query = query.filter(Conversation.assigned_user_id == current_user.id)
+            query = query.filter(Conversation.assigned_user_id == user_id_str)
             
         # Limite inteligente para evitar travamento com milhares de conversas resolvidas antigas
         if status_filter == "resolved":
@@ -76,7 +79,7 @@ def get_conversations(
         last_contact_msg_map = {}
 
         if convos:
-            convo_ids = [c.id for c in convos]
+            convo_ids = [str(c.id) for c in convos]
             
             # Busca todas as mensagens recentes das conversas listadas em ordem decrescente de criação
             recent_messages = (
