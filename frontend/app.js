@@ -465,36 +465,26 @@ const appRouter = {
             const convos = await api.get(`/api/inbox/conversations?status_filter=${statusFilter}`);
             state.conversations = convos;
             
-            if (!silent) {
-                listContainer.innerHTML = "";
-                if (convos.length === 0) {
-                    listContainer.innerHTML = "<p class='subtitle' style='padding: 20px;'>Nenhuma conversa nesta aba.</p>";
-                    return;
-                }
-            } else {
-                if (convos.length === 0 && listContainer.children.length === 0) {
-                    listContainer.innerHTML = "<p class='subtitle' style='padding: 20px;'>Nenhuma conversa nesta aba.</p>";
-                    return;
-                }
+            if (!silent && convos.length === 0) {
+                listContainer.innerHTML = "<p class='subtitle' style='padding: 20px;'>Nenhuma conversa nesta aba.</p>";
+                return;
             }
 
-            convos.forEach(c => {
-                const item = document.createElement("div");
-                item.setAttribute("data-id", c.id);
-                
+            // Remove o indicador de carregando se não for silencioso
+            if (!silent && (listContainer.innerHTML.includes("Carregando...") || listContainer.children.length === 0)) {
+                listContainer.innerHTML = "";
+            }
+
+            convos.forEach((c, index) => {
+                let item = listContainer.querySelector(`[data-id="${c.id}"]`);
                 const isUnread = c.unread_count && c.unread_count > 0 && state.activeConversationId !== c.id;
                 const needsResponse = (c.last_message_sender_type === 'contact') || (c.unread_count && c.unread_count > 0) || (c.unread === true);
-                
-                item.className = `convo-item ${state.activeConversationId === c.id ? 'active' : ''} ${isUnread ? 'unread' : ''} ${needsResponse ? 'needs-response' : ''}`;
-                item.onclick = () => this.selectConversation(c.id);
-                
                 const contactName = c.contact ? c.contact.name || c.contact.phone_number : "Hóspede";
                 
                 const avatarUrl = (c.contact && c.contact.avatar_url)
                     ? c.contact.avatar_url
                     : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(contactName)}`;
                 
-                // Preview: última mensagem da conversa
                 let previewText = "";
                 if (c.last_message_body) {
                     let cleanText = c.last_message_body;
@@ -529,7 +519,15 @@ const appRouter = {
                     : '';
 
                 const timeStr = formatRelativeTime(c.last_message_at);
-                
+
+                if (!item) {
+                    item = document.createElement("div");
+                    item.setAttribute("data-id", c.id);
+                    item.onclick = () => this.selectConversation(c.id);
+                    listContainer.appendChild(item);
+                }
+
+                item.className = `convo-item ${state.activeConversationId === c.id ? 'active' : ''} ${isUnread ? 'unread' : ''} ${needsResponse ? 'needs-response' : ''}`;
                 item.innerHTML = `
                     <img class="avatar" src="${avatarUrl}" alt="${contactName}">
                     <div class="convo-meta">
@@ -545,10 +543,23 @@ const appRouter = {
                         <p style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; opacity: 0.7;">${previewText}</p>
                     </div>
                 `;
-                listContainer.appendChild(item);
+                
+                // Mantém a ordem sincronizada com a API (chats mais recentes no topo)
+                if (listContainer.children[index] !== item) {
+                    listContainer.insertBefore(item, listContainer.children[index]);
+                }
             });
 
-            // Re-aplica busca se houver texto digitado
+            // Remove itens que não fazem mais parte do filtro da aba atual
+            const convoIds = convos.map(c => c.id);
+            Array.from(listContainer.children).forEach(child => {
+                const id = child.getAttribute("data-id");
+                if (id && !convoIds.includes(id)) {
+                    child.remove();
+                }
+            });
+
+            // Re-aplica busca se houver texto digitado no filtro de pesquisa
             const searchInput = document.getElementById("convo-search-input");
             if (searchInput && searchInput.value.trim() !== "") {
                 this.filterConversations(searchInput.value);
