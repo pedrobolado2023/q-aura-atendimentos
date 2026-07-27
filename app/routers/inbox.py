@@ -84,11 +84,12 @@ def get_conversations(
         if convos:
             convo_ids = [str(c.id) for c in convos]
             
-            # Busca todas as mensagens recentes das conversas listadas em ordem decrescente de criação
+            # Busca apenas as mensagens mais recentes das conversas listadas (máximo desempenho SQL)
             recent_messages = (
                 db.query(Message)
                 .filter(Message.conversation_id.in_(convo_ids))
                 .order_by(Message.created_at.desc())
+                .limit(600)
                 .all()
             )
 
