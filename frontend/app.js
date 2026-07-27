@@ -427,7 +427,9 @@ const appRouter = {
                 item.setAttribute("data-id", c.id);
                 
                 const isUnread = c.unread_count && c.unread_count > 0 && state.activeConversationId !== c.id;
-                item.className = `convo-item ${state.activeConversationId === c.id ? 'active' : ''} ${isUnread ? 'unread' : ''}`;
+                const needsResponse = (c.last_message_sender_type === 'contact') || (c.unread_count && c.unread_count > 0) || (c.unread === true);
+                
+                item.className = `convo-item ${state.activeConversationId === c.id ? 'active' : ''} ${isUnread ? 'unread' : ''} ${needsResponse ? 'needs-response' : ''}`;
                 item.onclick = () => this.selectConversation(c.id);
                 
                 const contactName = c.contact ? c.contact.name || c.contact.phone_number : "Hóspede";
@@ -452,6 +454,10 @@ const appRouter = {
                     ? `<span class="unread-badge" style="background-color: var(--color-primary); color: white; border-radius: 50%; font-size: 10px; font-weight: 700; min-width: 18px; height: 18px; padding: 0 4px; display: inline-flex; align-items: center; justify-content: center; margin-left: 8px; box-shadow: 0 0 4px var(--color-primary);">${c.unread_count}</span>`
                     : '';
 
+                const awaitingBadge = needsResponse
+                    ? `<span class="awaiting-badge" title="Cliente aguardando resposta"><i class="fa-solid fa-clock"></i> Pendente</span>`
+                    : '';
+
                 let flagColor = "transparent";
                 if (c.flag_type === "red") flagColor = "#ef4444";
                 else if (c.flag_type === "yellow") flagColor = "#fbbf24";
@@ -470,6 +476,7 @@ const appRouter = {
                         <h4>
                             <span style="display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden;">
                                 <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${contactName}</span>
+                                ${awaitingBadge}
                                 ${flagIcon}
                                 ${unreadBadge}
                             </span>
@@ -1139,15 +1146,40 @@ const appRouter = {
 
         // Atualizar estado em memória
         const convo = (state.conversations || []).find(c => c.id === convoId);
-        if (convo && isIncoming) {
-            convo.has_active_window = true;
+        if (convo) {
+            convo.last_message_sender_type = msg.sender_type;
             convo.last_message_at = msg.last_message_at || msg.created_at || new Date().toISOString();
+            if (isIncoming) convo.has_active_window = true;
         }
 
         if (!item) {
             // Conversa não está na lista atual — recarregar a lista
             this.loadConversations();
             return;
+        }
+
+        // Atualizar visualização do destaque de pendência (.needs-response)
+        const nameSpan = item.querySelector("h4 span");
+        if (isIncoming) {
+            item.classList.add("needs-response");
+            if (nameSpan && !nameSpan.querySelector(".awaiting-badge")) {
+                const awaitingBadge = document.createElement("span");
+                awaitingBadge.className = "awaiting-badge";
+                awaitingBadge.title = "Cliente aguardando resposta";
+                awaitingBadge.innerHTML = `<i class="fa-solid fa-clock"></i> Pendente`;
+                const nameNode = nameSpan.querySelector("span");
+                if (nameNode && nameNode.nextSibling) {
+                    nameSpan.insertBefore(awaitingBadge, nameNode.nextSibling);
+                } else {
+                    nameSpan.appendChild(awaitingBadge);
+                }
+            }
+        } else {
+            item.classList.remove("needs-response");
+            if (nameSpan) {
+                const awaitingBadge = nameSpan.querySelector(".awaiting-badge");
+                if (awaitingBadge) awaitingBadge.remove();
+            }
         }
 
         // Atualizar preview
@@ -1176,7 +1208,6 @@ const appRouter = {
                 badge = document.createElement("span");
                 badge.className = "unread-badge";
                 badge.style.cssText = "background-color: var(--color-primary); color: white; border-radius: 50%; font-size: 10px; font-weight: 700; min-width: 18px; height: 18px; padding: 0 4px; display: inline-flex; align-items: center; justify-content: center; margin-left: 8px; box-shadow: 0 0 4px var(--color-primary);";
-                const nameSpan = item.querySelector("h4 span");
                 if (nameSpan) nameSpan.appendChild(badge);
             }
             badge.textContent = newCount;
