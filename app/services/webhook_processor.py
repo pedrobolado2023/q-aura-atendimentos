@@ -142,21 +142,50 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                     if msg_type == "text":
                         body_content = msg_data.get("text", {}).get("body", "")
                     elif msg_type == "image":
-                        body_content = "[Imagem]"
+                        body_content = msg_data.get("image", {}).get("caption") or "[Imagem]"
                         media_url = msg_data.get("image", {}).get("id") # Meta media ID
                         media_mime = msg_data.get("image", {}).get("mime_type")
                     elif msg_type == "audio":
                         body_content = "[Áudio]"
                         media_url = msg_data.get("audio", {}).get("id")
                         media_mime = msg_data.get("audio", {}).get("mime_type")
+                    elif msg_type == "sticker":
+                        body_content = "[Figurinha]"
+                        media_url = msg_data.get("sticker", {}).get("id")
+                        media_mime = msg_data.get("sticker", {}).get("mime_type", "image/webp")
+                    elif msg_type == "document":
+                        doc_data = msg_data.get("document", {})
+                        body_content = doc_data.get("caption") or doc_data.get("filename") or "[Documento]"
+                        media_url = doc_data.get("id")
+                        media_mime = doc_data.get("mime_type")
+                    elif msg_type == "video":
+                        vid_data = msg_data.get("video", {})
+                        body_content = vid_data.get("caption") or "[Vídeo]"
+                        media_url = vid_data.get("id")
+                        media_mime = vid_data.get("mime_type")
+                    elif msg_type == "location":
+                        loc = msg_data.get("location", {})
+                        loc_name = loc.get("name") or loc.get("address") or f"{loc.get('latitude')}, {loc.get('longitude')}"
+                        body_content = f"📍 [Localização] {loc_name}"
+                    elif msg_type == "contacts":
+                        contacts_list = msg_data.get("contacts", [])
+                        c_name = contacts_list[0].get("name", {}).get("formatted_name", "Contato") if contacts_list else "Contato"
+                        body_content = f"📇 [Contato] {c_name}"
+                    elif msg_type == "reaction":
+                        emoji = msg_data.get("reaction", {}).get("emoji", "👍")
+                        body_content = f"Reagiu: {emoji}"
                     elif msg_type == "interactive":
                         interactive_data = msg_data.get("interactive", {})
                         int_type = interactive_data.get("type")
                         if int_type == "button_reply":
                             body_content = interactive_data.get("button_reply", {}).get("title", "[Clique no Botão]")
                             button_reply_id = interactive_data.get("button_reply", {}).get("id", "")
+                        elif int_type == "list_reply":
+                            body_content = interactive_data.get("list_reply", {}).get("title", "[Seleção da Lista]")
                         else:
                             body_content = "[Resposta Interativa]"
+                    elif msg_type == "unsupported":
+                        body_content = "[Figurinha / Mensagem do WhatsApp]"
                     else:
                         body_content = f"[{msg_type.capitalize()}]"
 

@@ -44,6 +44,9 @@ function showToast(message, type = "success") {
 // --- WhatsApp Formatting Helper ---
 function formatMessageBody(body) {
     if (!body) return "";
+    if (body === "[Unsupported]" || body === "[unsupported]" || body.toLowerCase().includes("unsupported")) {
+        return `<span style="opacity: 0.85; font-style: italic; display: inline-flex; align-items: center; gap: 4px;"><i class="fa-solid fa-circle-info" style="color: var(--color-primary);"></i> [Mensagem / Figurinha do WhatsApp]</span>`;
+    }
     // Safe escape HTML to prevent XSS
     let escaped = body
         .replace(/&/g, "&amp;")
@@ -103,12 +106,18 @@ function renderMessageBubble(m) {
         return `${API_URL}/api/inbox/media/${mediaUrl}?token=${state.token}`;
     };
 
-    if (m.message_type === "image" && m.media_url) {
+    if ((m.message_type === "image" || m.message_type === "sticker") && m.media_url) {
         const img = document.createElement("img");
         const imgSrc = getMediaSrc(m.media_url);
         img.src = imgSrc;
-        img.alt = "Imagem";
+        img.alt = m.message_type === "sticker" ? "Figurinha" : "Imagem";
         img.className = "chat-media-image";
+        if (m.message_type === "sticker") {
+            img.style.maxWidth = "130px";
+            img.style.maxHeight = "130px";
+            img.style.objectFit = "contain";
+            img.style.background = "transparent";
+        }
         img.onclick = () => window.open(imgSrc, "_blank");
         bubble.appendChild(img);
         
@@ -446,8 +455,12 @@ const appRouter = {
                 // Preview: última mensagem da conversa
                 let previewText = "";
                 if (c.last_message_body) {
+                    let cleanText = c.last_message_body;
+                    if (cleanText === "[Unsupported]" || cleanText.toLowerCase().includes("unsupported")) {
+                        cleanText = "📷 [Figurinha / Mensagem]";
+                    }
                     const prefix = c.last_message_sender_type === 'bot' ? '🤖 ' : c.last_message_sender_type === 'agent' ? '✍️ ' : '';
-                    previewText = prefix + c.last_message_body.substring(0, 50);
+                    previewText = prefix + cleanText.substring(0, 50);
                 } else {
                     if (c.status === "waiting") previewText = "Aguardando atendimento";
                     else if (c.status === "bot") previewText = "Em atendimento pelo bot";
@@ -1190,8 +1203,12 @@ const appRouter = {
         // Atualizar preview
         const previewEl = item.querySelector("p");
         if (previewEl) {
+            let rawText = msg.body || msg.preview || '';
+            if (rawText === "[Unsupported]" || rawText.toLowerCase().includes("unsupported")) {
+                rawText = "📷 [Figurinha / Mensagem]";
+            }
             const prefix = msg.sender_type === 'bot' ? '🤖 ' : msg.sender_type === 'agent' ? '✍️ ' : '';
-            const previewText = prefix + (msg.body || msg.preview || '').substring(0, 50);
+            const previewText = prefix + rawText.substring(0, 50);
             previewEl.textContent = previewText;
             previewEl.style.cssText = "overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; opacity: 0.7;";
         }
