@@ -62,13 +62,20 @@ def get_conversations(
     if status_filter == "active" and current_user.role not in ["administrator", "manager"]:
         query = query.filter(Conversation.assigned_user_id == current_user.id)
         
+    # Limite inteligente para evitar travamento com milhares de conversas resolvidas antigas
+    if status_filter == "resolved":
+        query = query.limit(150)
+    else:
+        query = query.limit(300)
+
     convos = query.order_by(Conversation.last_message_at.desc()).all()
 
-    # Busca última mensagem de cada conversa (1 query, compatível SQLite e PostgreSQL)
+    # Busca em LOTE (Batch Query 1-step) para evitar o gargalo N+1 nas últimas mensagens
     if convos:
         from sqlalchemy import func as sqlfunc
         convo_ids = [str(c.id) for c in convos]
-        # Subquery: max(created_at) por conversa
+
+        # 1. Subquery em lote: última mensagem geral de cada conversa
         max_subq = (
             db.query(
                 Message.conversation_id.label("cid"),
@@ -84,10 +91,28 @@ def get_conversations(
             .all()
         )
         last_msg_map = {str(m.conversation_id): m for m in last_msgs}
+
+        # 2. Subquery em lote: última mensagem enviada pelo CONTATO para cálculo de janela de 24h
+        contact_subq = (
+            db.query(
+                Message.conversation_id.label("cid"),
+                sqlfunc.max(Message.created_at).label("max_at")
+            )
+            .filter(Message.conversation_id.in_(convo_ids), Message.sender_type == "contact")
+            .group_by(Message.conversation_id)
+            .subquery()
+        )
+        last_contact_msgs = (
+            db.query(Message)
+            .join(contact_subq, (Message.conversation_id == contact_subq.c.cid) & (Message.created_at == contact_subq.c.max_at))
+            .all()
+        )
+        last_contact_msg_map = {str(m.conversation_id): m for m in last_contact_msgs}
     else:
         last_msg_map = {}
+        last_contact_msg_map = {}
 
-    # Enriquece cada conversa com preview da última mensagem e status da janela de 24 horas
+    # Enriquece cada conversa instantaneamente a partir do mapa em memória (O(1))
     result = []
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
@@ -98,15 +123,8 @@ def get_conversations(
             d.last_message_body = (lm.body or "")[:80]
             d.last_message_sender_type = lm.sender_type
             
-        # Busca última mensagem enviada pelo contato (cliente) para calcular a janela de 24 horas
-        last_contact_msg = (
-            db.query(Message)
-            .filter(Message.conversation_id == str(c.id), Message.sender_type == "contact")
-            .order_by(Message.created_at.desc())
-            .first()
-        )
+        last_contact_msg = last_contact_msg_map.get(str(c.id))
         if last_contact_msg and last_contact_msg.created_at:
-            # Garante comparação com timezone
             created_at_tz = last_contact_msg.created_at.replace(tzinfo=timezone.utc) if last_contact_msg.created_at.tzinfo is None else last_contact_msg.created_at
             diff_hours = (now - created_at_tz).total_seconds() / 3600
             d.has_active_window = diff_hours <= 24.0

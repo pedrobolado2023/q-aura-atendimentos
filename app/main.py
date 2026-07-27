@@ -43,6 +43,15 @@ try:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE qa_conversations ADD COLUMN flag_type TEXT DEFAULT 'none'"))
 
+    # Ensure indexes for high performance queries
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_qa_conv_tenant_status ON qa_conversations (tenant_id, status)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_qa_conv_last_msg_at ON qa_conversations (last_message_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_qa_msg_conv_sender ON qa_messages (conversation_id, sender_type)"))
+    except Exception as idx_err:
+        print(f"[Database] Index creation notice: {idx_err}")
+
     # Check qa_messages columns
     columns_msg = [col["name"] for col in inspector.get_columns("qa_messages")]
     if "internal_note" not in columns_msg:
