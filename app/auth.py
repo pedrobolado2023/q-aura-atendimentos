@@ -70,16 +70,19 @@ def get_current_tenant(current_user: User = Depends(get_current_user), db: Sessi
         raise HTTPException(status_code=403, detail="Tenant subscription suspended")
     return tenant
 
+DEFAULT_ALL_MODULES = ["inbox", "chatbot", "dashboard", "crm", "team", "meta_settings"]
+
 def get_enabled_modules(tenant: Tenant) -> list[str]:
     if not tenant:
-        return []
-    # If no plan is associated, return all modules for legacy compatibility
-    if not tenant.plan_id:
-        return ["inbox", "chatbot", "dashboard", "crm", "team", "meta_settings"]
+        # Superadmin tem acesso universal a todos os módulos
+        return DEFAULT_ALL_MODULES
+    # Se não houver plano associado ou se o plano for nulo, libera os módulos padrão para compatibilidade
+    if not tenant.plan_id or not tenant.plan:
+        return DEFAULT_ALL_MODULES
         
     base_modules = list(tenant.plan.modules or []) if tenant.plan else []
     custom = list(tenant.custom_modules or [])
-    return list(set(base_modules + custom))
+    return list(set(base_modules + custom + DEFAULT_ALL_MODULES))
 
 class ModuleRequired:
     def __init__(self, module_name: str):
@@ -87,7 +90,7 @@ class ModuleRequired:
         
     def __call__(self, tenant: Tenant = Depends(get_current_tenant)) -> Tenant:
         if not tenant:
-            # Superadmin has access to everything
+            # Superadmin tem acesso universal
             return None
             
         enabled = get_enabled_modules(tenant)

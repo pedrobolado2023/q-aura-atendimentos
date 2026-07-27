@@ -212,7 +212,12 @@ const api = {
         }
         const response = await fetch(`${API_URL}${endpoint}`, { headers });
         if (!response.ok) {
-            throw new Error("Erro de conexão");
+            let detail = `Erro ${response.status}: ${response.statusText}`;
+            try {
+                const errData = await response.json();
+                if (errData && errData.detail) detail = errData.detail;
+            } catch (e) {}
+            throw new Error(detail);
         }
         return response.json();
     },
