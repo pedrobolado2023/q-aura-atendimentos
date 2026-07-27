@@ -465,9 +465,17 @@ const appRouter = {
             const convos = await api.get(`/api/inbox/conversations?status_filter=${statusFilter}`);
             state.conversations = convos;
             
-            if (!silent && convos.length === 0) {
-                listContainer.innerHTML = "<p class='subtitle' style='padding: 20px;'>Nenhuma conversa.</p>";
-                return;
+            if (!silent) {
+                listContainer.innerHTML = "";
+                if (convos.length === 0) {
+                    listContainer.innerHTML = "<p class='subtitle' style='padding: 20px;'>Nenhuma conversa nesta aba.</p>";
+                    return;
+                }
+            } else {
+                if (convos.length === 0 && listContainer.children.length === 0) {
+                    listContainer.innerHTML = "<p class='subtitle' style='padding: 20px;'>Nenhuma conversa nesta aba.</p>";
+                    return;
+                }
             }
 
             convos.forEach(c => {
@@ -1115,6 +1123,78 @@ const appRouter = {
         }
     },
 
+    async openTransferModal() {
+        const modal = document.getElementById("modal-transfer-chat");
+        const listContainer = document.getElementById("transfer-users-list");
+        if (!modal || !listContainer) return;
+
+        modal.style.display = "flex";
+        listContainer.innerHTML = "<p style='text-align: center; opacity: 0.6; padding: 12px;'><i class='fa-solid fa-spinner fa-spin'></i> Carregando equipe...</p>";
+
+        try {
+            const users = await api.get("/api/auth/users");
+            listContainer.innerHTML = "";
+            
+            const currentUserId = state.user ? state.user.id : "";
+            const availableUsers = users.filter(u => u.id !== currentUserId);
+
+            if (availableUsers.length === 0) {
+                listContainer.innerHTML = "<p style='text-align: center; opacity: 0.6; padding: 12px;'>Nenhum outro atendente cadastrado no momento.</p>";
+                return;
+            }
+
+            availableUsers.forEach(u => {
+                const userCard = document.createElement("div");
+                userCard.className = "transfer-user-card";
+                userCard.style.cssText = "display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 8px; background: var(--bg-tertiary); border: 1px solid var(--border-color); cursor: pointer; transition: all 0.2s ease;";
+                userCard.onmouseover = () => userCard.style.borderColor = "var(--color-brand)";
+                userCard.onmouseout = () => userCard.style.borderColor = "var(--border-color)";
+                
+                const roleLabel = u.role === "administrator" ? "Administrador" : u.role === "manager" ? "Gerente" : "Atendente";
+                const avatarSeed = u.name || u.email;
+                
+                userCard.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <img class="avatar" src="https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(avatarSeed)}" style="width: 32px; height: 32px; border-radius: 50%;">
+                        <div>
+                            <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${u.name || u.email}</div>
+                            <div style="font-size: 11px; opacity: 0.6;">${roleLabel} • ${u.email}</div>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" style="padding: 5px 10px; font-size: 12px;">Transferir</button>
+                `;
+
+                userCard.onclick = async () => {
+                    try {
+                        await api.post(`/api/inbox/conversations/${state.activeConversationId}/assign`, { user_id: u.id });
+                        showToast(`Conversa transferida para ${u.name || u.email} com sucesso!`, "success");
+                        this.closeTransferModal();
+
+                        document.getElementById("active-chat-area").classList.add("empty");
+                        document.getElementById("active-chat-area").querySelector(".no-chat-selected").style.display = "flex";
+                        document.getElementById("active-chat-area").querySelector(".chat-wrapper").style.display = "none";
+                        document.getElementById("guest-context").style.display = "none";
+
+                        const activeTab = document.querySelector(".inbox-tabs .tab-btn.active");
+                        const currentStatus = activeTab ? activeTab.getAttribute("data-status") : "waiting";
+                        await this.loadConversations(currentStatus);
+                    } catch (err) {
+                        showToast("Erro ao transferir: " + err.message, "error");
+                    }
+                };
+
+                listContainer.appendChild(userCard);
+            });
+        } catch (err) {
+            listContainer.innerHTML = `<p style='color: var(--color-danger); text-align: center; padding: 12px;'>Erro ao carregar equipe: ${err.message}</p>`;
+        }
+    },
+
+    closeTransferModal() {
+        const modal = document.getElementById("modal-transfer-chat");
+        if (modal) modal.style.display = "none";
+    },
+
     startBackgroundSync() {
         if (state.syncInterval) clearInterval(state.syncInterval);
         // Polling inteligente silencioso a cada 4 segundos como garantia extra contra atrasos
@@ -1432,13 +1512,11 @@ document.getElementById("btn-transfer-chat").addEventListener("click", async () 
     const convo = state.conversations.find(c => c.id === state.activeConversationId);
     const isWaiting = convo && (convo.status === "waiting" || convo.status === "bot");
     
-    try {
-        await api.post(`/api/inbox/conversations/${state.activeConversationId}/assign`, {});
-        
-        if (isWaiting) {
+    if (isWaiting) {
+        try {
+            await api.post(`/api/inbox/conversations/${state.activeConversationId}/assign`, {});
             showToast("Atendimento assumido! Iniciando conversa...", "success");
             
-            // 1. Alterna a aba ativa visualmente para "Minhas" (active)
             document.querySelectorAll(".inbox-tabs .tab-btn").forEach(b => {
                 if (b.getAttribute("data-status") === "active") {
                     b.classList.add("active");
@@ -1447,26 +1525,14 @@ document.getElementById("btn-transfer-chat").addEventListener("click", async () 
                 }
             });
             
-            // 2. Carrega as conversas da aba "Minhas" (active)
             await appRouter.loadConversations("active");
-            
-            // 3. Mantém a conversa selecionada e aberta na tela
             await appRouter.selectConversation(state.activeConversationId);
-        } else {
-            showToast("Conversa transferida com sucesso!", "success");
-            
-            // Comportamento original para transferência: limpa a tela e recarrega a aba atual
-            const activeTab = document.querySelector(".inbox-tabs .tab-btn.active");
-            const currentStatus = activeTab ? activeTab.getAttribute("data-status") : "waiting";
-            await appRouter.loadConversations(currentStatus);
-            
-            document.getElementById("active-chat-area").classList.add("empty");
-            document.getElementById("active-chat-area").querySelector(".no-chat-selected").style.display = "flex";
-            document.getElementById("active-chat-area").querySelector(".chat-wrapper").style.display = "none";
-            document.getElementById("guest-context").style.display = "none";
+        } catch (err) {
+            showToast("Erro ao assumir atendimento: " + err.message, "error");
         }
-    } catch (err) {
-        showToast("Erro ao processar ação: " + err.message, "error");
+    } else {
+        // Se já estiver ativa, abre o modal de transferência de equipe
+        appRouter.openTransferModal();
     }
 });
 
@@ -1476,12 +1542,15 @@ document.getElementById("btn-resolve-chat").addEventListener("click", async () =
         await api.post(`/api/inbox/conversations/${state.activeConversationId}/resolve`, {});
         showToast("Conversa resolvida!", "success");
         
-        // Recarrega a fila e limpa a tela de chat ativo
-        await appRouter.loadConversations();
+        // Limpa tela do chat
         document.getElementById("active-chat-area").classList.add("empty");
         document.getElementById("active-chat-area").querySelector(".no-chat-selected").style.display = "flex";
         document.getElementById("active-chat-area").querySelector(".chat-wrapper").style.display = "none";
         document.getElementById("guest-context").style.display = "none";
+
+        const activeTab = document.querySelector(".inbox-tabs .tab-btn.active");
+        const currentStatus = activeTab ? activeTab.getAttribute("data-status") : "waiting";
+        await appRouter.loadConversations(currentStatus);
     } catch (err) {
         showToast("Erro ao resolver conversa: " + err.message, "error");
     }

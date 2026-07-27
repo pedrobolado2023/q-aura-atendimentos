@@ -1049,7 +1049,27 @@
             </div>
         </div>
     </div>
-    <div id="toast-container" class="toast-container"></div>
+    <!-- ===== MODAL: Transferir Atendimento ===== -->
+    <div id="modal-transfer-chat" class="modal-overlay" style="display: none;" onclick="if(event.target===this) appRouter.closeTransferModal()">
+        <div class="modal-card" style="max-width: 440px; padding: 0; overflow: hidden;" onclick="event.stopPropagation()">
+            <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="margin: 0; font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-arrow-right-arrow-left" style="color: var(--color-brand);"></i> Transferir Atendimento
+                </h3>
+                <button class="modal-close" onclick="appRouter.closeTransferModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">Selecione o membro da equipe para quem deseja transferir esta conversa:</p>
+                <div id="transfer-users-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow-y: auto;">
+                    <p style="text-align: center; opacity: 0.6;">Carregando equipe...</p>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 12px 20px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end;">
+                <button class="btn btn-secondary btn-sm" onclick="appRouter.closeTransferModal()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ===== MODAL: Em Desenvolvimento ===== -->
     <div id="dev-modal-overlay" class="modal-overlay" onclick="uiHelpers.closeDevModal()">
         <div class="modal-card" onclick="event.stopPropagation()">
