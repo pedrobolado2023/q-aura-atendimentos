@@ -290,8 +290,11 @@ async def send_message(
     )
     db.add(msg)
     
-    # Update last message timestamp
+    # Update last message timestamp & assign human agent
     convo.last_message_at = func.now()
+    convo.status = "active"
+    if not convo.assigned_user_id:
+        convo.assigned_user_id = current_user.id
     db.commit()
     db.refresh(msg)
 

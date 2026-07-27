@@ -195,15 +195,22 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                         Conversation.contact_id == contact.id
                     ).order_by(Conversation.last_message_at.desc()).first()
 
-                    # Check if chatbot is active for the tenant
+                    # Check if chatbot or n8n is configured
                     bot_config = db.query(BotConfig).filter(BotConfig.tenant_id == tenant_id).first()
-                    is_bot_active = bot_config and bot_config.is_active
+                    is_bot_active = bool(bot_config and bot_config.is_active)
+                    n8n_url = None
+                    if bot_config and bot_config.n8n_webhook_url:
+                        n8n_url = bot_config.n8n_webhook_url
+                    elif settings.N8N_WEBHOOK_URL:
+                        n8n_url = settings.N8N_WEBHOOK_URL
+                    
+                    is_any_bot_enabled = is_bot_active or bool(n8n_url)
 
                     if not convo:
                         convo = Conversation(
                             tenant_id=tenant_id,
                             contact_id=contact.id,
-                            status="bot" if is_bot_active else "waiting",
+                            status="bot" if is_any_bot_enabled else "waiting",
                             routing_mode="queue"
                         )
                         db.add(convo)
@@ -212,7 +219,7 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                     else:
                         # If conversation was resolved, re-open it!
                         if convo.status == "resolved":
-                            convo.status = "bot" if is_bot_active else "waiting"
+                            convo.status = "bot" if is_any_bot_enabled else "waiting"
                             convo.assigned_user_id = None # Clear previous assignment so it goes to queue!
 
                     # Check if message already exists
@@ -257,16 +264,20 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                         "contact_avatar": contact.avatar_url,
                         "preview": body_content[:60] if body_content else "",
                         "last_message_at": convo.last_message_at.isoformat() if convo.last_message_at else None,
-                        "created_at": new_msg.created_at.isoformat() if new_msg.created_at else None
+                        "created_at": new_msg.created_at.isoformat() if new_msg.created_at else None,
+                        "has_active_window": True
                     }
                     await websocket_broadcast_fn(tenant_id, broadcast_data)
 
-                    # 5. Chatbot Autoreply Logic
-                    if convo.status == "bot" and is_bot_active:
+                    # Check if conversation has been taken over by human agent
+                    is_human_handled = (convo.status == "active" or convo.assigned_user_id is not None)
+
+                    # 5. Site Chatbot Autoreply Logic (Only if NOT handled by human agent)
+                    if not is_human_handled and convo.status == "bot" and is_bot_active and bot_config:
                         creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == tenant_id).first()
                         if creds:
                             # Parse keywords to check for transfer to human agent
-                            keywords = [k.strip().lower() for k in bot_config.transfer_keywords.split(",") if k.strip()]
+                            keywords = [k.strip().lower() for k in bot_config.transfer_keywords.split(",") if k.strip()] if bot_config.transfer_keywords else []
                             should_transfer = any(k in body_content.lower() for k in keywords)
 
                             bot_reply_body = ""
@@ -286,59 +297,62 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                                 else:
                                     bot_reply_body = bot_config.fallback_message
 
-                            # Send reply via WhatsApp API
-                            bot_meta_msg_id = await send_whatsapp_text(
-                                phone_number_id=creds.phone_number_id,
-                                token=creds.permanent_access_token,
-                                to_phone=contact.phone_number,
-                                body=bot_reply_body
-                            )
+                            if bot_reply_body:
+                                # Send reply via WhatsApp API
+                                bot_meta_msg_id = await send_whatsapp_text(
+                                    phone_number_id=creds.phone_number_id,
+                                    token=creds.permanent_access_token,
+                                    to_phone=contact.phone_number,
+                                    body=bot_reply_body
+                                )
 
-                            # Save bot message to database
-                            bot_msg = Message(
-                                conversation_id=convo.id,
-                                sender_type="bot",
-                                body=bot_reply_body,
-                                meta_message_id=bot_meta_msg_id,
-                                status="sent" if bot_meta_msg_id else "failed"
-                            )
-                            db.add(bot_msg)
-                            
-                            # Mark conversation last message timestamp
-                            convo.last_message_at = datetime.utcnow()
-                            db.commit()
-                            db.refresh(bot_msg)
+                                # Save bot message to database
+                                bot_msg = Message(
+                                    conversation_id=convo.id,
+                                    sender_type="bot",
+                                    body=bot_reply_body,
+                                    meta_message_id=bot_meta_msg_id,
+                                    status="sent" if bot_meta_msg_id else "failed"
+                                )
+                                db.add(bot_msg)
+                                
+                                # Mark conversation last message timestamp
+                                convo.last_message_at = datetime.utcnow()
+                                db.commit()
+                                db.refresh(bot_msg)
 
-                            # Broadcast the bot's reply via WebSocket
-                            bot_broadcast_data = {
-                                "type": "new_message",
-                                "id": bot_msg.id,
-                                "conversation_id": convo.id,
-                                "sender_type": "bot",
-                                "body": bot_reply_body,
-                                "message_type": "text",
-                                "media_url": None,
-                                "unread": False,
-                                "unread_count": convo.unread_count,
-                                "contact_name": contact.name or contact.phone_number,
-                                "contact_phone": contact.phone_number,
-                                "contact_avatar": contact.avatar_url,
-                                "preview": bot_reply_body[:60] if bot_reply_body else "",
-                                "last_message_at": convo.last_message_at.isoformat() if convo.last_message_at else None,
-                                "created_at": bot_msg.created_at.isoformat() if bot_msg.created_at else None
-                            }
-                            await websocket_broadcast_fn(tenant_id, bot_broadcast_data)
+                                # Broadcast the bot's reply via WebSocket
+                                bot_broadcast_data = {
+                                    "type": "new_message",
+                                    "id": bot_msg.id,
+                                    "conversation_id": convo.id,
+                                    "sender_type": "bot",
+                                    "body": bot_reply_body,
+                                    "message_type": "text",
+                                    "media_url": None,
+                                    "unread": False,
+                                    "unread_count": convo.unread_count,
+                                    "contact_name": contact.name or contact.phone_number,
+                                    "contact_phone": contact.phone_number,
+                                    "contact_avatar": contact.avatar_url,
+                                    "preview": bot_reply_body[:60] if bot_reply_body else "",
+                                    "last_message_at": convo.last_message_at.isoformat() if convo.last_message_at else None,
+                                    "created_at": bot_msg.created_at.isoformat() if bot_msg.created_at else None,
+                                    "has_active_window": True
+                                }
+                                await websocket_broadcast_fn(tenant_id, bot_broadcast_data)
 
-        # Forward/Relay to n8n webhook
-        n8n_url = None
-        bot_config = db.query(BotConfig).filter(BotConfig.tenant_id == tenant_id).first()
-        if bot_config and bot_config.n8n_webhook_url:
-            n8n_url = bot_config.n8n_webhook_url
-        elif settings.N8N_WEBHOOK_URL:
-            n8n_url = settings.N8N_WEBHOOK_URL
+        # 6. Forward/Relay to n8n webhook (Only if NOT handled by human agent)
+        if 'convo' in locals() and convo:
+            is_human_handled = (convo.status == "active" or convo.assigned_user_id is not None)
+            bot_config = db.query(BotConfig).filter(BotConfig.tenant_id == tenant_id).first()
+            n8n_url = None
+            if bot_config and bot_config.n8n_webhook_url:
+                n8n_url = bot_config.n8n_webhook_url
+            elif settings.N8N_WEBHOOK_URL:
+                n8n_url = settings.N8N_WEBHOOK_URL
 
-        if n8n_url:
-            if 'convo' in locals() and convo and convo.status == "bot":
+            if n8n_url and not is_human_handled:
                 payload["conversation_id"] = str(convo.id)
                 await relay_webhook_to_n8n(n8n_url, payload)
 

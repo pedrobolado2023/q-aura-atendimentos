@@ -1075,8 +1075,24 @@ const appRouter = {
                 const msg = JSON.parse(event.data);
                 if (msg.type !== "new_message") return;
 
+                // Atualizar objeto de conversa no estado
+                const convo = (state.conversations || []).find(c => c.id === msg.conversation_id);
+                if (convo && msg.sender_type === "contact") {
+                    convo.has_active_window = true;
+                }
+
                 // --- Atualizar bolha no chat aberto ---
                 if (msg.conversation_id === state.activeConversationId) {
+                    if (msg.sender_type === "contact") {
+                        // Desbloqueio em tempo real sem precisar dar F5!
+                        const chatInputForm = document.getElementById("chat-input-form");
+                        const chatBlockedArea = document.getElementById("chat-blocked-area");
+                        if (chatInputForm && chatBlockedArea) {
+                            chatInputForm.style.display = "flex";
+                            chatBlockedArea.style.display = "none";
+                        }
+                    }
+
                     const scroll = document.getElementById("message-scroll");
                     if (scroll) {
                         // Deduplicação: não adicionar se já existe bolha com mesmo id
@@ -1121,6 +1137,13 @@ const appRouter = {
         const isActive = convoId === state.activeConversationId;
         const isIncoming = msg.sender_type === "contact";
 
+        // Atualizar estado em memória
+        const convo = (state.conversations || []).find(c => c.id === convoId);
+        if (convo && isIncoming) {
+            convo.has_active_window = true;
+            convo.last_message_at = msg.last_message_at || msg.created_at || new Date().toISOString();
+        }
+
         if (!item) {
             // Conversa não está na lista atual — recarregar a lista
             this.loadConversations();
@@ -1143,7 +1166,6 @@ const appRouter = {
         // Atualizar badge de não lido (somente mensagens do contato e não é a conversa ativa)
         if (isIncoming && !isActive) {
             item.classList.add("unread");
-            const convo = state.conversations.find(c => c.id === convoId);
             if (convo) {
                 convo.unread_count = (convo.unread_count || 0) + 1;
                 convo.unread = true;
