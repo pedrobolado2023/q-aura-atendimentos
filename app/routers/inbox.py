@@ -70,47 +70,29 @@ def get_conversations(
 
     convos = query.order_by(Conversation.last_message_at.desc()).all()
 
-    # Busca em LOTE (Batch Query 1-step) para evitar o gargalo N+1 nas últimas mensagens
+    # Busca em LOTE (1 única query SQL direta, 100% compatível com PostgreSQL UUID e SQLite)
+    last_msg_map = {}
+    last_contact_msg_map = {}
+
     if convos:
-        from sqlalchemy import func as sqlfunc
-        convo_ids = [str(c.id) for c in convos]
-
-        # 1. Subquery em lote: última mensagem geral de cada conversa
-        max_subq = (
-            db.query(
-                Message.conversation_id.label("cid"),
-                sqlfunc.max(Message.created_at).label("max_at")
-            )
+        convo_ids = [c.id for c in convos]
+        
+        # Busca todas as mensagens recentes das conversas listadas em ordem decrescente de criação
+        recent_messages = (
+            db.query(Message)
             .filter(Message.conversation_id.in_(convo_ids))
-            .group_by(Message.conversation_id)
-            .subquery()
-        )
-        last_msgs = (
-            db.query(Message)
-            .join(max_subq, (Message.conversation_id == max_subq.c.cid) & (Message.created_at == max_subq.c.max_at))
+            .order_by(Message.created_at.desc())
             .all()
         )
-        last_msg_map = {str(m.conversation_id): m for m in last_msgs}
 
-        # 2. Subquery em lote: última mensagem enviada pelo CONTATO para cálculo de janela de 24h
-        contact_subq = (
-            db.query(
-                Message.conversation_id.label("cid"),
-                sqlfunc.max(Message.created_at).label("max_at")
-            )
-            .filter(Message.conversation_id.in_(convo_ids), Message.sender_type == "contact")
-            .group_by(Message.conversation_id)
-            .subquery()
-        )
-        last_contact_msgs = (
-            db.query(Message)
-            .join(contact_subq, (Message.conversation_id == contact_subq.c.cid) & (Message.created_at == contact_subq.c.max_at))
-            .all()
-        )
-        last_contact_msg_map = {str(m.conversation_id): m for m in last_contact_msgs}
-    else:
-        last_msg_map = {}
-        last_contact_msg_map = {}
+        for m in recent_messages:
+            cid_key = str(m.conversation_id)
+            # Guarda a mensagem mais recente da conversa
+            if cid_key not in last_msg_map:
+                last_msg_map[cid_key] = m
+            # Guarda a mensagem mais recente enviada pelo contato (para a janela de 24h)
+            if m.sender_type == "contact" and cid_key not in last_contact_msg_map:
+                last_contact_msg_map[cid_key] = m
 
     # Enriquece cada conversa instantaneamente a partir do mapa em memória (O(1))
     result = []
