@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy import func
 from app.database import get_db, SessionLocal
