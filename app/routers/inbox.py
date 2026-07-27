@@ -50,71 +50,87 @@ def get_conversations(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
-    from sqlalchemy.orm import joinedload
-    query = db.query(Conversation).options(joinedload(Conversation.contact)).filter(Conversation.tenant_id == current_tenant.id)
-    if status_filter:
-        if status_filter == "waiting":
-            query = query.filter(Conversation.status.in_(["waiting", "bot"]))
-        else:
-            query = query.filter(Conversation.status == status_filter)
-        
-    # Para atendentes normais (agentes), filtra apenas as conversas atribuídas a eles na aba Minhas
-    if status_filter == "active" and current_user.role not in ["administrator", "manager"]:
-        query = query.filter(Conversation.assigned_user_id == current_user.id)
-        
-    # Limite inteligente para evitar travamento com milhares de conversas resolvidas antigas
-    if status_filter == "resolved":
-        query = query.limit(150)
-    else:
-        query = query.limit(300)
-
-    convos = query.order_by(Conversation.last_message_at.desc()).all()
-
-    # Busca em LOTE (1 única query SQL direta, 100% compatível com PostgreSQL UUID e SQLite)
-    last_msg_map = {}
-    last_contact_msg_map = {}
-
-    if convos:
-        convo_ids = [c.id for c in convos]
-        
-        # Busca todas as mensagens recentes das conversas listadas em ordem decrescente de criação
-        recent_messages = (
-            db.query(Message)
-            .filter(Message.conversation_id.in_(convo_ids))
-            .order_by(Message.created_at.desc())
-            .all()
-        )
-
-        for m in recent_messages:
-            cid_key = str(m.conversation_id)
-            # Guarda a mensagem mais recente da conversa
-            if cid_key not in last_msg_map:
-                last_msg_map[cid_key] = m
-            # Guarda a mensagem mais recente enviada pelo contato (para a janela de 24h)
-            if m.sender_type == "contact" and cid_key not in last_contact_msg_map:
-                last_contact_msg_map[cid_key] = m
-
-    # Enriquece cada conversa instantaneamente a partir do mapa em memória (O(1))
-    result = []
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc)
-    for c in convos:
-        d = ConversationResponse.from_orm(c)
-        lm = last_msg_map.get(str(c.id))
-        if lm:
-            d.last_message_body = (lm.body or "")[:80]
-            d.last_message_sender_type = lm.sender_type
+    try:
+        from sqlalchemy.orm import joinedload
+        query = db.query(Conversation).options(joinedload(Conversation.contact)).filter(Conversation.tenant_id == current_tenant.id)
+        if status_filter:
+            if status_filter == "waiting":
+                query = query.filter(Conversation.status.in_(["waiting", "bot"]))
+            else:
+                query = query.filter(Conversation.status == status_filter)
             
-        last_contact_msg = last_contact_msg_map.get(str(c.id))
-        if last_contact_msg and last_contact_msg.created_at:
-            created_at_tz = last_contact_msg.created_at.replace(tzinfo=timezone.utc) if last_contact_msg.created_at.tzinfo is None else last_contact_msg.created_at
-            diff_hours = (now - created_at_tz).total_seconds() / 3600
-            d.has_active_window = diff_hours <= 24.0
-        else:
-            d.has_active_window = False
+        # Para atendentes normais (agentes), filtra apenas as conversas atribuídas a eles na aba Minhas
+        if status_filter == "active" and current_user.role not in ["administrator", "manager"]:
+            query = query.filter(Conversation.assigned_user_id == current_user.id)
             
-        result.append(d)
-    return result
+        # Limite inteligente para evitar travamento com milhares de conversas resolvidas antigas
+        if status_filter == "resolved":
+            query = query.limit(150)
+        else:
+            query = query.limit(300)
+
+        convos = query.order_by(Conversation.last_message_at.desc()).all()
+
+        # Busca em LOTE (1 única query SQL direta, 100% compatível com PostgreSQL UUID e SQLite)
+        last_msg_map = {}
+        last_contact_msg_map = {}
+
+        if convos:
+            convo_ids = [c.id for c in convos]
+            
+            # Busca todas as mensagens recentes das conversas listadas em ordem decrescente de criação
+            recent_messages = (
+                db.query(Message)
+                .filter(Message.conversation_id.in_(convo_ids))
+                .order_by(Message.created_at.desc())
+                .all()
+            )
+
+            for m in recent_messages:
+                cid_key = str(m.conversation_id)
+                # Guarda a mensagem mais recente da conversa
+                if cid_key not in last_msg_map:
+                    last_msg_map[cid_key] = m
+                # Guarda a mensagem mais recente enviada pelo contato (para a janela de 24h)
+                if m.sender_type == "contact" and cid_key not in last_contact_msg_map:
+                    last_contact_msg_map[cid_key] = m
+
+        # Enriquece cada conversa instantaneamente a partir do mapa em memória (O(1))
+        result = []
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        for c in convos:
+            try:
+                # Sanitização de nulos em registros legados
+                if c.unread is None: c.unread = False
+                if c.unread_count is None: c.unread_count = 0
+                if c.is_flagged is None: c.is_flagged = False
+                if c.flag_type is None: c.flag_type = "none"
+
+                d = ConversationResponse.from_orm(c)
+                lm = last_msg_map.get(str(c.id))
+                if lm:
+                    d.last_message_body = (lm.body or "")[:80]
+                    d.last_message_sender_type = lm.sender_type
+                    
+                last_contact_msg = last_contact_msg_map.get(str(c.id))
+                if last_contact_msg and last_contact_msg.created_at:
+                    created_at_tz = last_contact_msg.created_at.replace(tzinfo=timezone.utc) if last_contact_msg.created_at.tzinfo is None else last_contact_msg.created_at
+                    diff_hours = (now - created_at_tz).total_seconds() / 3600
+                    d.has_active_window = diff_hours <= 24.0
+                else:
+                    d.has_active_window = False
+                    
+                result.append(d)
+            except Exception as single_err:
+                print(f"[Inbox Serialization Warning] Failed to parse conversation {c.id}: {single_err}")
+                continue
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[Inbox Error] get_conversations failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao listar conversas: {str(e)}")
 
 @router.get("/conversations/{conversation_id}/detail", response_model=ConversationResponse)
 def get_conversation_detail(

@@ -166,14 +166,14 @@ class MessageResponse(BaseModel):
     id: UUID
     conversation_id: UUID
     sender_type: str
-    sender_id: Optional[UUID]
-    message_type: str
-    body: Optional[str]
-    media_url: Optional[str]
-    media_mime_type: Optional[str]
-    status: str
-    internal_note: bool
-    created_at: datetime
+    sender_id: Optional[UUID] = None
+    message_type: Optional[str] = "text"
+    body: Optional[str] = None
+    media_url: Optional[str] = None
+    media_mime_type: Optional[str] = None
+    status: Optional[str] = "sent"
+    internal_note: Optional[bool] = False
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -181,11 +181,11 @@ class MessageResponse(BaseModel):
 class ContactResponse(BaseModel):
     id: UUID
     phone_number: str
-    name: Optional[str]
-    email: Optional[str]
-    language: str
-    loyalty_level: str
-    sales_funnel_stage: str
+    name: Optional[str] = None
+    email: Optional[str] = None
+    language: Optional[str] = "pt-BR"
+    loyalty_level: Optional[str] = "none"
+    sales_funnel_stage: Optional[str] = "lead"
     avatar_url: Optional[str] = None
 
     class Config:
@@ -195,16 +195,16 @@ class ConversationResponse(BaseModel):
     id: UUID
     tenant_id: UUID
     contact_id: UUID
-    assigned_user_id: Optional[UUID]
-    assigned_department_id: Optional[UUID]
-    status: str
-    routing_mode: str
-    is_flagged: bool
-    flag_type: str
-    last_message_at: datetime
-    created_at: datetime
-    unread: bool
-    unread_count: int
+    assigned_user_id: Optional[UUID] = None
+    assigned_department_id: Optional[UUID] = None
+    status: Optional[str] = "waiting"
+    routing_mode: Optional[str] = "queue"
+    is_flagged: Optional[bool] = False
+    flag_type: Optional[str] = "none"
+    last_message_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    unread: Optional[bool] = False
+    unread_count: Optional[int] = 0
     contact: Optional[ContactResponse] = None
     last_message_body: Optional[str] = None
     last_message_sender_type: Optional[str] = None
