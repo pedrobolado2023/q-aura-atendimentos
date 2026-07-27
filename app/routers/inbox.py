@@ -813,92 +813,98 @@ async def resolve_conversation(
     """
     Marks the conversation as resolved, creates system note, and sends closing message.
     """
-    convo = db.query(Conversation).filter(
-        Conversation.id == str(conversation_id),
-        Conversation.tenant_id == current_tenant.id
-    ).first()
-    if not convo:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-        
-    convo.status = "resolved"
+    try:
+        convo = db.query(Conversation).filter(
+            Conversation.id == str(conversation_id),
+            Conversation.tenant_id == str(current_tenant.id)
+        ).first()
+        if not convo:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+            
+        convo.status = "resolved"
+        convo.last_message_at = datetime.now(timezone.utc)
 
-    user_disp_name = current_user.name or current_user.email
-    sys_text = f"✅ {user_disp_name} encerrou o atendimento."
+        user_disp_name = current_user.name or current_user.email
+        sys_text = f"✅ {user_disp_name} encerrou o atendimento."
 
-    sys_msg = Message(
-        conversation_id=convo.id,
-        sender_type="system",
-        sender_id=current_user.id,
-        message_type="system",
-        body=sys_text,
-        internal_note=True
-    )
-    db.add(sys_msg)
-    
-    # Send closing message to the contact
-    creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == current_tenant.id).first()
-    if creds and convo.contact and convo.contact.phone_number:
-        closing_msg = (
-            "*Atendimento Concluído*\n\n"
-            "Seu atendimento foi finalizado com sucesso. Agradecemos imensamente o seu contato! "
-            "Se precisar de qualquer outra informação ou suporte no futuro, estaremos sempre por aqui.\n\n"
-            "Tenha um excelente dia! ✨🏨"
+        sys_msg = Message(
+            conversation_id=convo.id,
+            sender_type="system",
+            sender_id=current_user.id,
+            message_type="system",
+            body=sys_text,
+            internal_note=True
         )
+        db.add(sys_msg)
         
-        meta_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{creds.phone_number_id}/messages"
-        headers = {
-            "Authorization": f"Bearer {creds.permanent_access_token}",
-            "Content-Type": "application/json"
-        }
-        meta_payload = {
-            "messaging_product": "whatsapp",
-            "recipient_type": "individual",
-            "to": convo.contact.phone_number,
-            "type": "text",
-            "text": {
-                "preview_url": False,
-                "body": closing_msg
+        # Send closing message to the contact
+        creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == str(current_tenant.id)).first()
+        if creds and convo.contact and convo.contact.phone_number:
+            closing_msg = (
+                "*Atendimento Concluído*\n\n"
+                "Seu atendimento foi finalizado com sucesso. Agradecemos imensamente o seu contato! "
+                "Se precisar de qualquer outra informação ou suporte no futuro, estaremos sempre por aqui.\n\n"
+                "Tenha um excelente dia! ✨🏨"
+            )
+            
+            meta_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{creds.phone_number_id}/messages"
+            headers = {
+                "Authorization": f"Bearer {creds.permanent_access_token}",
+                "Content-Type": "application/json"
             }
-        }
-        
-        async with httpx.AsyncClient() as client:
+            meta_payload = {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": convo.contact.phone_number,
+                "type": "text",
+                "text": {
+                    "preview_url": False,
+                    "body": closing_msg
+                }
+            }
+            
             try:
-                response = await client.post(meta_url, headers=headers, json=meta_payload)
-                if response.status_code == 200:
-                    res_data = response.json()
-                    meta_message_id = res_data.get("messages", [{}])[0].get("id")
-                    
-                    msg = Message(
-                        conversation_id=convo.id,
-                        sender_type="system",
-                        sender_id=current_user.id,
-                        message_type="text",
-                        body=closing_msg,
-                        meta_message_id=meta_message_id,
-                        status="sent"
-                    )
-                    db.add(msg)
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(meta_url, headers=headers, json=meta_payload, timeout=10.0)
+                    if response.status_code == 200:
+                        res_data = response.json()
+                        meta_message_id = res_data.get("messages", [{}])[0].get("id")
+                        
+                        msg = Message(
+                            conversation_id=convo.id,
+                            sender_type="system",
+                            sender_id=current_user.id,
+                            message_type="text",
+                            body=closing_msg,
+                            meta_message_id=meta_message_id,
+                            status="sent"
+                        )
+                        db.add(msg)
             except Exception as e:
                 print(f"[Resolve] Failed to send closing message: {e}")
-                
-    convo.last_message_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(convo)
+                    
+        db.commit()
+        db.refresh(convo)
 
-    from app.services.websocket_manager import manager
-    manager.broadcast_to_tenant(str(current_tenant.id), {
-        "type": "new_message",
-        "conversation_id": str(convo.id),
-        "id": str(sys_msg.id),
-        "sender_type": "system",
-        "message_type": "system",
-        "body": sys_text,
-        "internal_note": True,
-        "created_at": datetime.now(timezone.utc).isoformat()
-    })
+        from app.services.websocket_manager import manager
+        manager.broadcast_to_tenant(str(current_tenant.id), {
+            "type": "new_message",
+            "conversation_id": str(convo.id),
+            "id": str(sys_msg.id),
+            "sender_type": "system",
+            "message_type": "system",
+            "body": sys_text,
+            "internal_note": True,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
 
-    return convo
-    return convo
+        return convo
+    except Exception as err:
+        import traceback
+        traceback.print_exc()
+        print(f"[Resolve Error] {err}")
+        raise HTTPException(status_code=500, detail=f"Erro ao resolver conversa: {str(err)}")
 
 @router.post("/conversations/{conversation_id}/toggle-flag", response_model=ConversationResponse)
 def toggle_flag_conversation(
