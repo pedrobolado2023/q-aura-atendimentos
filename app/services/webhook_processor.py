@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.models import Contact, Conversation, Message, BotConfig, MetaCredential, CampaignRecipient
 from app.config import settings
 from app.database import SessionLocal
-from datetime import datetime
+from datetime import datetime, timezone
 
 def format_brazilian_phone(phone: str) -> str:
     # Mantém apenas dígitos
