@@ -107,11 +107,41 @@ try:
     # Deduplica contatos e conversas legadas e reseta marcação de lista geral de campanhas
     try:
         from app.database import SessionLocal
-        from app.services.webhook_processor import deduplicate_all_contacts_and_conversations
+        from app.services.webhook_processor import deduplicate_all_contacts_and_conversations, get_phone_variations, format_brazilian_phone
+        from app.models import Contact, Conversation, Message
         db_cleanup = SessionLocal()
         deduplicate_all_contacts_and_conversations(db_cleanup)
         db_cleanup.execute(text("UPDATE qa_contacts SET is_list_contact = FALSE"))
         db_cleanup.commit()
+
+        # Expurgo definitivo dos 27 contatos da planilha solicitada pelo usuário
+        raw_target_numbers = [
+            "6284570521", "6196984367", "6199933590", "6196322131", "6198618978",
+            "6284028716", "6299871141", "6194631595", "6199755884", "6993053135",
+            "6299072377", "6296306604", "6298521394", "6294592319", "6294587769",
+            "6293854660", "6198053264", "6281091988", "6291869836", "6492018500",
+            "6281506925", "6592272680", "6294406728", "6285481727", "6285524718",
+            "6296235709", "6281588271"
+        ]
+        target_vars = []
+        for raw in raw_target_numbers:
+            p = format_brazilian_phone(raw)
+            if p:
+                target_vars.extend(get_phone_variations(p))
+
+        if target_vars:
+            target_contacts = db_cleanup.query(Contact).filter(Contact.phone_number.in_(target_vars)).all()
+            if target_contacts:
+                tc_ids = [c.id for c in target_contacts]
+                convos = db_cleanup.query(Conversation).filter(Conversation.contact_id.in_(tc_ids)).all()
+                if convos:
+                    c_ids = [cv.id for cv in convos]
+                    db_cleanup.query(Message).filter(Message.conversation_id.in_(c_ids)).delete(synchronize_session=False)
+                    db_cleanup.query(Conversation).filter(Conversation.id.in_(c_ids)).delete(synchronize_session=False)
+                db_cleanup.query(Contact).filter(Contact.id.in_(tc_ids)).delete(synchronize_session=False)
+                db_cleanup.commit()
+                print(f"[Purge] Successfully purged {len(target_contacts)} contacts from CSV from database.")
+
         db_cleanup.close()
     except Exception as cleanup_err:
         print(f"[Startup Cleanup Notice] {cleanup_err}")

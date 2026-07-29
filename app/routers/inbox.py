@@ -1127,6 +1127,56 @@ def import_contacts_bulk(
         raise HTTPException(status_code=500, detail=f"Erro ao importar lista de contatos: {str(e)}")
 
 
+@router.post("/contacts/delete-bulk")
+def delete_contact_list(
+    payload: BulkContactUploadRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("crm"))
+):
+    """
+    Deletes specified contacts and their conversations/messages in bulk.
+    """
+    if current_user.role not in ["administrator", "manager"]:
+        raise HTTPException(status_code=403, detail="Apenas administradores e supervisores podem excluir contatos.")
+
+    tenant_id_str = str(current_tenant.id)
+    try:
+        from app.services.webhook_processor import get_phone_variations
+        phones_to_delete = []
+        for c in payload.contacts:
+            phone = format_brazilian_phone(c.phone_number)
+            if phone:
+                phones_to_delete.extend(get_phone_variations(phone))
+
+        if not phones_to_delete:
+            return {"status": "success", "deleted": 0}
+
+        contacts = db.query(Contact).filter(
+            Contact.tenant_id == tenant_id_str,
+            Contact.phone_number.in_(phones_to_delete)
+        ).all()
+
+        deleted_count = len(contacts)
+        if contacts:
+            contact_ids = [c.id for c in contacts]
+            convos = db.query(Conversation).filter(Conversation.contact_id.in_(contact_ids)).all()
+            if convos:
+                convo_ids = [cv.id for cv in convos]
+                db.query(Message).filter(Message.conversation_id.in_(convo_ids)).delete(synchronize_session=False)
+                db.query(Conversation).filter(Conversation.id.in_(convo_ids)).delete(synchronize_session=False)
+            db.query(Contact).filter(Contact.id.in_(contact_ids)).delete(synchronize_session=False)
+            db.commit()
+
+        return {"status": "success", "deleted": deleted_count}
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        print(f"[CRM Delete Bulk Error] {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao excluir contatos: {str(e)}")
+
+
 async def dispatch_campaign_bulk(
     tenant_id: UUID,
     agent_id: UUID,
