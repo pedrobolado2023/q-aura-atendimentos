@@ -567,13 +567,10 @@ async def start_conversation(
             name=contact_name,
             language="pt-BR",
             sales_funnel_stage="lead",
-            is_list_contact=True
+            is_list_contact=False
         )
         db.add(contact)
         db.flush()
-    else:
-        contact.is_list_contact = True
-        db.commit()
 
     # 3. Get/Create conversation
     convo = db.query(Conversation).filter(
@@ -1073,6 +1070,11 @@ def import_contacts_bulk(
 
     if not contacts_to_process:
         return {"status": "success", "imported": 0}
+
+    # Reseta a flag de lista de campanha dos contatos antigos do tenant para garantir que a campanha vai SOMENTE para a nova lista importada
+    db.query(Contact).filter(Contact.tenant_id == current_tenant.id).update(
+        {Contact.is_list_contact: False}, synchronize_session=False
+    )
 
     # Fetch all existing contacts in a single query
     phones_list = [p[0] for p in contacts_to_process]

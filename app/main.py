@@ -104,12 +104,14 @@ try:
     except Exception as check_err:
         print(f"[Auto-Migration] Could not check tenant count: {check_err}")
 
-    # Deduplica contatos e conversas legadas que foram geradas pela variação de 8 vs 9 dígitos
+    # Deduplica contatos e conversas legadas e reseta marcação de lista geral de campanhas
     try:
         from app.database import SessionLocal
         from app.services.webhook_processor import deduplicate_all_contacts_and_conversations
         db_cleanup = SessionLocal()
         deduplicate_all_contacts_and_conversations(db_cleanup)
+        db_cleanup.execute(text("UPDATE qa_contacts SET is_list_contact = FALSE"))
+        db_cleanup.commit()
         db_cleanup.close()
     except Exception as cleanup_err:
         print(f"[Startup Cleanup Notice] {cleanup_err}")
