@@ -1079,19 +1079,27 @@ def import_contacts_bulk(
             {"is_list_contact": False}, synchronize_session=False
         )
 
-        # Fetch all existing contacts in a single query
-        phones_list = [p[0] for p in contacts_to_process]
+        from app.services.webhook_processor import get_phone_variations
+        all_phone_vars = []
+        for p, n in contacts_to_process:
+            all_phone_vars.extend(get_phone_variations(p))
+
+        # Fetch all existing contacts for any 8/9 digit phone variation in a single query
         existing = db.query(Contact).filter(
             Contact.tenant_id == tenant_id_str,
-            Contact.phone_number.in_(phones_list)
+            Contact.phone_number.in_(all_phone_vars)
         ).all()
         
-        existing_map = {c.phone_number: c for c in existing}
+        existing_map = {}
+        for c in existing:
+            for v in get_phone_variations(c.phone_number):
+                existing_map[v] = c
 
         for phone, name in contacts_to_process:
             contact = existing_map.get(phone)
             if contact:
-                contact.name = name
+                if name and not name.startswith("Hóspede "):
+                    contact.name = name
                 contact.is_list_contact = True
             else:
                 contact = Contact(
@@ -1104,6 +1112,9 @@ def import_contacts_bulk(
                     is_list_contact=True
                 )
                 db.add(contact)
+                # Registra variações do novo contato no mapa local para evitar duplicidade na mesma lista
+                for v in get_phone_variations(phone):
+                    existing_map[v] = contact
             imported_count += 1
             
         db.commit()
