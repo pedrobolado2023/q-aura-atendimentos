@@ -216,7 +216,7 @@ class ConversationResponse(BaseModel):
 
 # CRM & Campaign Schemas
 class BulkContactItem(BaseModel):
-    name: str
+    name: Optional[str] = None
     phone_number: str
 
 class BulkContactUploadRequest(BaseModel):
