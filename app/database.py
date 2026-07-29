@@ -31,11 +31,20 @@ if not db_url.startswith("sqlite"):
     except Exception as e:
         print(f"Erro ao tratar URL do banco de dados: {e}")
 
-# Configure SQLite check_same_thread if applicable
+from sqlalchemy import event
+
+# Configure SQLite check_same_thread and WAL mode for maximum concurrency and speed
 if db_url.startswith("sqlite"):
-    engine = create_engine(db_url, connect_args={"check_same_thread": False})
+    engine = create_engine(db_url, connect_args={"check_same_thread": False, "timeout": 15})
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.close()
 else:
-    engine = create_engine(db_url)
+    engine = create_engine(db_url, pool_pre_ping=True)
 
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

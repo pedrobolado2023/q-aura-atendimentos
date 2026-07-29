@@ -1208,16 +1208,20 @@ const appRouter = {
 
     startBackgroundSync() {
         if (state.syncInterval) clearInterval(state.syncInterval);
-        // Polling inteligente e seguro a cada 4 segundos como garantia contra oscilações de rede / WebSocket
+        // Polling inteligente e otimizado (se WebSocket estiver conectado, reduz frequência para economizar servidor)
         state.syncInterval = setInterval(async () => {
             if (!state.token || !state.tenant_id) return;
+            const isWsConnected = state.ws && state.ws.readyState === WebSocket.OPEN;
             try {
-                await this.loadConversations(null, true);
-                if (state.activeConversationId) {
-                    await this.refreshActiveMessagesSilent();
+                // Se WebSocket estiver desativado ou oscilando, renova a lista
+                if (!isWsConnected) {
+                    await this.loadConversations(null, true);
+                    if (state.activeConversationId) {
+                        await this.refreshActiveMessagesSilent();
+                    }
                 }
             } catch (e) {}
-        }, 4000);
+        }, 6000);
     },
 
     async refreshActiveMessagesSilent() {
