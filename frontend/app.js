@@ -1499,8 +1499,20 @@ document.getElementById("chat-input-form").addEventListener("submit", async (e) 
 
     input.value = "";
     try {
-        await api.post(`/api/inbox/send-message?conversation_id=${state.activeConversationId}&body=${encodeURIComponent(body)}`, {});
+        const newMsg = await api.post(`/api/inbox/send-message?conversation_id=${state.activeConversationId}&body=${encodeURIComponent(body)}`, {});
+        if (newMsg && newMsg.id) {
+            const scroll = document.getElementById("message-scroll");
+            if (scroll) {
+                const alreadyExists = scroll.querySelector(`[data-msg-id="${newMsg.id}"]`);
+                if (!alreadyExists) {
+                    const bubble = renderMessageBubble(newMsg);
+                    scroll.appendChild(bubble);
+                    scroll.scrollTop = scroll.scrollHeight;
+                }
+            }
+        }
     } catch (err) {
+        input.value = body; // Restaura o texto digitado em caso de erro para não perder a mensagem
         showToast("Erro ao enviar: " + err.message, "error");
     }
 });

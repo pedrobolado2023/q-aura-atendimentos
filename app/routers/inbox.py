@@ -288,18 +288,31 @@ async def send_message(
     }
 
     meta_message_id = None
+    meta_error_detail = None
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(meta_url, headers=headers, json=payload)
+            response = await client.post(meta_url, headers=headers, json=payload, timeout=12.0)
             if response.status_code == 200:
                 res_data = response.json()
                 meta_message_id = res_data.get("messages", [{}])[0].get("id")
             else:
-                # Handle/log failure, keep status as failed
-                pass
+                try:
+                    err_data = response.json()
+                    err_obj = err_data.get("error", {})
+                    meta_error_detail = err_obj.get("message") or f"Erro Meta HTTP {response.status_code}"
+                    err_code = err_obj.get("code")
+                    if err_code == 131047 or "24 hours" in str(meta_error_detail).lower():
+                        meta_error_detail = "A janela de 24h para envio de mensagens ativas gratuitas expirou. O cliente precisa enviar uma mensagem primeiro ou você deve enviar um Modelo/Template."
+                except Exception:
+                    meta_error_detail = f"Erro Meta API HTTP {response.status_code}: {response.text[:200]}"
         except Exception as e:
-            # log exception
-            pass
+            meta_error_detail = f"Erro de conexão com a API Meta WhatsApp: {str(e)}"
+
+    if not meta_message_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=meta_error_detail or "Falha ao enviar mensagem via WhatsApp API Meta."
+        )
 
     # 4. Save to Database
     msg = Message(
@@ -309,7 +322,7 @@ async def send_message(
         message_type="text",
         body=formatted_body,
         meta_message_id=meta_message_id,
-        status="sent" if meta_message_id else "failed"
+        status="sent"
     )
     db.add(msg)
     
@@ -365,7 +378,7 @@ async def send_message(
         "last_message_at": convo.last_message_at.isoformat() if convo.last_message_at else None,
         "created_at": msg.created_at.isoformat() if msg.created_at else None
     }
-    await manager.broadcast_to_tenant(current_tenant.id, broadcast_data)
+    await manager.broadcast_to_tenant(str(current_tenant.id), broadcast_data)
 
     return msg
 
@@ -509,7 +522,7 @@ async def send_bot_message(
         "last_message_at": msg.created_at.isoformat() if msg.created_at else None,
         "created_at": msg.created_at.isoformat() if msg.created_at else None
     }
-    await manager.broadcast_to_tenant(current_tenant.id, broadcast_data)
+    await manager.broadcast_to_tenant(str(current_tenant.id), broadcast_data)
 
     return msg
 
@@ -694,7 +707,7 @@ class AssignRequest(BaseModel):
     user_id: Optional[UUID] = None
 
 @router.post("/conversations/{conversation_id}/assign", response_model=ConversationResponse)
-def assign_conversation(
+async def assign_conversation(
     conversation_id: UUID,
     payload: Optional[AssignRequest] = None,
     db: Session = Depends(get_db),
@@ -706,14 +719,14 @@ def assign_conversation(
     """
     convo = db.query(Conversation).filter(
         Conversation.id == str(conversation_id),
-        Conversation.tenant_id == current_tenant.id
+        Conversation.tenant_id == str(current_tenant.id)
     ).first()
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
         
     target_user = current_user
     if payload and payload.user_id:
-        u = db.query(User).filter(User.id == str(payload.user_id), User.tenant_id == current_tenant.id).first()
+        u = db.query(User).filter(User.id == str(payload.user_id), User.tenant_id == str(current_tenant.id)).first()
         if u:
             target_user = u
 
@@ -740,7 +753,7 @@ def assign_conversation(
     db.refresh(convo)
 
     from app.services.websocket_manager import manager
-    manager.broadcast_to_tenant(str(current_tenant.id), {
+    await manager.broadcast_to_tenant(str(current_tenant.id), {
         "type": "new_message",
         "conversation_id": str(convo.id),
         "id": str(sys_msg.id),
@@ -755,7 +768,7 @@ def assign_conversation(
 
 
 @router.post("/conversations/{conversation_id}/transfer-to-bot", response_model=ConversationResponse)
-def transfer_conversation_to_bot(
+async def transfer_conversation_to_bot(
     conversation_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -766,7 +779,7 @@ def transfer_conversation_to_bot(
     """
     convo = db.query(Conversation).filter(
         Conversation.id == str(conversation_id),
-        Conversation.tenant_id == current_tenant.id
+        Conversation.tenant_id == str(current_tenant.id)
     ).first()
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -790,7 +803,7 @@ def transfer_conversation_to_bot(
     db.refresh(convo)
 
     from app.services.websocket_manager import manager
-    manager.broadcast_to_tenant(str(current_tenant.id), {
+    await manager.broadcast_to_tenant(str(current_tenant.id), {
         "type": "new_message",
         "conversation_id": str(convo.id),
         "id": str(sys_msg.id),
@@ -889,7 +902,7 @@ async def resolve_conversation(
         db.refresh(convo)
 
         from app.services.websocket_manager import manager
-        manager.broadcast_to_tenant(str(current_tenant.id), {
+        await manager.broadcast_to_tenant(str(current_tenant.id), {
             "type": "new_message",
             "conversation_id": str(convo.id),
             "id": str(sys_msg.id),
