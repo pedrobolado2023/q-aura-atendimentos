@@ -103,6 +103,16 @@ try:
                     print(f"[Auto-Migration] Migration process error: {mig_err}")
     except Exception as check_err:
         print(f"[Auto-Migration] Could not check tenant count: {check_err}")
+
+    # Deduplica contatos e conversas legadas que foram geradas pela variação de 8 vs 9 dígitos
+    try:
+        from app.database import SessionLocal
+        from app.services.webhook_processor import deduplicate_all_contacts_and_conversations
+        db_cleanup = SessionLocal()
+        deduplicate_all_contacts_and_conversations(db_cleanup)
+        db_cleanup.close()
+    except Exception as cleanup_err:
+        print(f"[Startup Cleanup Notice] {cleanup_err}")
 except Exception as e:
     print(f"[Database] Error creating/updating tables on startup: {e}")
 

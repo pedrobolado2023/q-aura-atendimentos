@@ -16,6 +16,27 @@ def format_brazilian_phone(phone: str) -> str:
         digits = "55" + digits
     return digits
 
+def get_phone_variations(phone: str) -> list:
+    if not phone:
+        return []
+    clean = "".join(filter(str.isdigit, str(phone)))
+    if not clean:
+        return []
+    if not clean.startswith("55"):
+        clean = "55" + clean
+
+    variations = [clean]
+    if len(clean) == 13 and clean.startswith("55") and clean[4] == "9":
+        without_9 = clean[:4] + clean[5:]
+        if without_9 not in variations:
+            variations.append(without_9)
+    elif len(clean) == 12 and clean.startswith("55"):
+        with_9 = clean[:4] + "9" + clean[4:]
+        if with_9 not in variations:
+            variations.append(with_9)
+
+    return variations
+
 async def send_whatsapp_text(phone_number_id: str, token: str, to_phone: str, body: str) -> Optional[str]:
     """Helper function to send a text WhatsApp message via Meta Cloud API."""
     meta_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{phone_number_id}/messages"
@@ -173,13 +194,29 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                     else:
                         body_content = f"[{msg_type.capitalize()}]"
 
-                    # 1. Resolve Contact
-                    contact = db.query(Contact).filter(
-                        Contact.tenant_id == tenant_id,
-                        Contact.phone_number == sender_phone
-                    ).first()
 
-                    if not contact:
+
+                    # 1. Resolve Contact (Busca flexível por variações de 8 e 9 dígitos para o mesmo DDD)
+                    phone_vars = get_phone_variations(sender_phone)
+                    contacts = db.query(Contact).filter(
+                        Contact.tenant_id == tenant_id,
+                        Contact.phone_number.in_(phone_vars)
+                    ).all()
+
+                    if contacts:
+                        contact = contacts[0]
+                        # Mescla automaticamente contatos duplicados se existirem
+                        if len(contacts) > 1:
+                            for dup in contacts[1:]:
+                                db.query(Conversation).filter(Conversation.contact_id == dup.id).update(
+                                    {Conversation.contact_id: contact.id}, synchronize_session=False
+                                )
+                                db.delete(dup)
+                            try:
+                                db.commit()
+                            except Exception:
+                                db.rollback()
+                    else:
                         contact = Contact(
                             tenant_id=tenant_id,
                             phone_number=sender_phone,
@@ -202,11 +239,25 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                                 campaign.click_count = (campaign.click_count or 0) + 1
                             db.commit()
 
-                    # 2. Resolve Conversation (find the latest conversation for this contact)
-                    convo = db.query(Conversation).filter(
+                    # 2. Resolve Conversation (Garante conversa única e mescla duplicadas)
+                    convos = db.query(Conversation).filter(
                         Conversation.tenant_id == tenant_id,
                         Conversation.contact_id == contact.id
-                    ).order_by(Conversation.last_message_at.desc()).first()
+                    ).order_by(Conversation.last_message_at.desc()).all()
+
+                    convo = None
+                    if convos:
+                        convo = convos[0]
+                        if len(convos) > 1:
+                            for dup_convo in convos[1:]:
+                                db.query(Message).filter(Message.conversation_id == dup_convo.id).update(
+                                    {Message.conversation_id: convo.id}, synchronize_session=False
+                                )
+                                db.delete(dup_convo)
+                            try:
+                                db.commit()
+                            except Exception:
+                                db.rollback()
 
                     # Check if chatbot or n8n is configured
                     bot_config = db.query(BotConfig).filter(BotConfig.tenant_id == tenant_id).first()
@@ -242,10 +293,10 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                         db.commit()
                         db.refresh(convo)
                     else:
-                        # If conversation was resolved, re-open it!
+                        # Se a conversa já estava ativa com atendente humano, NUNCA manda pro bot!
                         if convo.status == "resolved":
                             convo.status = "bot" if is_any_bot_enabled else "waiting"
-                            convo.assigned_user_id = None # Clear previous assignment so it goes to queue!
+                            convo.assigned_user_id = None # Reinicia atendimento se foi resolvida
                             sys_text = "🤖 Conversa reaberta e enviada ao Robô Chatbot" if is_any_bot_enabled else "⏳ Conversa reaberta e enviada para a fila de atendimento"
                             sys_msg = Message(
                                 conversation_id=convo.id,
@@ -413,3 +464,63 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
         return False
     finally:
         db.close()
+
+
+def deduplicate_all_contacts_and_conversations(db: Session):
+    """
+    Cleans up duplicate contacts and duplicate conversations created by 8 vs 9 digit phone variations.
+    """
+    try:
+        tenants = db.query(Contact.tenant_id).distinct().all()
+        for (t_id,) in tenants:
+            if not t_id:
+                continue
+            contacts = db.query(Contact).filter(Contact.tenant_id == t_id).all()
+            visited_ids = set()
+
+            for c in contacts:
+                if c.id in visited_ids:
+                    continue
+                vars_list = get_phone_variations(c.phone_number)
+                if not vars_list:
+                    continue
+
+                matching = [m for m in contacts if m.phone_number in vars_list]
+                if len(matching) > 1:
+                    primary = matching[0]
+                    for dup in matching[1:]:
+                        visited_ids.add(dup.id)
+                        db.query(Conversation).filter(Conversation.contact_id == dup.id).update(
+                            {Conversation.contact_id: primary.id}, synchronize_session=False
+                        )
+                        db.delete(dup)
+                    db.commit()
+                visited_ids.add(c.id)
+
+            # Cleanup duplicate conversations per contact
+            contacts_after = db.query(Contact).filter(Contact.tenant_id == t_id).all()
+            for c in contacts_after:
+                convos = db.query(Conversation).filter(
+                    Conversation.tenant_id == t_id,
+                    Conversation.contact_id == c.id
+                ).order_by(Conversation.last_message_at.desc()).all()
+
+                if len(convos) > 1:
+                    # Pick active conversation or most recent
+                    primary_convo = convos[0]
+                    for active_candidate in convos:
+                        if active_candidate.status in ["active", "waiting"]:
+                            primary_convo = active_candidate
+                            break
+
+                    for dup_c in convos:
+                        if dup_c.id == primary_convo.id:
+                            continue
+                        db.query(Message).filter(Message.conversation_id == dup_c.id).update(
+                            {Message.conversation_id: primary_convo.id}, synchronize_session=False
+                        )
+                        db.delete(dup_c)
+                    db.commit()
+    except Exception as e:
+        print(f"[Deduplication Error] {e}")
+        db.rollback()
