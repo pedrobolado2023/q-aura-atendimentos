@@ -840,7 +840,7 @@ const appRouter = {
 
 
     async loadMetaSettings() {
-        if (state.currentUser && state.currentUser.role !== "administrator") {
+        if (state.user && state.user.role !== "administrator") {
             return;
         }
         try {
@@ -1490,7 +1490,18 @@ document.getElementById("settings-form").addEventListener("submit", async (e) =>
     }
 });
 
-// Chat Send Submit
+// Captura a tecla Enter no campo de texto para enviar a mensagem (Shift+Enter para nova linha)
+const chatTextarea = document.getElementById("chat-message-input");
+if (chatTextarea) {
+    chatTextarea.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            document.getElementById("chat-input-form").dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+        }
+    });
+}
+
+// Chat Send Submit (com Renderização Otimista Instantânea em 0ms)
 document.getElementById("chat-input-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const input = document.getElementById("chat-message-input");
@@ -1498,21 +1509,51 @@ document.getElementById("chat-input-form").addEventListener("submit", async (e) 
     if (!body || !state.activeConversationId) return;
 
     input.value = "";
+    
+    // 1. Renderização Otimista Instantânea (Aparece no chat em 0ms!)
+    const scroll = document.getElementById("message-scroll");
+    const tempId = `temp_${Date.now()}`;
+    const userDisplayName = (state.user && state.user.name) ? state.user.name : "Pedro";
+    const formattedBody = `*Atendente ${userDisplayName}:* ${body}`;
+
+    const tempMsgObj = {
+        id: tempId,
+        conversation_id: state.activeConversationId,
+        sender_type: "agent",
+        body: formattedBody,
+        message_type: "text",
+        created_at: new Date().toISOString()
+    };
+
+    let tempBubble = null;
+    if (scroll) {
+        // Se mensagem "Nenhuma mensagem ainda" estiver visível, limpa
+        if (scroll.innerText.includes("Nenhuma mensagem ainda")) {
+            scroll.innerHTML = "";
+        }
+        tempBubble = renderMessageBubble(tempMsgObj);
+        tempBubble.style.opacity = "0.75"; // Efeito suave de mensagem enviando
+        scroll.appendChild(tempBubble);
+        scroll.scrollTop = scroll.scrollHeight;
+    }
+
     try {
-        const newMsg = await api.post(`/api/inbox/send-message?conversation_id=${state.activeConversationId}&body=${encodeURIComponent(body)}`, {});
+        const newMsg = await api.post("/api/inbox/send-message", {
+            conversation_id: state.activeConversationId,
+            body: body
+        });
+
+        // 2. Quando o envio for confirmado pela API, atualiza a bolha temporária para permanente
         if (newMsg && newMsg.id) {
-            const scroll = document.getElementById("message-scroll");
-            if (scroll) {
-                const alreadyExists = scroll.querySelector(`[data-msg-id="${newMsg.id}"]`);
-                if (!alreadyExists) {
-                    const bubble = renderMessageBubble(newMsg);
-                    scroll.appendChild(bubble);
-                    scroll.scrollTop = scroll.scrollHeight;
-                }
+            if (tempBubble) {
+                tempBubble.setAttribute("data-msg-id", newMsg.id);
+                tempBubble.style.opacity = "1";
             }
         }
     } catch (err) {
-        input.value = body; // Restaura o texto digitado em caso de erro para não perder a mensagem
+        // 3. Em caso de erro, remove a bolha temporária e restaura o texto digitado
+        if (tempBubble) tempBubble.remove();
+        input.value = body;
         showToast("Erro ao enviar: " + err.message, "error");
     }
 });

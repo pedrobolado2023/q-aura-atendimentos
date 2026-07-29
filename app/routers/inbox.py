@@ -218,18 +218,31 @@ def get_messages(
         
     return db.query(Message).filter(Message.conversation_id == convo_id_str).order_by(Message.created_at.asc()).all()
 
+class SendMessagePayload(BaseModel):
+    conversation_id: Optional[UUID] = None
+    body: Optional[str] = None
+
 @router.post("/send-message", response_model=MessageResponse)
 async def send_message(
-    conversation_id: UUID,
-    body: str,
+    conversation_id: Optional[UUID] = None,
+    body: Optional[str] = None,
+    payload: Optional[SendMessagePayload] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
+    target_convo_id = conversation_id or (payload.conversation_id if payload else None)
+    target_body = body or (payload.body if payload else None)
+    if not target_convo_id or not target_body or not target_body.strip():
+        raise HTTPException(status_code=400, detail="Identificador da conversa (conversation_id) e conteúdo da mensagem (body) são obrigatórios.")
+
+    conversation_id = target_convo_id
+    body = target_body.strip()
+
     # 1. Verify conversation
     convo = db.query(Conversation).filter(
-        Conversation.id == conversation_id,
-        Conversation.tenant_id == current_tenant.id
+        Conversation.id == str(conversation_id),
+        Conversation.tenant_id == str(current_tenant.id)
     ).first()
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
