@@ -13,6 +13,65 @@ const state = {
     messagesCache: {}
 };
 
+// --- Web Audio API Synth Sound & Desktop Notifications ---
+let audioCtx = null;
+
+function playNewMessageSound() {
+    try {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === "suspended") {
+            audioCtx.resume();
+        }
+        
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        
+        osc.type = "sine";
+        // Chime duplo agradável: 587.33Hz (D5) -> 880Hz (A5)
+        osc.frequency.setValueAtTime(587.33, now);
+        osc.frequency.exponentialRampToValueAtTime(880.00, now + 0.08);
+        
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.25, now + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        osc.start(now);
+        osc.stop(now + 0.35);
+    } catch (e) {
+        console.warn("[Sound Notice] Audio playback unavailable:", e);
+    }
+}
+
+function requestNotificationPermission() {
+    if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission();
+    }
+}
+
+function showDesktopNotification(title, body, icon) {
+    if ("Notification" in window && Notification.permission === "granted") {
+        try {
+            new Notification(title, {
+                body: body || "Nova mensagem recebida",
+                icon: icon || "/favicon.png"
+            });
+        } catch (e) {
+            console.warn("[Notification Notice] Could not show desktop notification:", e);
+        }
+    }
+}
+
+// Solocita permissão de notificação no primeiro clique da página
+document.addEventListener("click", () => {
+    requestNotificationPermission();
+}, { once: true });
+
 // --- Toast Notification Helper ---
 function showToast(message, type = "success") {
     const container = document.getElementById("toast-container");
@@ -458,14 +517,18 @@ const appRouter = {
             if (!listContainer) return;
             
             const activeTab = document.querySelector(".inbox-tabs .tab-btn.active");
-            const statusFilter = status || (activeTab ? activeTab.getAttribute("data-status") : "waiting");
-            
-            if (!silent && (!listContainer.children || listContainer.children.length === 0)) {
+            // Renderização instantânea de 0ms a partir do cache local se disponível
+            if (!state.conversationsCache) state.conversationsCache = {};
+            if (!silent && state.conversationsCache[statusFilter] && state.conversationsCache[statusFilter].length > 0) {
+                // Renderiza imediatamente sem esperar pela requisição HTTP
+                state.conversations = state.conversationsCache[statusFilter];
+            } else if (!silent && (!listContainer.children || listContainer.children.length === 0)) {
                 listContainer.innerHTML = "<p class='subtitle' style='padding: 20px;'>Carregando...</p>";
             }
             
             const convos = await api.get(`/api/inbox/conversations?status_filter=${statusFilter}`);
             state.conversations = convos;
+            state.conversationsCache[statusFilter] = convos;
             
             if (!silent && convos.length === 0) {
                 listContainer.innerHTML = "<p class='subtitle' style='padding: 20px;'>Nenhuma conversa nesta aba.</p>";
@@ -1226,13 +1289,17 @@ const appRouter = {
     },
 
     startBackgroundSync() {
+        if (!state.token || !state.tenant_id) return;
+        
+        // Garante a conexão WebSocket ativa em tempo real
+        this.connectWebSocket();
+
         if (state.syncInterval) clearInterval(state.syncInterval);
-        // Polling inteligente e otimizado (se WebSocket estiver conectado, reduz frequência para economizar servidor)
+        // Polling inteligente de backup (se WebSocket oscilar, reduz frequência para economizar servidor)
         state.syncInterval = setInterval(async () => {
             if (!state.token || !state.tenant_id) return;
             const isWsConnected = state.ws && state.ws.readyState === WebSocket.OPEN;
             try {
-                // Se WebSocket estiver desativado ou oscilando, renova a lista
                 if (!isWsConnected) {
                     await this.loadConversations(null, true);
                     if (state.activeConversationId) {
@@ -1276,7 +1343,7 @@ const appRouter = {
         state.ws = new WebSocket(`${wsProtocol}//${wsHost}/ws/${state.tenant_id}`);
         
         state.ws.onopen = () => {
-            console.log("[WS] Conectado.");
+            console.log("[WS] Conectado em tempo real!");
             retryDelay = 1000;
             // Heartbeat Ping a cada 15 segundos para manter conexao viva no Nginx/Easypanel
             state.pingInterval = setInterval(() => {
@@ -1291,6 +1358,16 @@ const appRouter = {
                 if (event.data === "pong") return;
                 const msg = JSON.parse(event.data);
                 if (msg.type !== "new_message") return;
+
+                // Tocar efeito sonoro de notificação e exibir alerta visual se a mensagem for do contato
+                if (msg.sender_type === "contact") {
+                    playNewMessageSound();
+                    showDesktopNotification(
+                        msg.contact_name || "Novo Atendimento",
+                        msg.body || "Mensagem recebida no WhatsApp",
+                        msg.contact_avatar
+                    );
+                }
 
                 // Atualizar objeto de conversa no estado
                 const convo = (state.conversations || []).find(c => c.id === msg.conversation_id);
