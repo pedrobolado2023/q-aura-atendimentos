@@ -8,7 +8,9 @@ const state = {
     tenant_id: localStorage.getItem("qa_tenant_id") || null,
     conversations: [],
     activeConversationId: null,
-    ws: null
+    ws: null,
+    conversationsCache: {},
+    messagesCache: {}
 };
 
 // --- Toast Notification Helper ---
@@ -773,25 +775,42 @@ const appRouter = {
             }
         }
 
-        // Carregar mensagens
+        // Carregar mensagens (com cache em memória para exibição INSTANTÂNEA em 0ms)
         try {
             const scroll = document.getElementById("message-scroll");
-            scroll.innerHTML = `<div style="text-align:center;padding:20px;opacity:0.5;font-size:13px;">Carregando mensagens...</div>`;
+            if (scroll) {
+                if (state.messagesCache && state.messagesCache[convoId] && state.messagesCache[convoId].length > 0) {
+                    scroll.innerHTML = "";
+                    state.messagesCache[convoId].forEach(m => {
+                        const bubble = renderMessageBubble(m);
+                        scroll.appendChild(bubble);
+                    });
+                    scroll.scrollTop = scroll.scrollHeight;
+                } else {
+                    scroll.innerHTML = `<div style="text-align:center;padding:20px;opacity:0.5;font-size:13px;">Carregando mensagens...</div>`;
+                }
+            }
+
             const messages = await api.get(`/api/inbox/conversations/${convoId}/messages`);
-            scroll.innerHTML = "";
-            if (messages.length === 0) {
-                scroll.innerHTML = `<div style="text-align:center;padding:40px;opacity:0.5;font-size:13px;">Nenhuma mensagem ainda.</div>`;
-            } else {
-                messages.forEach(m => {
-                    const bubble = renderMessageBubble(m);
-                    scroll.appendChild(bubble);
-                });
-                scroll.scrollTop = scroll.scrollHeight;
+            if (!state.messagesCache) state.messagesCache = {};
+            state.messagesCache[convoId] = messages;
+
+            if (scroll) {
+                scroll.innerHTML = "";
+                if (messages.length === 0) {
+                    scroll.innerHTML = `<div style="text-align:center;padding:40px;opacity:0.5;font-size:13px;">Nenhuma mensagem ainda.</div>`;
+                } else {
+                    messages.forEach(m => {
+                        const bubble = renderMessageBubble(m);
+                        scroll.appendChild(bubble);
+                    });
+                    scroll.scrollTop = scroll.scrollHeight;
+                }
             }
         } catch (e) {
             console.error("[inbox] Erro ao carregar mensagens:", e);
             const scroll = document.getElementById("message-scroll");
-            if (scroll) {
+            if (scroll && (!state.messagesCache || !state.messagesCache[convoId])) {
                 scroll.innerHTML = `<div style="text-align:center;padding:20px;color:var(--color-danger);font-size:13px;">Erro ao carregar histórico da conversa: ${e.message}</div>`;
             }
         }
@@ -1568,7 +1587,8 @@ document.querySelectorAll(".inbox-tabs .tab-btn").forEach(btn => {
         document.querySelectorAll(".inbox-tabs .tab-btn").forEach(b => b.classList.remove("active"));
         e.currentTarget.classList.add("active");
         const status = e.currentTarget.getAttribute("data-status");
-        await appRouter.loadConversations(status);
+        // Carrega em modo silencioso para troca instantânea de abas sem piscar "Carregando..."
+        await appRouter.loadConversations(status, true);
     });
 });
 

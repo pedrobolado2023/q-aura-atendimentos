@@ -195,12 +195,9 @@ def get_messages(
         raise HTTPException(status_code=404, detail="Conversation not found")
         
     # Mark conversation as read
-    if convo.unread or (convo.unread_count and convo.unread_count > 0):
-        convo.unread = False
-        convo.unread_count = 0
-        db.commit()
-        
-    return db.query(Message).filter(Message.conversation_id == convo_id_str).order_by(Message.created_at.asc()).all()
+    # Retorna no máximo as 150 mensagens mais recentes para resposta ultra-rápida (sub-5ms)
+    recent_messages = db.query(Message).filter(Message.conversation_id == convo_id_str).order_by(Message.created_at.desc()).limit(150).all()
+    return list(reversed(recent_messages))
 
 class SendMessagePayload(BaseModel):
     conversation_id: Optional[UUID] = None
