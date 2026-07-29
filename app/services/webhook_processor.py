@@ -209,7 +209,7 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                         if len(contacts) > 1:
                             for dup in contacts[1:]:
                                 db.query(Conversation).filter(Conversation.contact_id == dup.id).update(
-                                    {Conversation.contact_id: contact.id}, synchronize_session=False
+                                    {"contact_id": contact.id}, synchronize_session=False
                                 )
                                 db.delete(dup)
                             try:
@@ -251,7 +251,7 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                         if len(convos) > 1:
                             for dup_convo in convos[1:]:
                                 db.query(Message).filter(Message.conversation_id == dup_convo.id).update(
-                                    {Message.conversation_id: convo.id}, synchronize_session=False
+                                    {"conversation_id": convo.id}, synchronize_session=False
                                 )
                                 db.delete(dup_convo)
                             try:
@@ -491,7 +491,7 @@ def deduplicate_all_contacts_and_conversations(db: Session):
                     for dup in matching[1:]:
                         visited_ids.add(dup.id)
                         db.query(Conversation).filter(Conversation.contact_id == dup.id).update(
-                            {Conversation.contact_id: primary.id}, synchronize_session=False
+                            {"contact_id": primary.id}, synchronize_session=False
                         )
                         db.delete(dup)
                     db.commit()
@@ -517,7 +517,7 @@ def deduplicate_all_contacts_and_conversations(db: Session):
                         if dup_c.id == primary_convo.id:
                             continue
                         db.query(Message).filter(Message.conversation_id == dup_c.id).update(
-                            {Message.conversation_id: primary_convo.id}, synchronize_session=False
+                            {"conversation_id": primary_convo.id}, synchronize_session=False
                         )
                         db.delete(dup_c)
                     db.commit()
