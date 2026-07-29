@@ -1840,7 +1840,7 @@ if (dragDropArea && fileInput) {
 }
 
 function handleContactsFile(file) {
-    if (!file.name.endsWith(".csv")) {
+    if (!file || !file.name || !file.name.toLowerCase().endsWith(".csv")) {
         showToast("Por favor, envie um arquivo contendo uma planilha CSV.", "error");
         return;
     }
@@ -1854,6 +1854,9 @@ function handleContactsFile(file) {
 }
 
 function parseCSVContacts(text) {
+    if (!text) return;
+    // Remove marcador BOM UTF-8 se presente
+    text = text.replace(/^\uFEFF/, "");
     const lines = text.split(/\r?\n/);
     if (lines.length <= 1) {
         showToast("O arquivo CSV está vazio ou não possui contatos.", "error");
@@ -1861,32 +1864,39 @@ function parseCSVContacts(text) {
     }
     
     tempContacts = [];
-    // Tenta detectar colunas pelo cabeçalho
-    const headers = lines[0].split(/[;,]/).map(h => h.trim().toLowerCase());
+    const firstLine = lines[0].trim();
+    const delimiter = firstLine.includes(";") ? ";" : ",";
+    const headers = firstLine.split(delimiter).map(h => h.trim().toLowerCase().replace(/^["']|["']$/g, ""));
     
-    let nameIdx = headers.indexOf("nome");
-    let phoneIdx = headers.indexOf("telefone");
+    let nameIdx = headers.findIndex(h => h.includes("nome") || h.includes("name"));
+    let phoneIdx = headers.findIndex(h => h.includes("telefone") || h.includes("fone") || h.includes("phone") || h.includes("celular") || h.includes("whatsapp"));
     
-    // Fallbacks
     if (nameIdx === -1) nameIdx = 0;
-    if (phoneIdx === -1) phoneIdx = 1;
+    if (phoneIdx === -1) phoneIdx = headers.length > 1 ? 1 : 0;
     
     for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
         
-        const cols = line.split(/[;,]/).map(c => c.trim().replace(/^["']|["']$/g, ""));
-        if (cols.length <= Math.max(nameIdx, phoneIdx)) continue;
+        const cols = line.split(delimiter).map(c => c.trim().replace(/^["']|["']$/g, ""));
+        if (cols.length === 0) continue;
         
         const name = cols[nameIdx] || "Hóspede";
-        const phone = cols[phoneIdx] || "";
+        const phone = cols[phoneIdx] || cols[0] || "";
         
-        if (phone) {
-            tempContacts.push({ name, phone_number: phone });
+        const digitsOnly = phone.replace(/\D/g, "");
+        if (digitsOnly && digitsOnly.length >= 8) {
+            tempContacts.push({ name: name.trim() || "Hóspede", phone_number: phone.trim() });
         }
     }
     
+    if (tempContacts.length === 0) {
+        showToast("Nenhum número de telefone válido foi detectado na planilha CSV.", "error");
+        return;
+    }
+
     updateContactsPreview();
+    showToast(`${tempContacts.length} contatos detectados na planilha!`, "success");
 }
 
 function updateContactsPreview() {
