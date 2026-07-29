@@ -1055,56 +1055,65 @@ def import_contacts_bulk(
     if current_user.role not in ["administrator", "manager"]:
         raise HTTPException(status_code=403, detail="Apenas administradores e supervisores podem importar contatos.")
 
-    imported_count = 0
-    seen_phones = set()
-    contacts_to_process = []
-    
-    for c in payload.contacts:
-        phone = format_brazilian_phone(c.phone_number)
-        if not phone:
-            continue
-        if phone in seen_phones:
-            continue
-        seen_phones.add(phone)
-        contacts_to_process.append((phone, c.name))
-
-    if not contacts_to_process:
-        return {"status": "success", "imported": 0}
-
-    # Reseta a flag de lista de campanha dos contatos antigos do tenant para garantir que a campanha vai SOMENTE para a nova lista importada
-    db.query(Contact).filter(Contact.tenant_id == str(current_tenant.id)).update(
-        {"is_list_contact": False}, synchronize_session=False
-    )
-
-    # Fetch all existing contacts in a single query
-    phones_list = [p[0] for p in contacts_to_process]
-    existing = db.query(Contact).filter(
-        Contact.tenant_id == current_tenant.id,
-        Contact.phone_number.in_(phones_list)
-    ).all()
-    
-    existing_map = {c.phone_number: c for c in existing}
-
-    for phone, name in contacts_to_process:
-        contact = existing_map.get(phone)
-        if contact:
-            contact.name = name
-            contact.is_list_contact = True
-        else:
-            contact = Contact(
-                tenant_id=current_tenant.id,
-                phone_number=phone,
-                name=name,
-                sales_funnel_stage="lead",
-                loyalty_level="none",
-                language="pt-BR",
-                is_list_contact=True
-            )
-            db.add(contact)
-        imported_count += 1
+    tenant_id_str = str(current_tenant.id)
+    try:
+        imported_count = 0
+        seen_phones = set()
+        contacts_to_process = []
         
-    db.commit()
-    return {"status": "success", "imported": imported_count}
+        for c in payload.contacts:
+            phone = format_brazilian_phone(c.phone_number)
+            if not phone:
+                continue
+            if phone in seen_phones:
+                continue
+            seen_phones.add(phone)
+            contact_name = c.name if c.name and c.name.strip() else f"Hóspede {phone[-4:]}"
+            contacts_to_process.append((phone, contact_name))
+
+        if not contacts_to_process:
+            return {"status": "success", "imported": 0}
+
+        # Reseta a flag de lista de campanha dos contatos antigos do tenant para garantir que a campanha vai SOMENTE para a nova lista importada
+        db.query(Contact).filter(Contact.tenant_id == tenant_id_str).update(
+            {"is_list_contact": False}, synchronize_session=False
+        )
+
+        # Fetch all existing contacts in a single query
+        phones_list = [p[0] for p in contacts_to_process]
+        existing = db.query(Contact).filter(
+            Contact.tenant_id == tenant_id_str,
+            Contact.phone_number.in_(phones_list)
+        ).all()
+        
+        existing_map = {c.phone_number: c for c in existing}
+
+        for phone, name in contacts_to_process:
+            contact = existing_map.get(phone)
+            if contact:
+                contact.name = name
+                contact.is_list_contact = True
+            else:
+                contact = Contact(
+                    tenant_id=tenant_id_str,
+                    phone_number=phone,
+                    name=name,
+                    sales_funnel_stage="lead",
+                    loyalty_level="none",
+                    language="pt-BR",
+                    is_list_contact=True
+                )
+                db.add(contact)
+            imported_count += 1
+            
+        db.commit()
+        return {"status": "success", "imported": imported_count}
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        print(f"[CRM Import Error] {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao importar lista de contatos: {str(e)}")
 
 
 async def dispatch_campaign_bulk(
