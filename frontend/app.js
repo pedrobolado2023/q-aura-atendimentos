@@ -517,6 +517,8 @@ const appRouter = {
             if (!listContainer) return;
             
             const activeTab = document.querySelector(".inbox-tabs .tab-btn.active");
+            const statusFilter = status || (activeTab ? activeTab.getAttribute("data-status") : "waiting");
+            
             // Renderização instantânea de 0ms a partir do cache local se disponível
             if (!state.conversationsCache) state.conversationsCache = {};
             if (!silent && state.conversationsCache[statusFilter] && state.conversationsCache[statusFilter].length > 0) {
