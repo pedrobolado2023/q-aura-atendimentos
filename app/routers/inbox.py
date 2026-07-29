@@ -1373,25 +1373,17 @@ async def send_campaign(
     if not creds:
         raise HTTPException(status_code=400, detail="Chaves da API da Meta não configuradas para este hotel.")
         
-    # Valida contatos alvo antes de criar a campanha
+    # Valida contatos alvo da lista antes de criar a campanha (Garante 100% que dispara SOMENTE para a lista selecionada)
     list_contacts_count = db.query(Contact).filter(
         Contact.tenant_id == current_tenant.id,
         Contact.is_list_contact == True
     ).count()
 
     if list_contacts_count == 0:
-        total_contacts = db.query(Contact).filter(Contact.tenant_id == current_tenant.id).count()
-        if total_contacts == 0:
-            raise HTTPException(
-                status_code=400,
-                detail="Nenhum contato encontrado no banco de dados. Por favor, selecione ou envie uma planilha de contatos em formato CSV antes de disparar."
-            )
-        else:
-            # Caso não haja lista ativa recente, ativa a lista para todos os contatos cadastrados do hotel
-            db.query(Contact).filter(Contact.tenant_id == current_tenant.id).update(
-                {Contact.is_list_contact: True}, synchronize_session=False
-            )
-            db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail="Nenhum contato encontrado na lista de envio. Por favor, escolha uma planilha de contatos em formato CSV na coluna da esquerda antes de disparar a campanha."
+        )
 
     clean_template_name = camp.template_name.strip().lower() if camp.template_name else None
 
