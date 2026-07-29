@@ -16,30 +16,14 @@ from app.auth import get_current_user, get_current_tenant, ModuleRequired
 from app.config import settings
 
 def format_brazilian_phone(phone: str) -> str:
-    # Mantém apenas dígitos
-    phone = "".join(filter(str.isdigit, phone))
-    
-    # Valida formato e DDI do Brasil (55)
-    if phone.startswith("55") and len(phone) >= 12:
-        ddd = int(phone[2:4])
-        # Se tem 13 dígitos e DDD >= 31, remove o 9º dígito (o 9 logo após o DDD)
-        if len(phone) == 13 and ddd >= 31 and phone[4] == "9":
-            phone = phone[:4] + phone[5:]
-        # Se tem 12 dígitos e DDD < 31 (11 a 28), adiciona o 9º dígito
-        elif len(phone) == 12 and 11 <= ddd <= 28:
-            phone = phone[:4] + "9" + phone[4:]
-            
-    # Caso importado sem DDI 55
-    elif len(phone) in [10, 11] and not phone.startswith("55"):
-        ddd = int(phone[0:2])
-        if len(phone) == 11 and ddd >= 31 and phone[2] == "9":
-            phone = "55" + phone[:2] + phone[3:]
-        elif len(phone) == 10 and 11 <= ddd <= 28:
-            phone = "55" + phone[:2] + "9" + phone[2:]
-        else:
-            phone = "55" + phone
-            
-    return phone
+    if not phone:
+        return ""
+    digits = "".join(filter(str.isdigit, str(phone)))
+    if not digits:
+        return ""
+    if not digits.startswith("55"):
+        digits = "55" + digits
+    return digits
 
 router = APIRouter(prefix="/api/inbox", tags=["inbox"])
 
@@ -283,6 +267,18 @@ async def send_message(
     # Prepend agent's name in WhatsApp bold format
     formatted_body = f"*Atendente {current_user.name}:* {body}"
 
+    recipient_phone = format_brazilian_phone(contact.phone_number)
+    # Auto-repair legacy numbers saved with 12 digits for DDD >= 31
+    if len(recipient_phone) == 12 and recipient_phone.startswith("55"):
+        try:
+            ddd = int(recipient_phone[2:4])
+            if ddd >= 31:
+                recipient_phone = recipient_phone[:4] + "9" + recipient_phone[4:]
+                contact.phone_number = recipient_phone
+                db.commit()
+        except Exception:
+            pass
+
     # 3. Post to Meta API (WhatsApp Cloud API)
     meta_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{creds.phone_number_id}/messages"
     headers = {
@@ -292,7 +288,7 @@ async def send_message(
     payload = {
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
-        "to": contact.phone_number,
+        "to": recipient_phone,
         "type": "text",
         "text": {
             "preview_url": False,
