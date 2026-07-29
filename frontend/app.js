@@ -2230,6 +2230,22 @@ if (dispatchCampaignBtn) {
         }
         
         dispatchCampaignBtn.disabled = true;
+        
+        // Se o usuário selecionou uma planilha de contatos mas esqueceu de clicar em Salvar, salva automaticamente!
+        if (typeof tempContacts !== "undefined" && tempContacts.length > 0) {
+            try {
+                dispatchCampaignBtn.innerText = "Salvando contatos da lista...";
+                await api.post("/api/inbox/contacts/bulk", { contacts: tempContacts });
+                tempContacts = [];
+                if (typeof updateContactsPreview === "function") updateContactsPreview();
+            } catch (saveErr) {
+                showToast("Erro ao salvar a lista de contatos: " + saveErr.message, "error");
+                dispatchCampaignBtn.disabled = false;
+                dispatchCampaignBtn.innerText = "Disparar Campanha para Lista";
+                return;
+            }
+        }
+
         dispatchCampaignBtn.innerText = "Agendando disparos...";
         
         try {
