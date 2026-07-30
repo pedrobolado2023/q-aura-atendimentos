@@ -454,6 +454,9 @@ const appRouter = {
 
     showMainLayout() {
         document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+        const loginView = document.getElementById("login-view");
+        if (loginView) loginView.style.display = "none";
+
         const mainLayout = document.getElementById("main-layout");
         if (mainLayout) {
             mainLayout.classList.remove("layout-hidden");
