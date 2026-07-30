@@ -288,6 +288,16 @@ function renderMessageBubble(m) {
 
 // --- API Client ---
 const api = {
+    handleUnauthorized() {
+        console.warn("[Auth] Sessão expirada (401). Redirecionando para a tela de login...");
+        if (typeof appRouter !== "undefined" && appRouter.logout) {
+            appRouter.logout();
+        } else {
+            localStorage.clear();
+            window.location.reload();
+        }
+    },
+
     async post(endpoint, data, useAuth = true) {
         const headers = { "Content-Type": "application/json" };
         if (useAuth && state.token) {
@@ -298,6 +308,10 @@ const api = {
             headers,
             body: JSON.stringify(data)
         });
+        if (response.status === 401 && useAuth) {
+            this.handleUnauthorized();
+            throw new Error("Sessão expirada. Redirecionando...");
+        }
         if (!response.ok) {
             const err = await response.json();
             throw new Error(err.detail || "Erro desconhecido");
@@ -311,6 +325,10 @@ const api = {
             headers["Authorization"] = `Bearer ${state.token}`;
         }
         const response = await fetch(`${API_URL}${endpoint}`, { headers });
+        if (response.status === 401) {
+            this.handleUnauthorized();
+            throw new Error("Sessão expirada. Redirecionando...");
+        }
         if (!response.ok) {
             let detail = `Erro ${response.status}: ${response.statusText}`;
             try {
@@ -332,6 +350,10 @@ const api = {
             headers,
             body: JSON.stringify(data)
         });
+        if (response.status === 401 && useAuth) {
+            this.handleUnauthorized();
+            throw new Error("Sessão expirada. Redirecionando...");
+        }
         if (!response.ok) {
             const err = await response.json();
             throw new Error(err.detail || "Erro desconhecido");
@@ -348,6 +370,10 @@ const api = {
             method: "DELETE",
             headers
         });
+        if (response.status === 401) {
+            this.handleUnauthorized();
+            throw new Error("Sessão expirada. Redirecionando...");
+        }
         if (!response.ok) {
             const err = await response.json();
             throw new Error(err.detail || "Erro ao excluir");
