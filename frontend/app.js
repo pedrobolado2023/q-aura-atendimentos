@@ -960,6 +960,7 @@ const appRouter = {
                 }
             }
 
+            const messages = await api.get(`/api/inbox/conversations/${convoId}/messages`);
             if (!state.messagesCache) state.messagesCache = {};
             state.messagesCache[convoId] = messages;
 
