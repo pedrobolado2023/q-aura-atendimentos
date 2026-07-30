@@ -960,9 +960,15 @@ const appRouter = {
                 }
             }
 
-            const messages = await api.get(`/api/inbox/conversations/${convoId}/messages`);
             if (!state.messagesCache) state.messagesCache = {};
             state.messagesCache[convoId] = messages;
+
+            // Limita o cache de mensagens em memória RAM para no máximo 15 chats simultâneos (previne Memory Leak em sessões longas)
+            const cacheKeys = Object.keys(state.messagesCache);
+            if (cacheKeys.length > 15) {
+                const oldestKey = cacheKeys.find(k => k !== state.activeConversationId && k !== convoId);
+                if (oldestKey) delete state.messagesCache[oldestKey];
+            }
 
             if (scroll) {
                 scroll.innerHTML = "";

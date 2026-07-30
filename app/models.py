@@ -125,8 +125,8 @@ class Department(Base):
 class Contact(Base):
     __tablename__ = "qa_contacts"
     id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
-    tenant_id = Column(UuidCol, ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False)
-    phone_number = Column(String(30), nullable=False)
+    tenant_id = Column(UuidCol, ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    phone_number = Column(String(30), nullable=False, index=True)
     name = Column(String(255))
     email = Column(String(255))
     language = Column(String(10), default="pt-BR")
@@ -145,16 +145,16 @@ class Conversation(Base):
     __tablename__ = "qa_conversations"
     id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
     tenant_id = Column(UuidCol, ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    contact_id = Column(UuidCol, ForeignKey("qa_contacts.id", ondelete="CASCADE"), nullable=False)
-    assigned_user_id = Column(UuidCol, ForeignKey("qa_users.id", ondelete="SET NULL"))
-    assigned_department_id = Column(UuidCol, ForeignKey("qa_departments.id", ondelete="SET NULL"))
-    status = Column(String(50), default="waiting") # bot, waiting, active, resolved, archived
+    contact_id = Column(UuidCol, ForeignKey("qa_contacts.id", ondelete="CASCADE"), nullable=False, index=True)
+    assigned_user_id = Column(UuidCol, ForeignKey("qa_users.id", ondelete="SET NULL"), index=True)
+    assigned_department_id = Column(UuidCol, ForeignKey("qa_departments.id", ondelete="SET NULL"), index=True)
+    status = Column(String(50), default="waiting", index=True) # bot, waiting, active, resolved, archived
     routing_mode = Column(String(50), default="queue") # round_robin, queue, fixed, department
     unread = Column(Boolean, default=True)
     unread_count = Column(Integer, default=0)
     is_flagged = Column(Boolean, default=False)
     flag_type = Column(String(20), default="none")
-    last_message_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    last_message_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -166,7 +166,7 @@ class Message(Base):
     __tablename__ = "qa_messages"
     id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
     conversation_id = Column(UuidCol, ForeignKey("qa_conversations.id", ondelete="CASCADE"), nullable=False, index=True)
-    sender_type = Column(String(20), nullable=False) # bot, agent, contact, system
+    sender_type = Column(String(20), nullable=False, index=True) # bot, agent, contact, system
     sender_id = Column(UuidCol)
     message_type = Column(String(50), nullable=False) # text, image, audio, video, document, location, interactive_button, interactive_list, template
     body = Column(Text)
@@ -175,7 +175,7 @@ class Message(Base):
     meta_message_id = Column(String(255), index=True)
     status = Column(String(50), default="sent") # sent, delivered, read, failed
     internal_note = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     conversation = relationship("Conversation", back_populates="messages")
 
