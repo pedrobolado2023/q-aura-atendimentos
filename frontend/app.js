@@ -1192,36 +1192,32 @@ const appRouter = {
     },
 
     async loadBillingSummary() {
-        if (state.currentUser && !["administrator", "manager", "superadmin"].includes(state.currentUser.role)) {
+        if (state.user && !["administrator", "manager", "superadmin"].includes(state.user.role)) {
             return;
         }
+        const planNameEl = document.getElementById("billing-plan-name");
+        const modeEl = document.getElementById("billing-active-mode");
+        const balanceEl = document.getElementById("billing-balance");
+        const spendEl = document.getElementById("billing-monthly-spend");
+        const limitEl = document.getElementById("billing-postpaid-limit");
+        const selectModeEl = document.getElementById("select-billing-mode");
+        const rechargeSection = document.getElementById("prepaid-recharge-section");
+
         try {
             const summary = await api.get("/api/billing/summary");
             if (summary) {
-                // Atualiza campos de consolidado financeiro
-                const planNameEl = document.getElementById("billing-plan-name");
-                const modeEl = document.getElementById("billing-active-mode");
-                const balanceEl = document.getElementById("billing-balance");
-                const spendEl = document.getElementById("billing-monthly-spend");
-                const limitEl = document.getElementById("billing-postpaid-limit");
-                const selectModeEl = document.getElementById("select-billing-mode");
-                const rechargeSection = document.getElementById("prepaid-recharge-section");
-
-                if (planNameEl) {
-                    planNameEl.innerText = summary.plan_name || "Pro";
-                }
+                if (planNameEl) planNameEl.innerText = summary.plan_name || "Pro";
                 if (modeEl) {
                     modeEl.innerText = summary.billing_mode === "postpaid" ? "PÓS-PAGO" : "PRÉ-PAGO";
                     modeEl.style.color = summary.billing_mode === "postpaid" ? "var(--color-info)" : "var(--color-success)";
                 }
-                if (balanceEl) balanceEl.innerText = `R$ ${summary.balance.toFixed(2)}`;
-                if (spendEl) spendEl.innerText = `R$ ${summary.monthly_spend.toFixed(2)}`;
-                if (limitEl) limitEl.innerText = `R$ ${summary.postpaid_limit.toFixed(2)}`;
-                if (selectModeEl) selectModeEl.value = summary.billing_mode;
+                if (balanceEl) balanceEl.innerText = `R$ ${(summary.balance || 0).toFixed(2)}`;
+                if (spendEl) spendEl.innerText = `R$ ${(summary.monthly_spend || 0).toFixed(2)}`;
+                if (limitEl) limitEl.innerText = `R$ ${(summary.postpaid_limit || 100).toFixed(2)}`;
+                if (selectModeEl) selectModeEl.value = summary.billing_mode || "prepaid";
 
-                // Mostra recarga apenas se for pré-pago
                 if (rechargeSection) {
-                    rechargeSection.style.display = summary.billing_mode === "prepaid" ? "flex" : "none";
+                    rechargeSection.style.display = (summary.billing_mode || "prepaid") === "prepaid" ? "flex" : "none";
                 }
             }
 
@@ -1250,7 +1246,7 @@ const appRouter = {
                             <td>${date}</td>
                             <td><span class="badge" style="font-weight: 700;">${categoryText}</span></td>
                             <td>${t.description || "-"}</td>
-                            <td style="${amountColor} font-weight:700;">${amountPrefix} R$ ${t.amount.toFixed(2)}</td>
+                            <td style="${amountColor} font-weight:700;">${amountPrefix} R$ ${(t.amount || 0).toFixed(2)}</td>
                         `;
                         txsList.appendChild(tr);
                     });
@@ -1259,6 +1255,8 @@ const appRouter = {
 
         } catch (e) {
             console.error("Erro ao carregar faturamento:", e);
+            if (planNameEl) planNameEl.innerText = "Pro";
+            if (modeEl) modeEl.innerText = "PRÉ-PAGO";
         }
     },
 
@@ -1379,8 +1377,22 @@ const appRouter = {
     },
 
     connectWebSocket(retryDelay = 1000) {
+        if (!state.token || !state.tenant_id) return;
+
+        if (state.wsReconnectTimer) {
+            clearTimeout(state.wsReconnectTimer);
+            state.wsReconnectTimer = null;
+        }
+
         if (state.ws) {
-            try { state.ws.close(); } catch (e) {}
+            try {
+                state.ws.onopen = null;
+                state.ws.onmessage = null;
+                state.ws.onerror = null;
+                state.ws.onclose = null;
+                state.ws.close();
+            } catch (e) {}
+            state.ws = null;
         }
         if (state.pingInterval) clearInterval(state.pingInterval);
 
@@ -1390,7 +1402,10 @@ const appRouter = {
         
         state.ws.onopen = () => {
             console.log("[WS] Conectado em tempo real!");
-            retryDelay = 1000;
+            if (state.wsReconnectTimer) {
+                clearTimeout(state.wsReconnectTimer);
+                state.wsReconnectTimer = null;
+            }
             // Heartbeat Ping a cada 15 segundos para manter conexao viva no Nginx/Easypanel
             state.pingInterval = setInterval(() => {
                 if (state.ws && state.ws.readyState === WebSocket.OPEN) {
@@ -1458,9 +1473,10 @@ const appRouter = {
         };
         
         state.ws.onclose = () => {
-            console.log(`[WS] Desconectado. Reconectando em ${retryDelay}ms...`);
             if (state.token && state.tenant_id) {
-                setTimeout(() => {
+                console.log(`[WS] Desconectado. Reconectando em ${retryDelay}ms...`);
+                if (state.wsReconnectTimer) clearTimeout(state.wsReconnectTimer);
+                state.wsReconnectTimer = setTimeout(() => {
                     this.connectWebSocket(Math.min(retryDelay * 2, 30000));
                 }, retryDelay);
             }

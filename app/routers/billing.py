@@ -33,18 +33,31 @@ class TransactionResponse(BaseModel):
 class ChangeBillingModeRequest(BaseModel):
     billing_mode: str
 
+def get_target_tenant(db: Session, current_user: User, current_tenant: Optional[Tenant]) -> Optional[Tenant]:
+    if current_tenant:
+        return current_tenant
+    if current_user.tenant_id:
+        return db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+    return db.query(Tenant).first()
+
 @router.get("/summary", response_model=BillingSummaryResponse)
 def get_billing_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+    current_tenant: Optional[Tenant] = Depends(ModuleRequired("inbox"))
 ):
     if current_user.role not in ["administrator", "manager", "superadmin"]:
         raise HTTPException(status_code=403, detail="Acesso não autorizado. Apenas supervisores e administradores podem visualizar dados de faturamento.")
 
-    tenant = db.query(Tenant).filter(Tenant.id == current_tenant.id).first()
+    tenant = get_target_tenant(db, current_user, current_tenant)
     if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant não encontrado")
+        return BillingSummaryResponse(
+            billing_mode="prepaid",
+            balance=0.0,
+            postpaid_limit=100.0,
+            monthly_spend=0.0,
+            plan_name="Pro"
+        )
 
     plan_name = "Pro"
     if tenant.plan_id:
@@ -87,13 +100,17 @@ def get_billing_summary(
 def get_billing_transactions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+    current_tenant: Optional[Tenant] = Depends(ModuleRequired("inbox"))
 ):
     if current_user.role not in ["administrator", "manager", "superadmin"]:
         raise HTTPException(status_code=403, detail="Acesso não autorizado. Apenas supervisores e administradores podem visualizar o histórico financeiro.")
 
+    tenant = get_target_tenant(db, current_user, current_tenant)
+    if not tenant:
+        return []
+
     txs = db.query(BillingTransaction).filter(
-        BillingTransaction.tenant_id == current_tenant.id
+        BillingTransaction.tenant_id == str(tenant.id)
     ).order_by(BillingTransaction.created_at.desc()).limit(100).all()
 
     results = []
@@ -112,7 +129,7 @@ def change_billing_mode(
     payload: ChangeBillingModeRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+    current_tenant: Optional[Tenant] = Depends(ModuleRequired("inbox"))
 ):
     if current_user.role not in ["administrator", "manager"]:
         raise HTTPException(status_code=403, detail="Apenas administradores podem alterar o método de faturamento.")
@@ -120,7 +137,7 @@ def change_billing_mode(
     if payload.billing_mode not in ["prepaid", "postpaid"]:
         raise HTTPException(status_code=400, detail="Método de faturamento inválido.")
 
-    tenant = db.query(Tenant).filter(Tenant.id == current_tenant.id).first()
+    tenant = get_target_tenant(db, current_user, current_tenant)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
 
