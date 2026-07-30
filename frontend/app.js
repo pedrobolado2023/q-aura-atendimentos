@@ -571,7 +571,7 @@ const appRouter = {
             convos.forEach((c, index) => {
                 let item = listContainer.querySelector(`[data-id="${c.id}"]`);
                 const isUnread = c.unread_count && c.unread_count > 0 && state.activeConversationId !== c.id;
-                const needsResponse = (c.last_message_sender_type === 'contact') || (c.unread_count && c.unread_count > 0) || (c.unread === true);
+                const needsResponse = (c.last_message_sender_type === 'contact') && (state.activeConversationId !== c.id);
                 const contactName = c.contact ? c.contact.name || c.contact.phone_number : "Hóspede";
                 
                 const avatarUrl = (c.contact && c.contact.avatar_url)
@@ -722,14 +722,32 @@ const appRouter = {
     async selectConversation(convoId) {
         state.activeConversationId = convoId;
         
-        // Marca item como ativo na lista
+        // Limpa o painel de mensagens instantaneamente (0ms) para evitar exibição da conversa anterior
+        const scroll = document.getElementById("message-scroll");
+        if (scroll) {
+            if (state.messagesCache && state.messagesCache[convoId] && state.messagesCache[convoId].length > 0) {
+                scroll.innerHTML = "";
+                state.messagesCache[convoId].forEach(m => {
+                    const bubble = renderMessageBubble(m);
+                    scroll.appendChild(bubble);
+                });
+                scroll.scrollTop = scroll.scrollHeight;
+            } else {
+                scroll.innerHTML = `<div style="text-align:center;padding:40px;opacity:0.5;font-size:13px;"><i class="fa-solid fa-spinner fa-spin"></i> Carregando mensagens...</div>`;
+            }
+        }
+
+        // Marca item como ativo na lista e limpa o destaque visual (Pendente e Não Lido)
         document.querySelectorAll(".convo-item").forEach(item => {
             item.classList.remove("active");
             if (item.getAttribute("data-id") === convoId) {
                 item.classList.add("active");
                 item.classList.remove("unread");
+                item.classList.remove("needs-response");
                 const badge = item.querySelector(".unread-badge");
                 if (badge) badge.remove();
+                const awaitingBadge = item.querySelector(".awaiting-badge");
+                if (awaitingBadge) awaitingBadge.remove();
             }
         });
         
@@ -1664,6 +1682,9 @@ document.getElementById("chat-input-form").addEventListener("submit", async (e) 
         scroll.appendChild(tempBubble);
         scroll.scrollTop = scroll.scrollHeight;
     }
+
+    // Atualiza a conversa na lista lateral (remover badge Pendente/Não lido e atualizar o preview)
+    appRouter._updateConversationInList(tempMsgObj);
 
     try {
         const newMsg = await api.post("/api/inbox/send-message", {
