@@ -681,7 +681,7 @@ const appRouter = {
                     item.setAttribute("data-hash", itemHash);
                     item.className = `convo-item ${state.activeConversationId === c.id ? 'active' : ''} ${isUnread ? 'unread' : ''} ${needsResponse ? 'needs-response' : ''}`;
                     item.innerHTML = `
-                        <img class="avatar" src="${avatarUrl}" alt="${contactName}">
+                        <img class="avatar" src="${avatarUrl}" alt="${contactName}" onerror="this.onerror=null; this.src='favicon.png';">
                         <div class="convo-meta">
                             <h4>
                                 <span style="display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden;">
@@ -880,7 +880,7 @@ const appRouter = {
             const avatarUrl = convo.contact.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(contactName)}`;
             const activeAvatar = document.getElementById("active-avatar");
             if (activeAvatar) {
-                activeAvatar.innerHTML = `<img class="avatar" src="${avatarUrl}" alt="${contactName}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">`;
+                activeAvatar.innerHTML = `<img class="avatar" src="${avatarUrl}" alt="${contactName}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;" onerror="this.onerror=null; this.src='favicon.png';">`;
             }
 
             // Flag
@@ -1444,7 +1444,7 @@ const appRouter = {
     },
 
     connectWebSocket(retryDelay = 1000) {
-        if (!state.token || !state.tenant_id) return;
+        if (!state.token || !state.tenant_id || state.tenant_id === "00000000-0000-0000-0000-000000000000") return;
 
         if (state.wsReconnectTimer) {
             clearTimeout(state.wsReconnectTimer);
