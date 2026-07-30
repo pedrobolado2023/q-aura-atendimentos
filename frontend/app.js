@@ -289,13 +289,16 @@ function renderMessageBubble(m) {
 // --- API Client ---
 const api = {
     handleUnauthorized() {
-        console.warn("[Auth] Sessão expirada (401). Redirecionando para a tela de login...");
+        if (state.isDeauthenticating) return;
+        state.isDeauthenticating = true;
+        console.warn("[Auth] Sessão expirada (401). Movendo para a tela de login...");
         if (typeof appRouter !== "undefined" && appRouter.logout) {
-            appRouter.logout();
+            appRouter.logout(true);
         } else {
             localStorage.clear();
             window.location.reload();
         }
+        setTimeout(() => { state.isDeauthenticating = false; }, 3000);
     },
 
     async post(endpoint, data, useAuth = true) {
@@ -451,8 +454,18 @@ const appRouter = {
 
     showMainLayout() {
         document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
-        document.getElementById("main-layout").classList.remove("layout-hidden");
+        const mainLayout = document.getElementById("main-layout");
+        if (mainLayout) {
+            mainLayout.classList.remove("layout-hidden");
+            mainLayout.style.display = "flex";
+        }
         
+        // Pausa o vídeo 3D da tela de login para economizar 100% de CPU/GPU
+        const loginVid = document.querySelector("#login-view video");
+        if (loginVid) {
+            try { loginVid.pause(); } catch(e) {}
+        }
+
         // Restore sidebar collapsed state
         if (localStorage.getItem("qa_sidebar_collapsed") === "true") {
             const sidebar = document.querySelector(".sidebar");
@@ -526,14 +539,54 @@ const appRouter = {
         }
     },
 
-    logout() {
+    logout(expired = false) {
+        // 1. Cancela todos os intervalos e reconexões
+        if (state.syncInterval) clearInterval(state.syncInterval);
+        if (state.pingInterval) clearInterval(state.pingInterval);
+        if (state.wsReconnectTimer) clearTimeout(state.wsReconnectTimer);
+
+        // 2. Limpa dados de autenticação
         localStorage.clear();
         state.token = null;
         state.user = null;
         state.tenant_id = null;
-        if (state.ws) state.ws.close();
-        document.getElementById("main-layout").classList.add("layout-hidden");
-        this.navigate("login");
+
+        // 3. Encerra WebSocket sem disparar loop de reconexão
+        if (state.ws) {
+            try {
+                state.ws.onopen = null;
+                state.ws.onmessage = null;
+                state.ws.onerror = null;
+                state.ws.onclose = null;
+                state.ws.close();
+            } catch (e) {}
+            state.ws = null;
+        }
+
+        // 4. Oculta o layout principal imediatamente
+        const mainLayout = document.getElementById("main-layout");
+        if (mainLayout) {
+            mainLayout.classList.add("layout-hidden");
+            mainLayout.style.display = "none";
+        }
+
+        // 5. Exibe a tela de login instantaneamente (sem precisar de F5)
+        document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+        const loginView = document.getElementById("login-view");
+        if (loginView) {
+            loginView.classList.add("active");
+            loginView.style.display = "block";
+        }
+
+        // 6. Retoma o vídeo de fundo do login
+        const loginVid = document.querySelector("#login-view video");
+        if (loginVid) {
+            try { loginVid.play(); } catch(e) {}
+        }
+
+        if (expired) {
+            try { showToast("Sessão expirada. Por favor, faça login novamente.", "warning"); } catch(e) {}
+        }
     },
 
     // --- Data Loaders ---
@@ -620,22 +673,26 @@ const appRouter = {
                     listContainer.appendChild(item);
                 }
 
-                item.className = `convo-item ${state.activeConversationId === c.id ? 'active' : ''} ${isUnread ? 'unread' : ''} ${needsResponse ? 'needs-response' : ''}`;
-                item.innerHTML = `
-                    <img class="avatar" src="${avatarUrl}" alt="${contactName}">
-                    <div class="convo-meta">
-                        <h4>
-                            <span style="display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden;">
-                                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${contactName}</span>
-                                ${awaitingBadge}
-                                ${flagIcon}
-                                ${unreadBadge}
-                            </span>
-                            <span class="convo-time">${timeStr}</span>
-                        </h4>
-                        <p style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; opacity: 0.7;">${previewText}</p>
-                    </div>
-                `;
+                const itemHash = `${contactName}_${c.last_message_at}_${previewText}_${isUnread}_${needsResponse}_${c.flag_type}_${state.activeConversationId === c.id}`;
+                if (item.getAttribute("data-hash") !== itemHash) {
+                    item.setAttribute("data-hash", itemHash);
+                    item.className = `convo-item ${state.activeConversationId === c.id ? 'active' : ''} ${isUnread ? 'unread' : ''} ${needsResponse ? 'needs-response' : ''}`;
+                    item.innerHTML = `
+                        <img class="avatar" src="${avatarUrl}" alt="${contactName}">
+                        <div class="convo-meta">
+                            <h4>
+                                <span style="display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden;">
+                                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${contactName}</span>
+                                    ${awaitingBadge}
+                                    ${flagIcon}
+                                    ${unreadBadge}
+                                </span>
+                                <span class="convo-time">${timeStr}</span>
+                            </h4>
+                            <p style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; opacity: 0.7;">${previewText}</p>
+                        </div>
+                    `;
+                }
                 
                 // Mantém a ordem sincronizada com a API (chats mais recentes no topo)
                 if (listContainer.children[index] !== item) {
