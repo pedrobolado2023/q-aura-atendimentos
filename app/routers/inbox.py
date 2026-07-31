@@ -200,25 +200,21 @@ def get_messages(
     return list(reversed(recent_messages))
 
 class SendMessagePayload(BaseModel):
-    conversation_id: Optional[UUID] = None
-    body: Optional[str] = None
+    conversation_id: UUID
+    body: str
 
 @router.post("/send-message", response_model=MessageResponse)
 async def send_message(
-    conversation_id: Optional[UUID] = None,
-    body: Optional[str] = None,
-    payload: Optional[SendMessagePayload] = None,
+    payload: SendMessagePayload,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
-    target_convo_id = conversation_id or (payload.conversation_id if payload else None)
-    target_body = body or (payload.body if payload else None)
-    if not target_convo_id or not target_body or not target_body.strip():
-        raise HTTPException(status_code=400, detail="Identificador da conversa (conversation_id) e conteúdo da mensagem (body) são obrigatórios.")
+    conversation_id = payload.conversation_id
+    body = payload.body.strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="O conteúdo da mensagem (body) não pode estar vazio.")
 
-    conversation_id = target_convo_id
-    body = target_body.strip()
 
     # 1. Verify conversation
     convo = db.query(Conversation).filter(

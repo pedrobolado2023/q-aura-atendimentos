@@ -1,6 +1,7 @@
 from decimal import Decimal
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.models import Tenant, BillingTransaction, Conversation, Message, PricingConfig
 
 # Valores-padrão hardcoded usados como fallback se a tabela estiver vazia
@@ -61,6 +62,7 @@ def can_initiate_conversation(db: Session, tenant_id: str) -> bool:
     """
     Verifica se a empresa possui saldo (Pré-pago) ou limite disponível (Pós-pago)
     para iniciar uma nova conversa.
+    Tenants sem billing_mode definido (novos/trial) têm acesso liberado.
     """
     try:
         tenant_id_str = str(tenant_id)
@@ -68,9 +70,14 @@ def can_initiate_conversation(db: Session, tenant_id: str) -> bool:
         if not tenant:
             return False
 
+        mode = tenant.billing_mode or "prepaid"
+
+        # Novos tenants sem plano formal: acesso liberado (modo trial/grace)
+        if tenant.plan_id is None:
+            return True
+
         balance = Decimal(str(tenant.balance if tenant.balance is not None else 0.0))
         postpaid_limit = Decimal(str(tenant.postpaid_limit if tenant.postpaid_limit is not None else 100.0))
-        mode = tenant.billing_mode or "prepaid"
 
         if mode == "prepaid":
             return balance > Decimal("0.00")
@@ -82,7 +89,7 @@ def can_initiate_conversation(db: Session, tenant_id: str) -> bool:
                     BillingTransaction.category.in_(["marketing", "utility", "service"]),
                     BillingTransaction.created_at >= first_day_of_month
                 ).with_entities(
-                    db.func.sum(BillingTransaction.amount)
+                    func.sum(BillingTransaction.amount)
                 ).scalar()
                 monthly_spend = Decimal(str(monthly_spend)) if monthly_spend is not None else Decimal("0.00")
             except Exception:
