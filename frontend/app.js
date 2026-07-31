@@ -1444,7 +1444,7 @@ const appRouter = {
     },
 
     connectWebSocket(retryDelay = 1000) {
-        if (!state.token || !state.tenant_id || state.tenant_id === "00000000-0000-0000-0000-000000000000") return;
+        if (!state.token || !state.tenant_id) return;
 
         if (state.wsReconnectTimer) {
             clearTimeout(state.wsReconnectTimer);
