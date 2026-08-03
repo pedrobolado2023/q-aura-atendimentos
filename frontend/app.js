@@ -1474,19 +1474,23 @@ const appRouter = {
         this.connectWebSocket();
 
         if (state.syncInterval) clearInterval(state.syncInterval);
-        // Polling inteligente de backup (se WebSocket oscilar, reduz frequência para economizar servidor)
+        // Polling contínuo e silencioso a cada 3.5s (garantia de 100% que mensagens novas apareçam na tela sem F5)
         state.syncInterval = setInterval(async () => {
             if (!state.token || !state.tenant_id) return;
-            const isWsConnected = state.ws && state.ws.readyState === WebSocket.OPEN;
             try {
+                // 1. Se o WebSocket caiu ou desconectou, tenta reconectar
+                const isWsConnected = state.ws && state.ws.readyState === WebSocket.OPEN;
                 if (!isWsConnected) {
-                    await this.loadConversations(null, true);
-                    if (state.activeConversationId) {
-                        await this.refreshActiveMessagesSilent();
-                    }
+                    this.connectWebSocket();
                 }
+                // 2. Atualiza silenciosamente a conversa aberta em tempo real
+                if (state.activeConversationId) {
+                    await this.refreshActiveMessagesSilent();
+                }
+                // 3. Atualiza silenciosamente a lista lateral de conversas
+                await this.loadConversations(null, true);
             } catch (e) {}
-        }, 6000);
+        }, 3500);
     },
 
     async refreshActiveMessagesSilent() {
@@ -1497,16 +1501,23 @@ const appRouter = {
             if (!scroll) return;
 
             let addedAny = false;
+            let lastSenderType = null;
+
             messages.forEach(m => {
                 const existing = m.id && scroll.querySelector(`[data-msg-id="${m.id}"]`);
                 if (!existing) {
                     const bubble = renderMessageBubble(m);
                     scroll.appendChild(bubble);
                     addedAny = true;
+                    lastSenderType = m.sender_type;
                 }
             });
+
             if (addedAny) {
                 scroll.scrollTop = scroll.scrollHeight;
+                if (lastSenderType === "contact") {
+                    playNewMessageSound();
+                }
             }
         } catch (e) {}
     },
@@ -1544,21 +1555,27 @@ const appRouter = {
                 clearTimeout(state.wsReconnectTimer);
                 state.wsReconnectTimer = null;
             }
-            // Heartbeat Ping a cada 15 segundos para manter conexao viva no Nginx/Easypanel
+            // Heartbeat Ping a cada 10 segundos para manter conexao viva sem queda de socket
             state.pingInterval = setInterval(() => {
                 if (state.ws && state.ws.readyState === WebSocket.OPEN) {
                     state.ws.send("ping");
                 }
-            }, 15000);
+            }, 10000);
         };
         
         state.ws.onmessage = (event) => {
             try {
-                if (event.data === "pong") return;
-                const msg = JSON.parse(event.data);
-                if (msg.type !== "new_message") return;
+                if (!event.data || event.data === "pong") return;
+                const msg = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+                if (!msg) return;
 
-                // Tocar efeito sonoro de notificação e exibir alerta visual se a mensagem for do contato
+                // Eventos de transferência/atribuição/resolução
+                if (msg.type === "conversation_transferred" || msg.type === "conversation_assigned" || msg.type === "conversation_resolved") {
+                    this.loadConversations(null, true);
+                    return;
+                }
+
+                // Tocar som e alerta para mensagem do contato
                 if (msg.sender_type === "contact") {
                     playNewMessageSound();
                     showDesktopNotification(
@@ -1568,16 +1585,15 @@ const appRouter = {
                     );
                 }
 
-                // Atualizar objeto de conversa no estado
-                const convo = (state.conversations || []).find(c => c.id === msg.conversation_id);
+                // Atualizar conversa no estado
+                const convo = (state.conversations || []).find(c => String(c.id) === String(msg.conversation_id));
                 if (convo && msg.sender_type === "contact") {
                     convo.has_active_window = true;
                 }
 
-                // --- Atualizar bolha no chat aberto ---
-                if (msg.conversation_id === state.activeConversationId) {
+                // --- Atualizar bolha no chat aberto em tempo real (0ms) ---
+                if (state.activeConversationId && String(msg.conversation_id || '').toLowerCase() === String(state.activeConversationId || '').toLowerCase()) {
                     if (msg.sender_type === "contact") {
-                        // Desbloqueio em tempo real sem precisar dar F5!
                         const chatInputForm = document.getElementById("chat-input-form");
                         const chatBlockedArea = document.getElementById("chat-blocked-area");
                         if (chatInputForm && chatBlockedArea) {
@@ -1588,7 +1604,6 @@ const appRouter = {
 
                     const scroll = document.getElementById("message-scroll");
                     if (scroll) {
-                        // Deduplicação: não adicionar se já existe bolha com mesmo id
                         const alreadyExists = msg.id && scroll.querySelector(`[data-msg-id="${msg.id}"]`);
                         if (!alreadyExists) {
                             const bubble = renderMessageBubble(msg);
@@ -1598,7 +1613,7 @@ const appRouter = {
                     }
                 }
 
-                // --- Atualização incremental da lista (sem reload completo) ---
+                // --- Atualização incremental da lista lateral ---
                 this._updateConversationInList(msg);
 
             } catch (e) {
