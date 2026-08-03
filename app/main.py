@@ -146,6 +146,9 @@ async def websocket_endpoint(websocket: WebSocket, tenant_id: str):
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
         manager.disconnect(tenant_id, websocket)
+    except Exception as err:
+        print(f"[WS Notice] Conexão encerrada com exceção ({tenant_id}): {err}")
+        manager.disconnect(tenant_id, websocket)
 
 # Include Routers
 from app.routers import billing

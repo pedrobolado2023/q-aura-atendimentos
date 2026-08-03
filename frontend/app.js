@@ -286,6 +286,36 @@ function renderMessageBubble(m) {
     return bubble;
 }
 
+// --- WebSocket Status Badge Helper ---
+function updateWsStatusBadge(status) {
+    const badge = document.getElementById("ws-status-badge");
+    const text = document.getElementById("ws-status-text");
+    if (!badge || !text) return;
+
+    if (status === "connected") {
+        badge.style.background = "rgba(34, 197, 94, 0.15)";
+        badge.style.color = "#22c55e";
+        badge.style.borderColor = "rgba(34, 197, 94, 0.3)";
+        const icon = badge.querySelector("i");
+        if (icon) icon.className = "fa-solid fa-circle text-xs";
+        text.innerText = "Conectado ao vivo";
+    } else if (status === "connecting") {
+        badge.style.background = "rgba(234, 179, 8, 0.15)";
+        badge.style.color = "#eab308";
+        badge.style.borderColor = "rgba(234, 179, 8, 0.3)";
+        const icon = badge.querySelector("i");
+        if (icon) icon.className = "fa-solid fa-spinner fa-spin text-xs";
+        text.innerText = "Reconectando...";
+    } else {
+        badge.style.background = "rgba(239, 68, 68, 0.15)";
+        badge.style.color = "#ef4444";
+        badge.style.borderColor = "rgba(239, 68, 68, 0.3)";
+        const icon = badge.querySelector("i");
+        if (icon) icon.className = "fa-solid fa-circle-xmark text-xs";
+        text.innerText = "Desconectado";
+    }
+}
+
 // --- API Client ---
 const api = {
     handleUnauthorized() {
@@ -301,12 +331,31 @@ const api = {
         setTimeout(() => { state.isDeauthenticating = false; }, 3000);
     },
 
+    async fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const response = await fetch(url, {
+                ...options,
+                signal: controller.signal
+            });
+            clearTimeout(timer);
+            return response;
+        } catch (err) {
+            clearTimeout(timer);
+            if (err.name === "AbortError") {
+                throw new Error("Tempo limite de conexão excedido (Timeout). Tente novamente.");
+            }
+            throw err;
+        }
+    },
+
     async post(endpoint, data, useAuth = true) {
         const headers = { "Content-Type": "application/json" };
         if (useAuth && state.token) {
             headers["Authorization"] = `Bearer ${state.token}`;
         }
-        const response = await fetch(`${API_URL}${endpoint}`, {
+        const response = await this.fetchWithTimeout(`${API_URL}${endpoint}`, {
             method: "POST",
             headers,
             body: JSON.stringify(data)
@@ -327,7 +376,7 @@ const api = {
         if (state.token) {
             headers["Authorization"] = `Bearer ${state.token}`;
         }
-        const response = await fetch(`${API_URL}${endpoint}`, { headers });
+        const response = await this.fetchWithTimeout(`${API_URL}${endpoint}`, { headers });
         if (response.status === 401) {
             this.handleUnauthorized();
             throw new Error("Sessão expirada. Redirecionando...");
@@ -348,7 +397,7 @@ const api = {
         if (useAuth && state.token) {
             headers["Authorization"] = `Bearer ${state.token}`;
         }
-        const response = await fetch(`${API_URL}${endpoint}`, {
+        const response = await this.fetchWithTimeout(`${API_URL}${endpoint}`, {
             method: "PUT",
             headers,
             body: JSON.stringify(data)
@@ -369,7 +418,7 @@ const api = {
         if (state.token) {
             headers["Authorization"] = `Bearer ${state.token}`;
         }
-        const response = await fetch(`${API_URL}${endpoint}`, {
+        const response = await this.fetchWithTimeout(`${API_URL}${endpoint}`, {
             method: "DELETE",
             headers
         });
@@ -424,9 +473,12 @@ const appRouter = {
     },
 
     async init() {
+        // Inicializa o gerenciador de inatividade e segundo plano (5 minutos)
+        this.initInactivityAndVisibilityManager();
+
         if (state.token) {
             try {
-                // Busca o perfil real do usuário logado
+                // Busca o perfil real do usuário logado (com timeout de 10s via fetchWithTimeout)
                 const userProfile = await api.get("/api/auth/me");
                 state.user = userProfile;
                 state.tenant_id = userProfile.tenant_id;
@@ -439,13 +491,27 @@ const appRouter = {
                 this.startBackgroundSync();
                 this.updateProfileUI();
                 
-                // Pré-carrega as configurações da Meta, as Respostas Rápidas e as Métricas
-                this.loadMetaSettings();
-                this.loadQuickMessages();
-                this.loadDashboardMetrics();
+                // Pré-carrega as configurações sem bloquear a exibição principal da interface
+                Promise.allSettled([
+                    this.loadMetaSettings(),
+                    this.loadQuickMessages(),
+                    this.loadDashboardMetrics()
+                ]);
             } catch (e) {
-                console.error("Erro na autenticação:", e);
-                this.logout();
+                console.error("[Init Error] Falha ao verificar credenciais:", e);
+                // Se for 401 explícito, realiza logout
+                if (e.message && e.message.includes("401")) {
+                    this.logout(true);
+                } else if (state.user && state.tenant_id) {
+                    // Se for falha de rede temporária no F5, aproveita o perfil salvo e mostra o layout sem travar a tela
+                    console.warn("[Init Recovery] Usando sessão armazenada localmente devido a oscilação de rede.");
+                    this.showMainLayout();
+                    this.connectWebSocket();
+                    this.startBackgroundSync();
+                    this.updateProfileUI();
+                } else {
+                    this.logout(true);
+                }
             }
         } else {
             this.navigate("login");
@@ -543,10 +609,11 @@ const appRouter = {
     },
 
     logout(expired = false) {
-        // 1. Cancela todos os intervalos e reconexões
+        // 1. Cancela todos os intervalos, inatividade e reconexões
         if (state.syncInterval) clearInterval(state.syncInterval);
         if (state.pingInterval) clearInterval(state.pingInterval);
         if (state.wsReconnectTimer) clearTimeout(state.wsReconnectTimer);
+        if (state.clearIdleTimer) state.clearIdleTimer();
 
         // 2. Limpa dados de autenticação
         localStorage.clear();
@@ -565,6 +632,7 @@ const appRouter = {
             } catch (e) {}
             state.ws = null;
         }
+        updateWsStatusBadge("disconnected");
 
         // 4. Oculta o layout principal imediatamente
         const mainLayout = document.getElementById("main-layout");
@@ -1446,6 +1514,8 @@ const appRouter = {
     connectWebSocket(retryDelay = 1000) {
         if (!state.token || !state.tenant_id) return;
 
+        updateWsStatusBadge("connecting");
+
         if (state.wsReconnectTimer) {
             clearTimeout(state.wsReconnectTimer);
             state.wsReconnectTimer = null;
@@ -1469,6 +1539,7 @@ const appRouter = {
         
         state.ws.onopen = () => {
             console.log("[WS] Conectado em tempo real!");
+            updateWsStatusBadge("connected");
             if (state.wsReconnectTimer) {
                 clearTimeout(state.wsReconnectTimer);
                 state.wsReconnectTimer = null;
@@ -1537,9 +1608,11 @@ const appRouter = {
         
         state.ws.onerror = (err) => {
             console.error("[WS] Erro:", err);
+            updateWsStatusBadge("disconnected");
         };
         
         state.ws.onclose = () => {
+            updateWsStatusBadge("disconnected");
             if (state.token && state.tenant_id) {
                 console.log(`[WS] Desconectado. Reconectando em ${retryDelay}ms...`);
                 if (state.wsReconnectTimer) clearTimeout(state.wsReconnectTimer);
@@ -1548,6 +1621,81 @@ const appRouter = {
                 }, retryDelay);
             }
         };
+    },
+
+    initInactivityAndVisibilityManager() {
+        if (this._inactivityManagerInitialized) return;
+        this._inactivityManagerInitialized = true;
+
+        const FIVE_MINUTES_MS = 5 * 60 * 1000; // 300.000 ms = 5 minutos
+        let idleTimer = null;
+        let hiddenTimer = null;
+        let hiddenStartTime = null;
+
+        const resetIdleTimer = () => {
+            if (!state.token) return;
+            if (idleTimer) clearTimeout(idleTimer);
+            idleTimer = setTimeout(() => {
+                if (state.token) {
+                    console.warn("[Inactivity] 5 minutos de inatividade sem interação detectados. Efetuando logout...");
+                    showToast("Sessão encerrada por inatividade (5 minutos sem uso).", "error");
+                    this.logout(true);
+                }
+            }, FIVE_MINUTES_MS);
+        };
+
+        state.clearIdleTimer = () => {
+            if (idleTimer) clearTimeout(idleTimer);
+            if (hiddenTimer) clearTimeout(hiddenTimer);
+        };
+
+        // Eventos de atividade do usuário
+        const activityEvents = ["mousemove", "keydown", "mousedown", "touchstart", "scroll"];
+        activityEvents.forEach(evt => {
+            window.addEventListener(evt, () => {
+                resetIdleTimer();
+            }, { passive: true });
+        });
+
+        // Monitoramento de aba em segundo plano (Visibility Change)
+        document.addEventListener("visibilitychange", () => {
+            if (!state.token) return;
+
+            if (document.visibilityState === "hidden") {
+                hiddenStartTime = Date.now();
+                if (hiddenTimer) clearTimeout(hiddenTimer);
+                hiddenTimer = setTimeout(() => {
+                    if (state.token) {
+                        console.warn("[Background] Aba em segundo plano por mais de 5 minutos. Efetuando logout...");
+                        this.logout(true);
+                    }
+                }, FIVE_MINUTES_MS);
+            } else if (document.visibilityState === "visible") {
+                if (hiddenTimer) clearTimeout(hiddenTimer);
+
+                if (hiddenStartTime) {
+                    const elapsed = Date.now() - hiddenStartTime;
+                    hiddenStartTime = null;
+                    if (elapsed >= FIVE_MINUTES_MS) {
+                        console.warn("[Background] Retornou após >5min em segundo plano. Deslogando...");
+                        showToast("Sessão encerrada por inatividade em segundo plano.", "error");
+                        this.logout(true);
+                        return;
+                    }
+                }
+
+                console.log("[Visibility] Aba visível novamente. Reconectando WebSocket e atualizando mensagens...");
+                if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+                    this.connectWebSocket();
+                }
+                if (state.activeConversationId) {
+                    this.refreshActiveMessagesSilent();
+                }
+                resetIdleTimer();
+            }
+        });
+
+        resetIdleTimer();
     },
 
     // Atualiza apenas o item da conversa na lista sem recarregar tudo
