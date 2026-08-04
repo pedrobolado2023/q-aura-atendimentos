@@ -105,8 +105,8 @@ function showToast(message, type = "success") {
 // --- WhatsApp Formatting Helper ---
 function formatMessageBody(body) {
     if (!body) return "";
-    if (body === "[Unsupported]" || body === "[unsupported]" || body.toLowerCase().includes("unsupported")) {
-        return `<span style="opacity: 0.85; font-style: italic; display: inline-flex; align-items: center; gap: 4px;"><i class="fa-solid fa-circle-info" style="color: var(--color-primary);"></i> [Mensagem / Figurinha do WhatsApp]</span>`;
+    if (body === "[Unsupported]" || body === "[unsupported]") {
+        return `<span style="opacity: 0.85; font-style: italic; display: inline-flex; align-items: center; gap: 4px;"><i class="fa-solid fa-circle-info" style="color: var(--color-primary);"></i> [Mensagem de Sistema / Autenticação do WhatsApp]</span>`;
     }
     // Safe escape HTML to prevent XSS
     let escaped = body
@@ -706,7 +706,7 @@ const appRouter = {
                 if (c.last_message_body) {
                     let cleanText = c.last_message_body;
                     if (cleanText === "[Unsupported]" || cleanText.toLowerCase().includes("unsupported")) {
-                        cleanText = "📷 [Figurinha / Mensagem]";
+                        cleanText = "ℹ️ [Mensagem de Sistema / Auth]";
                     }
                     const prefix = c.last_message_sender_type === 'bot' ? '🤖 ' : c.last_message_sender_type === 'agent' ? '✍️ ' : '';
                     previewText = prefix + cleanText.substring(0, 50);
@@ -1766,7 +1766,7 @@ const appRouter = {
         if (previewEl) {
             let rawText = msg.body || msg.preview || '';
             if (rawText === "[Unsupported]" || rawText.toLowerCase().includes("unsupported")) {
-                rawText = "📷 [Figurinha / Mensagem]";
+                rawText = "ℹ️ [Mensagem de Sistema / Auth]";
             }
             const prefix = msg.sender_type === 'bot' ? '🤖 ' : msg.sender_type === 'agent' ? '✍️ ' : '';
             const previewText = prefix + rawText.substring(0, 50);

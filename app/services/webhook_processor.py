@@ -187,12 +187,43 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                             button_reply_id = interactive_data.get("button_reply", {}).get("id", "")
                         elif int_type == "list_reply":
                             body_content = interactive_data.get("list_reply", {}).get("title", "[Seleção da Lista]")
+                        elif int_type == "nfm_reply":
+                            nfm = interactive_data.get("nfm_reply", {})
+                            resp_raw = nfm.get("response_json") or nfm.get("body") or ""
+                            body_content = f"📋 [Resposta de Autenticação/Formulário]: {resp_raw}" if resp_raw else "[Resposta de Fluxo]"
+                        elif int_type == "cta_url_reply":
+                            body_content = interactive_data.get("cta_url_reply", {}).get("display_text", "[Link de Autenticação]")
                         else:
-                            body_content = "[Resposta Interativa]"
+                            body_content = interactive_data.get("text") or interactive_data.get("body") or "[Resposta Interativa]"
+                    elif msg_type == "button":
+                        btn_data = msg_data.get("button", {})
+                        body_content = btn_data.get("text") or btn_data.get("payload") or "[Botão de Confirmação]"
+                    elif msg_type == "template":
+                        tmpl = msg_data.get("template", {})
+                        body_content = tmpl.get("text") or tmpl.get("name") or "[Mensagem de Modelo/Autenticação]"
+                    elif msg_type in ["auth", "authentication", "security"]:
+                        auth_data = msg_data.get(msg_type, {})
+                        code = auth_data.get("code") or auth_data.get("token") or auth_data.get("otp") or msg_data.get("text", {}).get("body")
+                        body_content = f"🔑 [Código de Autenticação]: {code}" if code else "[Solicitação de Autenticação]"
+                    elif msg_type == "system":
+                        sys_data = msg_data.get("system", {})
+                        body_content = sys_data.get("body") or f"⚙️ [Sistema WhatsApp]: {sys_data.get('type', 'evento')}"
                     elif msg_type == "unsupported":
-                        body_content = "[Figurinha / Mensagem do WhatsApp]"
+                        txt_body = msg_data.get("text", {}).get("body")
+                        errors = msg_data.get("errors", [])
+                        err_title = errors[0].get("title") or errors[0].get("message") if errors else None
+                        if txt_body:
+                            body_content = txt_body
+                        elif err_title:
+                            body_content = f"⚠️ [Mensagem WhatsApp]: {err_title}"
+                        else:
+                            body_content = "⚠️ [Mensagem de Autenticação / Sistema não suportada pelo WhatsApp API]"
                     else:
-                        body_content = f"[{msg_type.capitalize()}]"
+                        txt_body = msg_data.get("text", {}).get("body")
+                        if txt_body:
+                            body_content = txt_body
+                        else:
+                            body_content = f"[{msg_type.capitalize()}]"
 
 
 
