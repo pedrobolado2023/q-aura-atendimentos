@@ -187,8 +187,11 @@ function renderMessageBubble(m) {
     // Helper to get media source URL
     const getMediaSrc = (mediaUrl) => {
         if (!mediaUrl) return "";
-        if (mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://")) {
+        if (mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://") || mediaUrl.startsWith("blob:")) {
             return mediaUrl;
+        }
+        if (mediaUrl.startsWith("/")) {
+            return `${API_URL}${mediaUrl}`;
         }
         return `${API_URL}/api/inbox/media/${mediaUrl}?token=${state.token}`;
     };
@@ -367,6 +370,27 @@ const api = {
         if (!response.ok) {
             const err = await response.json();
             throw new Error(err.detail || "Erro desconhecido");
+        }
+        return response.json();
+    },
+
+    async postForm(endpoint, formData, useAuth = true, timeoutMs = 60000) {
+        const headers = {};
+        if (useAuth && state.token) {
+            headers["Authorization"] = `Bearer ${state.token}`;
+        }
+        const response = await this.fetchWithTimeout(`${API_URL}${endpoint}`, {
+            method: "POST",
+            headers,
+            body: formData
+        }, timeoutMs);
+        if (response.status === 401 && useAuth) {
+            this.handleUnauthorized();
+            throw new Error("Sessão expirada. Redirecionando...");
+        }
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || "Erro no envio do arquivo");
         }
         return response.json();
     },
@@ -1882,6 +1906,138 @@ document.getElementById("settings-form").addEventListener("submit", async (e) =>
     }
 });
 
+// --- Gerenciamento de Anexos no Chat (Upload e Ctrl+V Paste) ---
+state.pendingAttachment = null;
+
+function setPendingAttachment(file) {
+    if (!file) return;
+    state.pendingAttachment = file;
+    
+    const previewBar = document.getElementById("chat-attachment-preview-bar");
+    const thumbnailEl = document.getElementById("chat-attachment-thumbnail");
+    const filenameEl = document.getElementById("chat-attachment-filename");
+    const filesizeEl = document.getElementById("chat-attachment-filesize");
+    
+    if (filenameEl) filenameEl.textContent = file.name;
+    if (filesizeEl) {
+        const kb = (file.size / 1024).toFixed(1);
+        const mb = (file.size / (1024 * 1024)).toFixed(1);
+        filesizeEl.textContent = file.size > 1024 * 1024 ? `${mb} MB` : `${kb} KB`;
+    }
+    
+    if (thumbnailEl) {
+        thumbnailEl.innerHTML = "";
+        if (file.type.startsWith("image/")) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = document.createElement("img");
+                img.src = e.target.result;
+                img.style.width = "100%";
+                img.style.height = "100%";
+                img.style.objectFit = "cover";
+                thumbnailEl.appendChild(img);
+            };
+            reader.readAsDataURL(file);
+        } else if (file.type.startsWith("video/")) {
+            thumbnailEl.innerHTML = `<i class="fa-solid fa-file-video" style="font-size: 20px; color: #a855f7;"></i>`;
+        } else if (file.type.startsWith("audio/")) {
+            thumbnailEl.innerHTML = `<i class="fa-solid fa-file-audio" style="font-size: 20px; color: #10b981;"></i>`;
+        } else if (file.type === "application/pdf") {
+            thumbnailEl.innerHTML = `<i class="fa-solid fa-file-pdf" style="font-size: 20px; color: #ef4444;"></i>`;
+        } else {
+            thumbnailEl.innerHTML = `<i class="fa-solid fa-file-lines" style="font-size: 20px; color: #3b82f6;"></i>`;
+        }
+    }
+    
+    if (previewBar) previewBar.style.display = "flex";
+    
+    const input = document.getElementById("chat-message-input");
+    if (input) input.focus();
+}
+
+function clearPendingAttachment() {
+    state.pendingAttachment = null;
+    const previewBar = document.getElementById("chat-attachment-preview-bar");
+    if (previewBar) previewBar.style.display = "none";
+    const fileInput = document.getElementById("chat-file-input");
+    if (fileInput) fileInput.value = "";
+}
+
+// Event Bindings para Anexo e Paste
+document.addEventListener("DOMContentLoaded", () => {
+    const attachBtn = document.getElementById("chat-attach-btn");
+    const fileInput = document.getElementById("chat-file-input");
+    const removeAttachBtn = document.getElementById("chat-attachment-remove-btn");
+    
+    if (attachBtn && fileInput) {
+        attachBtn.addEventListener("click", () => fileInput.click());
+        fileInput.addEventListener("change", (e) => {
+            if (e.target.files && e.target.files.length > 0) {
+                setPendingAttachment(e.target.files[0]);
+            }
+        });
+    }
+    
+    if (removeAttachBtn) {
+        removeAttachBtn.addEventListener("click", clearPendingAttachment);
+    }
+    
+    // Suporte a COLAR (Ctrl+V) de imagens e arquivos no chat
+    const chatInputForm = document.getElementById("chat-input-form");
+    const chatTextarea = document.getElementById("chat-message-input");
+    
+    const handlePasteEvent = (e) => {
+        const clipboardData = e.clipboardData || (e.originalEvent && e.originalEvent.clipboardData);
+        if (!clipboardData || !clipboardData.items) return;
+        
+        const items = clipboardData.items;
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.kind === "file") {
+                const blob = item.getAsFile();
+                if (blob) {
+                    e.preventDefault();
+                    let fileToAttach = blob;
+                    if (item.type.startsWith("image/") && (!blob.name || blob.name === "image.png")) {
+                        const ext = item.type.split("/")[1] || "png";
+                        fileToAttach = new File([blob], `imagem_colada_${Date.now()}.${ext}`, { type: item.type });
+                    }
+                    setPendingAttachment(fileToAttach);
+                    if (typeof showToast === "function") {
+                        showToast("Imagem/Arquivo colado do clipboard!", "info");
+                    }
+                    break;
+                }
+            }
+        }
+    };
+    
+    if (chatTextarea) chatTextarea.addEventListener("paste", handlePasteEvent);
+    if (chatInputForm) chatInputForm.addEventListener("paste", handlePasteEvent);
+
+    // Drag & drop
+    if (chatInputForm) {
+        chatInputForm.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            chatInputForm.style.borderColor = "var(--color-brand, #3b82f6)";
+        });
+        chatInputForm.addEventListener("dragleave", (e) => {
+            e.preventDefault();
+            chatInputForm.style.borderColor = "";
+        });
+        chatInputForm.addEventListener("drop", (e) => {
+            e.preventDefault();
+            chatInputForm.style.borderColor = "";
+            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                setPendingAttachment(e.dataTransfer.files[0]);
+                if (typeof showToast === "function") {
+                    showToast("Arquivo arrastado para o chat!", "info");
+                }
+            }
+        });
+    }
+});
+
 // Captura a tecla Enter no campo de texto para enviar a mensagem (Shift+Enter para nova linha)
 const chatTextarea = document.getElementById("chat-message-input");
 if (chatTextarea) {
@@ -1893,21 +2049,87 @@ if (chatTextarea) {
     });
 }
 
-// Chat Send Submit (com Renderização Otimista Instantânea em 0ms)
+// Chat Send Submit (com suporte a Mídia / Arquivos / Imagens e Renderização Otimista Instantânea em 0ms)
 document.getElementById("chat-input-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const input = document.getElementById("chat-message-input");
     const body = input.value.trim();
-    if (!body || !state.activeConversationId) return;
-
-    input.value = "";
     
-    // 1. Renderização Otimista Instantânea (Aparece no chat em 0ms!)
+    if ((!body && !state.pendingAttachment) || !state.activeConversationId) return;
+
+    const attachmentFile = state.pendingAttachment;
+    input.value = "";
+    clearPendingAttachment();
+
     const scroll = document.getElementById("message-scroll");
     const tempId = `temp_${Date.now()}`;
     const userDisplayName = (state.user && state.user.name) ? state.user.name : "Pedro";
-    const formattedBody = `*Atendente ${userDisplayName}:* ${body}`;
 
+    // CASO 1: Envio de Mídia / Arquivo / Imagem
+    if (attachmentFile) {
+        let mediaType = "document";
+        if (attachmentFile.type.startsWith("image/")) mediaType = "image";
+        else if (attachmentFile.type.startsWith("video/")) mediaType = "video";
+        else if (attachmentFile.type.startsWith("audio/")) mediaType = "audio";
+
+        const tempBlobUrl = URL.createObjectURL(attachmentFile);
+        const formattedBody = body ? `*Atendente ${userDisplayName}:* ${body}` : (mediaType === "document" ? `*Atendente ${userDisplayName}:* ${attachmentFile.name}` : `*Atendente ${userDisplayName}:* [${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)}]`);
+
+        const tempMsgObj = {
+            id: tempId,
+            conversation_id: state.activeConversationId,
+            sender_type: "agent",
+            body: formattedBody,
+            message_type: mediaType,
+            media_url: tempBlobUrl,
+            media_mime_type: attachmentFile.type,
+            created_at: new Date().toISOString()
+        };
+
+        let tempBubble = null;
+        if (scroll) {
+            if (scroll.innerText.includes("Nenhuma mensagem ainda")) scroll.innerHTML = "";
+            tempBubble = renderMessageBubble(tempMsgObj);
+            tempBubble.style.opacity = "0.75";
+            scroll.appendChild(tempBubble);
+            scroll.scrollTop = scroll.scrollHeight;
+        }
+
+        appRouter._updateConversationInList({
+            ...tempMsgObj,
+            preview: `📎 ${attachmentFile.name}`
+        });
+
+        try {
+            const formData = new FormData();
+            formData.append("conversation_id", state.activeConversationId);
+            if (body) formData.append("caption", body);
+            formData.append("file", attachmentFile);
+
+            const newMsg = await api.postForm("/api/inbox/send-media", formData);
+            if (newMsg && newMsg.id) {
+                if (tempBubble) {
+                    tempBubble.setAttribute("data-msg-id", newMsg.id);
+                    tempBubble.style.opacity = "1";
+                    if (newMsg.media_url) {
+                        const mediaElem = tempBubble.querySelector("img, video, audio, a");
+                        if (mediaElem) {
+                            if (mediaElem.tagName === "A") mediaElem.href = getMediaSrc(newMsg.media_url);
+                            else mediaElem.src = getMediaSrc(newMsg.media_url);
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            if (tempBubble) tempBubble.remove();
+            input.value = body;
+            showToast("Erro ao enviar arquivo: " + err.message, "error");
+        }
+        return;
+    }
+
+    // CASO 2: Envio de Texto Puro
+    const formattedBody = `*Atendente ${userDisplayName}:* ${body}`;
     const tempMsgObj = {
         id: tempId,
         conversation_id: state.activeConversationId,
@@ -1919,17 +2141,15 @@ document.getElementById("chat-input-form").addEventListener("submit", async (e) 
 
     let tempBubble = null;
     if (scroll) {
-        // Se mensagem "Nenhuma mensagem ainda" estiver visível, limpa
         if (scroll.innerText.includes("Nenhuma mensagem ainda")) {
             scroll.innerHTML = "";
         }
         tempBubble = renderMessageBubble(tempMsgObj);
-        tempBubble.style.opacity = "0.75"; // Efeito suave de mensagem enviando
+        tempBubble.style.opacity = "0.75";
         scroll.appendChild(tempBubble);
         scroll.scrollTop = scroll.scrollHeight;
     }
 
-    // Atualiza a conversa na lista lateral (remover badge Pendente/Não lido e atualizar o preview)
     appRouter._updateConversationInList(tempMsgObj);
 
     try {
@@ -1938,7 +2158,6 @@ document.getElementById("chat-input-form").addEventListener("submit", async (e) 
             body: body
         });
 
-        // 2. Quando o envio for confirmado pela API, atualiza a bolha temporária para permanente
         if (newMsg && newMsg.id) {
             if (tempBubble) {
                 tempBubble.setAttribute("data-msg-id", newMsg.id);
@@ -1946,7 +2165,6 @@ document.getElementById("chat-input-form").addEventListener("submit", async (e) 
             }
         }
     } catch (err) {
-        // 3. Em caso de erro, remove a bolha temporária e restaura o texto digitado
         if (tempBubble) tempBubble.remove();
         input.value = body;
         showToast("Erro ao enviar: " + err.message, "error");

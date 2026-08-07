@@ -1789,3 +1789,29 @@ img.avatar {
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
+/* Attachment preview & button styles */
+#chat-attach-btn:hover {
+    color: var(--color-brand, #3b82f6) !important;
+    transform: scale(1.1);
+    transition: all 0.2s ease;
+}
+
+#chat-attachment-preview-bar {
+    animation: slideDownFade 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#chat-attachment-remove-btn:hover {
+    background: rgba(239, 68, 68, 0.15) !important;
+}
+
+@keyframes slideDownFade {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+

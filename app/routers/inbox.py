@@ -385,6 +385,232 @@ async def send_message(
     return msg
 
 
+@router.post("/send-media", response_model=MessageResponse)
+async def send_media(
+    conversation_id: UUID = Form(...),
+    caption: Optional[str] = Form(None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    # 1. Verify conversation
+    convo = db.query(Conversation).filter(
+        Conversation.id == str(conversation_id),
+        Conversation.tenant_id == str(current_tenant.id)
+    ).first()
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada.")
+
+    # Validar saldo / limite antes de enviar mídia em nova sessão
+    from app.services.charge_service import can_initiate_conversation, charge_tenant_conversation
+    from datetime import datetime, timezone
+    import re
+    from uuid import uuid4
+
+    last_contact_msg = (
+        db.query(Message)
+        .filter(Message.conversation_id == convo.id, Message.sender_type == "contact")
+        .order_by(Message.created_at.desc())
+        .first()
+    )
+    is_new_session = True
+    if last_contact_msg and last_contact_msg.created_at:
+        created_at_tz = last_contact_msg.created_at.replace(tzinfo=timezone.utc) if last_contact_msg.created_at.tzinfo is None else last_contact_msg.created_at
+        diff_hours = (datetime.now(timezone.utc) - created_at_tz).total_seconds() / 3600
+        if diff_hours <= 24.0:
+            is_new_session = False
+
+    if is_new_session and not can_initiate_conversation(db, current_tenant.id):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED, 
+            detail="Saldo insuficiente ou limite pós-pago atingido. Efetue uma recarga para continuar enviando mensagens ativas."
+        )
+
+    contact = db.query(Contact).filter(Contact.id == convo.contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contato não encontrado.")
+
+    creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == current_tenant.id).first()
+    if not creds:
+        raise HTTPException(status_code=400, detail="Credenciais Meta não configuradas para este tenant.")
+
+    # 2. Process file contents & save locally
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="O arquivo enviado está vazio.")
+
+    mime_type = file.content_type or "application/octet-stream"
+    original_filename = file.filename or "arquivo"
+    safe_filename = re.sub(r'[^a-zA-Z0-9_\.\-]', '_', original_filename)
+    unique_filename = f"{uuid4().hex}_{safe_filename}"
+
+    if mime_type.startswith("image/"):
+        wa_media_type = "image"
+    elif mime_type.startswith("video/"):
+        wa_media_type = "video"
+    elif mime_type.startswith("audio/"):
+        wa_media_type = "audio"
+    else:
+        wa_media_type = "document"
+
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    uploads_folder = os.path.join(base_dir, "uploads", str(current_tenant.id))
+    os.makedirs(uploads_folder, exist_ok=True)
+    file_disk_path = os.path.join(uploads_folder, unique_filename)
+
+    with open(file_disk_path, "wb") as f:
+        f.write(file_bytes)
+
+    local_media_url = f"/uploads/{current_tenant.id}/{unique_filename}"
+
+    recipient_phone = format_brazilian_phone(contact.phone_number)
+    if len(recipient_phone) == 12 and recipient_phone.startswith("55"):
+        try:
+            ddd = int(recipient_phone[2:4])
+            if ddd >= 31:
+                recipient_phone = recipient_phone[:4] + "9" + recipient_phone[4:]
+                contact.phone_number = recipient_phone
+                db.commit()
+        except Exception:
+            pass
+
+    # 3. Upload media binary to Meta WhatsApp Cloud API
+    meta_media_id = None
+    meta_error_detail = None
+    meta_media_upload_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{creds.phone_number_id}/media"
+    headers_auth = {"Authorization": f"Bearer {creds.permanent_access_token}"}
+
+    async with httpx.AsyncClient() as client:
+        try:
+            files_payload = {
+                "file": (original_filename, file_bytes, mime_type)
+            }
+            data_payload = {
+                "messaging_product": "whatsapp",
+                "type": mime_type
+            }
+            res_upload = await client.post(meta_media_upload_url, headers=headers_auth, data=data_payload, files=files_payload, timeout=30.0)
+            if res_upload.status_code == 200:
+                res_json = res_upload.json()
+                meta_media_id = res_json.get("id")
+            else:
+                try:
+                    err_data = res_upload.json()
+                    meta_error_detail = err_data.get("error", {}).get("message") or f"Erro upload mídia Meta HTTP {res_upload.status_code}"
+                except Exception:
+                    meta_error_detail = f"Erro Meta API Media HTTP {res_upload.status_code}: {res_upload.text[:200]}"
+        except Exception as e:
+            meta_error_detail = f"Erro de conexão ao enviar mídia para Meta WhatsApp: {str(e)}"
+
+    if not meta_media_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=meta_error_detail or "Falha ao enviar arquivo de mídia para a API Meta WhatsApp."
+        )
+
+    # 4. Post media message to Meta API
+    formatted_caption = f"*Atendente {current_user.name}:* {caption.strip()}" if caption and caption.strip() else None
+    
+    meta_msg_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{creds.phone_number_id}/messages"
+    meta_msg_payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": recipient_phone,
+        "type": wa_media_type
+    }
+
+    media_obj = {"id": meta_media_id}
+    if formatted_caption and wa_media_type in ["image", "video", "document"]:
+        media_obj["caption"] = formatted_caption
+    if wa_media_type == "document":
+        media_obj["filename"] = original_filename
+
+    meta_msg_payload[wa_media_type] = media_obj
+
+    meta_message_id = None
+    async with httpx.AsyncClient() as client:
+        try:
+            res_msg = await client.post(meta_msg_url, headers=headers_auth, json=meta_msg_payload, timeout=15.0)
+            if res_msg.status_code == 200:
+                res_msg_data = res_msg.json()
+                meta_message_id = res_msg_data.get("messages", [{}])[0].get("id")
+            else:
+                print(f"Meta media send message error: {res_msg.text}")
+        except Exception as e:
+            print(f"Error sending Meta media message: {e}")
+
+    # 5. Save Message in Database
+    display_text = formatted_caption if formatted_caption else (f"*Atendente {current_user.name}:* {original_filename}" if wa_media_type == "document" else f"*Atendente {current_user.name}:* [{wa_media_type.capitalize()}]")
+    
+    msg = Message(
+        conversation_id=conversation_id,
+        sender_type="agent",
+        sender_id=current_user.id,
+        message_type=wa_media_type,
+        body=display_text,
+        media_url=local_media_url,
+        media_mime_type=mime_type,
+        meta_message_id=meta_message_id,
+        status="sent" if meta_message_id else "failed"
+    )
+    db.add(msg)
+
+    now_utc = datetime.now(timezone.utc)
+    convo.last_message_at = now_utc
+
+    if convo.status in ["waiting", "bot"]:
+        user_disp_name = current_user.name or current_user.email
+        sys_msg = Message(
+            conversation_id=convo.id,
+            sender_type="system",
+            sender_id=current_user.id,
+            message_type="system",
+            body=f"👤 {user_disp_name} assumiu a conversa e enviou um arquivo.",
+            internal_note=True
+        )
+        db.add(sys_msg)
+
+    convo.status = "active"
+    if not convo.assigned_user_id:
+        convo.assigned_user_id = current_user.id
+    db.commit()
+    db.refresh(msg)
+
+    if is_new_session and meta_message_id:
+        charge_tenant_conversation(
+            db, 
+            tenant_id=str(current_tenant.id), 
+            conversation_id=str(convo.id), 
+            category="service",
+            custom_description=f"Conversa de Serviço iniciada por atendente enviando mídia para {contact.phone_number}"
+        )
+
+    # 6. Broadcast via WebSocket
+    from app.services.websocket_manager import manager
+    broadcast_data = {
+        "type": "new_message",
+        "id": msg.id,
+        "conversation_id": convo.id,
+        "sender_type": "agent",
+        "body": display_text,
+        "message_type": wa_media_type,
+        "media_url": local_media_url,
+        "media_mime_type": mime_type,
+        "unread": False,
+        "unread_count": convo.unread_count,
+        "contact_name": contact.name or contact.phone_number,
+        "contact_phone": contact.phone_number,
+        "contact_avatar": contact.avatar_url,
+        "preview": f"📎 {original_filename}",
+        "last_message_at": convo.last_message_at.isoformat() if convo.last_message_at else None,
+        "created_at": msg.created_at.isoformat() if msg.created_at else None
+    }
+    await manager.broadcast_to_tenant(str(current_tenant.id), broadcast_data)
+
+    return msg
+
+
 class BotMessageSend(BaseModel):
     conversation_id: Optional[UUID] = None
     phone_number: Optional[str] = None
