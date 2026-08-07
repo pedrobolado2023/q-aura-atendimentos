@@ -120,11 +120,20 @@ try:
 except Exception as e:
     print(f"[Database] Error creating/updating tables on startup: {e}")
 
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
+import logging
+
+logger = logging.getLogger("q_aura")
+
 app = FastAPI(
     title="Q-aura Atendimentos API",
     description="Multi-tenant backend for Omnichannel Customer Service Platform",
     version="1.0.0"
 )
+
+# Enable GZip Compression for super fast response transfers (>1KB compressed automatically)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Configure CORS for multi-tenant subdomains
 app.add_middleware(
@@ -134,6 +143,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.error(f"[Global Exception] Unhandled error on {request.url.path}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Ocorreu um erro interno no servidor. Por favor, tente novamente."}
+    )
 
 @app.websocket("/ws/{tenant_id}")
 async def websocket_endpoint(websocket: WebSocket, tenant_id: str):

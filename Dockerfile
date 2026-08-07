@@ -17,5 +17,5 @@ COPY . .
 # Expõe a porta que o FastAPI usa
 EXPOSE 8000
 
-# Executa o uvicorn apontando para o app.main
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Executa o uvicorn com workers paralelos e suporte a proxy headers
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--proxy-headers"]

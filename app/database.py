@@ -35,16 +35,24 @@ from sqlalchemy import event
 
 # Configure SQLite check_same_thread and WAL mode for maximum concurrency and speed
 if db_url.startswith("sqlite"):
-    engine = create_engine(db_url, connect_args={"check_same_thread": False, "timeout": 15})
+    engine = create_engine(db_url, connect_args={"check_same_thread": False, "timeout": 30})
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")
-        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA busy_timeout=10000")
+        cursor.execute("PRAGMA temp_store=MEMORY")
+        cursor.execute("PRAGMA cache_size=-64000")
         cursor.close()
 else:
-    engine = create_engine(db_url, pool_pre_ping=True)
+    engine = create_engine(
+        db_url,
+        pool_pre_ping=True,
+        pool_size=20,
+        max_overflow=10,
+        pool_recycle=3600
+    )
 
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
