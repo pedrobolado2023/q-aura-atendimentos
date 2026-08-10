@@ -59,6 +59,14 @@ try:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE qa_messages ADD COLUMN internal_note BOOLEAN DEFAULT FALSE"))
 
+    # Ensure qa_message_templates table exists
+    if not inspector.has_table("qa_message_templates"):
+        print("[Database] Creating qa_message_templates table...")
+        try:
+            models.MessageTemplate.__table__.create(bind=engine, checkfirst=True)
+        except Exception as tpl_err:
+            print(f"[Database] Notice creating qa_message_templates: {tpl_err}")
+
     # Check qa_tenants columns for all tenant fields and billing
     if inspector.has_table("qa_tenants"):
         columns_tenants = [col["name"] for col in inspector.get_columns("qa_tenants")]

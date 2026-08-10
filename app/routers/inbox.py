@@ -2097,29 +2097,45 @@ def update_contact(
 # MESSAGE TEMPLATES ENDPOINTS (META DEVELOPER)
 # ==========================================
 
+def ensure_templates_table_exists(db: Session):
+    try:
+        db.query(MessageTemplate).first()
+    except Exception:
+        db.rollback()
+        try:
+            MessageTemplate.__table__.create(bind=db.get_bind(), checkfirst=True)
+        except Exception as ex:
+            print(f"[Database] Notice creating qa_message_templates: {ex}")
+
 @router.get("/templates", response_model=List[MessageTemplateResponse])
 def get_templates(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
+    ensure_templates_table_exists(db)
     templates = db.query(MessageTemplate).filter(
         MessageTemplate.tenant_id == str(current_tenant.id)
     ).order_by(MessageTemplate.created_at.desc()).all()
 
     # Se nao houver nenhum template cadastrado ainda, cadastrar o "primeiro_contato" padrao
     if not templates:
-        default_tpl = MessageTemplate(
-            tenant_id=str(current_tenant.id),
-            name="primeiro_contato",
-            label="Primeiro Contato - Boas-Vindas",
-            language="pt_BR",
-            category="UTILITY"
-        )
-        db.add(default_tpl)
-        db.commit()
-        db.refresh(default_tpl)
-        templates = [default_tpl]
+        try:
+            default_tpl = MessageTemplate(
+                tenant_id=str(current_tenant.id),
+                name="primeiro_contato",
+                label="Primeiro Contato - Boas-Vindas",
+                language="pt_BR",
+                category="UTILITY"
+            )
+            db.add(default_tpl)
+            db.commit()
+            db.refresh(default_tpl)
+            templates = [default_tpl]
+        except Exception as e:
+            db.rollback()
+            print(f"[Templates Notice] Could not seed default template: {e}")
+            templates = []
 
     return templates
 
@@ -2134,6 +2150,7 @@ def create_template(
     if current_user.role not in ["administrator", "manager"]:
         raise HTTPException(status_code=403, detail="Apenas administradores e gestores podem cadastrar templates.")
 
+    ensure_templates_table_exists(db)
     clean_name = payload.name.strip().lower().replace(" ", "_")
     if not clean_name:
         raise HTTPException(status_code=400, detail="Nome do template invalido.")
@@ -2198,6 +2215,7 @@ async def sync_meta_templates(
     if current_user.role not in ["administrator", "manager"]:
         raise HTTPException(status_code=403, detail="Apenas administradores e gestores podem sincronizar templates.")
 
+    ensure_templates_table_exists(db)
     creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == str(current_tenant.id)).first()
     if not creds or not creds.waba_id or not creds.permanent_access_token:
         raise HTTPException(status_code=400, detail="Credenciais WABA da Meta nao configuradas. Preencha a WABA ID e Token nas Configurações.")
