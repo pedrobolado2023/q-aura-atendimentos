@@ -299,8 +299,10 @@ class DashboardMetricsResponse(BaseModel):
 
 class StartConversationRequest(BaseModel):
     phone_number: str
-    body: str
+    body: Optional[str] = None
     name: Optional[str] = None
+    template_name: Optional[str] = None
+    template_language: Optional[str] = "pt_BR"
 
 
 # Quick Message Schemas
@@ -314,6 +316,28 @@ class QuickMessageResponse(BaseModel):
     shortcut: str
     body: str
     is_global: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# Message Template Schemas
+class MessageTemplateCreate(BaseModel):
+    name: str
+    label: Optional[str] = None
+    language: Optional[str] = "pt_BR"
+    category: Optional[str] = "UTILITY"
+    body_text: Optional[str] = None
+
+class MessageTemplateResponse(BaseModel):
+    id: UUID
+    name: str
+    label: str
+    language: str
+    category: str
+    body_text: Optional[str] = None
+    is_active: bool
     created_at: datetime
 
     class Config:

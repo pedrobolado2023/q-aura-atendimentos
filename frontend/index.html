@@ -370,6 +370,62 @@
                                 </table>
                             </div>
                         </div>
+
+                        <!-- Templates WhatsApp (Meta Developer) Editor -->
+                        <div class="settings-card" style="width: 100%; box-sizing: border-box;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+                                <div>
+                                    <h3 style="margin: 0;"><i class="fa-brands fa-whatsapp" style="color: var(--color-success);"></i> Modelos de Templates WhatsApp (Meta Developer)</h3>
+                                    <p class="settings-desc" style="margin-top: 4px; margin-bottom: 0;">Cadastre e gerencie os modelos de mensagens ativos no seu aplicativo da Meta para envio ao iniciar conversas.</p>
+                                </div>
+                                <button type="button" class="btn btn-secondary btn-sm" id="btn-sync-meta-templates" onclick="appRouter.syncMetaTemplates()" style="display: flex; align-items: center; gap: 6px;">
+                                    <i class="fa-solid fa-rotate"></i> Sincronizar da Meta
+                                </button>
+                            </div>
+                            
+                            <form id="template-message-form" style="display: grid; grid-template-columns: 1fr 1.2fr 100px 1fr auto; gap: 12px; margin-bottom: 20px; align-items: flex-end;">
+                                <div class="input-group" style="margin-bottom: 0;">
+                                    <label for="template-name" style="font-size: 12px; font-weight: 600;">Nome na Meta *</label>
+                                    <input type="text" id="template-name" required placeholder="Ex: primeiro_contato" style="padding: 8px 10px;">
+                                </div>
+                                <div class="input-group" style="margin-bottom: 0;">
+                                    <label for="template-label" style="font-size: 12px; font-weight: 600;">Rótulo Exibição</label>
+                                    <input type="text" id="template-label" placeholder="Ex: Boas-Vindas Inicial" style="padding: 8px 10px;">
+                                </div>
+                                <div class="input-group" style="margin-bottom: 0;">
+                                    <label for="template-language" style="font-size: 12px; font-weight: 600;">Idioma</label>
+                                    <input type="text" id="template-language" value="pt_BR" required placeholder="pt_BR" style="padding: 8px 10px;">
+                                </div>
+                                <div class="input-group" style="margin-bottom: 0;">
+                                    <label for="template-category" style="font-size: 12px; font-weight: 600;">Categoria</label>
+                                    <select id="template-category" style="width: 100%; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary);">
+                                        <option value="UTILITY">UTILITÁRIO</option>
+                                        <option value="MARKETING">MARKETING</option>
+                                        <option value="AUTHENTICATION">AUTENTICAÇÃO</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn btn-primary" style="height: 38px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 16px;">
+                                    <i class="fa-solid fa-plus"></i> Cadastrar
+                                </button>
+                            </form>
+
+                            <div class="table-container" style="max-height: 220px; overflow-y: auto;">
+                                <table class="data-table" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th>Nome na Meta</th>
+                                            <th>Rótulo Amigável</th>
+                                            <th>Idioma</th>
+                                            <th>Categoria</th>
+                                            <th style="text-align: right;">Ação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="templates-list-tbody">
+                                        <!-- Loaded dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                         <!-- Billing and Consumption (Faturamento e Consumo) Editor -->
                         <div class="admin-manager-only" style="width: 100%; display: flex; flex-direction: column;">
                             <div class="settings-card" style="width: 100%; display: flex; flex-direction: column; box-sizing: border-box;">
@@ -1034,12 +1090,29 @@
                     <label for="start-chat-name" style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Nome do Hóspede (Opcional)</label>
                     <input type="text" id="start-chat-name" placeholder="Ex: João Silva" style="width: 100%; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); box-sizing: border-box;">
                 </div>
-                <!-- O campo de texto livre foi removido para usar apenas o Template primeiro_contato -->
+                
+                <div class="input-group" style="display: flex; flex-direction: column; gap: 6px;">
+                    <label for="start-chat-template-select" style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Modelo de Template (Meta Developer)</label>
+                    <select id="start-chat-template-select" style="width: 100%; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); box-sizing: border-box;">
+                        <!-- Preenchido via JS -->
+                    </select>
+                </div>
+
+                <div id="start-chat-manual-template-container" class="input-group" style="display: none; flex-direction: column; gap: 6px;">
+                    <label for="start-chat-custom-template-name" style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Nome Exato do Template na Meta</label>
+                    <input type="text" id="start-chat-custom-template-name" placeholder="Ex: meu_template_aprovado" style="width: 100%; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); box-sizing: border-box;">
+                </div>
+
+                <div class="input-group" style="display: flex; flex-direction: column; gap: 6px;">
+                    <label for="start-chat-template-lang" style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Idioma do Template</label>
+                    <input type="text" id="start-chat-template-lang" value="pt_BR" placeholder="Ex: pt_BR" style="width: 100%; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); box-sizing: border-box;">
+                </div>
+
                 <div style="background: var(--bg-tertiary); padding: 12px; border-radius: var(--radius-sm); font-size: 12px; color: var(--text-secondary); text-align: center; border: 1px solid var(--border-color);">
                     <i class="fa-solid fa-circle-info" style="color: var(--color-brand); margin-right: 4px;"></i> 
-                    Será enviada a mensagem oficial aprovada (Template: <strong>primeiro_contato</strong>).
+                    A conversa ativa será iniciada enviando o modelo oficial aprovado na Meta Cloud API.
                 </div>
-                <button type="submit" class="btn btn-primary btn-block" style="margin-top: 10px; padding: 12px; font-weight: 600;">Iniciar Conversa</button>
+                <button type="submit" class="btn btn-primary btn-block" style="margin-top: 6px; padding: 12px; font-weight: 600;">Iniciar Conversa</button>
             </form>
         </div>
     </div>

@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy import func
 from app.database import get_db, SessionLocal
-from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig, Department, QuickMessage, MarketingCampaign, CampaignRecipient
-from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, CampaignResponse, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, StartConversationRequest, QuickMessageCreate, QuickMessageResponse, ContactResponse
+from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig, Department, QuickMessage, MarketingCampaign, CampaignRecipient, MessageTemplate
+from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, CampaignResponse, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, StartConversationRequest, QuickMessageCreate, QuickMessageResponse, ContactResponse, MessageTemplateCreate, MessageTemplateResponse
 from app.auth import get_current_user, get_current_tenant, ModuleRequired
 from app.config import settings
 
@@ -825,8 +825,37 @@ async def start_conversation(
             detail="Credenciais da Meta WhatsApp não estão configuradas para esta empresa. Configure em Configurações > Conexão WhatsApp."
         )
 
-    # Format body
-    formatted_body = f"*Atendente {current_user.name}:* {payload.body}"
+    # Determine se será enviado um Template ou mensagem de texto simples
+    target_template = payload.template_name or (payload.body if payload.body and payload.body != "text" and not payload.body.startswith("*Atendente") else None)
+    template_lang = payload.template_language or "pt_BR"
+
+    if target_template:
+        meta_payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": contact.phone_number,
+            "type": "template",
+            "template": {
+                "name": target_template,
+                "language": {"code": template_lang}
+            }
+        }
+        msg_body_record = f"[Template Enviado: {target_template}]"
+        msg_type_record = "template"
+    else:
+        formatted_body = f"*Atendente {current_user.name}:* {payload.body or 'Olá!'}"
+        meta_payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": contact.phone_number,
+            "type": "text",
+            "text": {
+                "preview_url": False,
+                "body": formatted_body
+            }
+        }
+        msg_body_record = formatted_body
+        msg_type_record = "text"
 
     # 5. Send message via Meta Cloud API
     meta_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{creds.phone_number_id}/messages"
@@ -838,33 +867,11 @@ async def start_conversation(
     meta_message_id = None
     async with httpx.AsyncClient() as client:
         try:
-            if payload.body == "primeiro_contato":
-                meta_payload = {
-                    "messaging_product": "whatsapp",
-                    "recipient_type": "individual",
-                    "to": contact.phone_number,
-                    "type": "template",
-                    "template": {
-                        "name": "primeiro_contato",
-                        "language": {"code": "pt_BR"}
-                    }
-                }
-            else:
-                meta_payload = {
-                    "messaging_product": "whatsapp",
-                    "recipient_type": "individual",
-                    "to": contact.phone_number,
-                    "type": "text",
-                    "text": {
-                        "preview_url": False,
-                        "body": formatted_body
-                    }
-                }
-
             response = await client.post(meta_url, headers=headers, json=meta_payload)
 
-            # Se a chamada via template primeiro_contato falhar, faz fallback para texto simples
-            if response.status_code != 200 and payload.body == "primeiro_contato":
+            # Se falhou e era um envio por template, tenta um fallback para texto simples apenas se não for erro de credenciais
+            if response.status_code != 200 and target_template == "primeiro_contato":
+                fallback_body = f"Olá! Sou o atendente {current_user.name}. Como posso ajudar?"
                 text_payload = {
                     "messaging_product": "whatsapp",
                     "recipient_type": "individual",
@@ -872,10 +879,14 @@ async def start_conversation(
                     "type": "text",
                     "text": {
                         "preview_url": False,
-                        "body": f"Olá! Sou o atendente {current_user.name}. Como posso ajudar?"
+                        "body": fallback_body
                     }
                 }
-                response = await client.post(meta_url, headers=headers, json=text_payload)
+                fallback_resp = await client.post(meta_url, headers=headers, json=text_payload)
+                if fallback_resp.status_code == 200:
+                    response = fallback_resp
+                    msg_body_record = fallback_body
+                    msg_type_record = "text"
 
             if response.status_code == 200:
                 try:
@@ -900,8 +911,8 @@ async def start_conversation(
         conversation_id=convo.id,
         sender_type="agent",
         sender_id=current_user.id,
-        message_type="text",
-        body=formatted_body,
+        message_type=msg_type_record,
+        body=msg_body_record,
         meta_message_id=meta_message_id,
         status="sent" if meta_message_id else "failed"
     )
@@ -915,13 +926,13 @@ async def start_conversation(
 
     # Executa tarifação se a mensagem foi enviada com sucesso
     if meta_message_id:
-        category = "utility" if "primeiro_contato" in (payload.body or "") else "marketing"
+        category = "utility" if msg_type_record == "template" else "marketing"
         charge_tenant_conversation(
             db,
             tenant_id=tenant_id_str,
             conversation_id=str(convo.id),
             category=category,
-            custom_description=f"Primeira Conversa de {category.capitalize()} iniciada de forma ativa com {contact.phone_number}"
+            custom_description=f"Conversa de {category.capitalize()} iniciada com template ({target_template or 'texto'}) com {contact.phone_number}"
         )
 
     return msg
@@ -2080,6 +2091,163 @@ def update_contact(
     db.commit()
     db.refresh(contact)
     return contact
+
+
+# ==========================================
+# MESSAGE TEMPLATES ENDPOINTS (META DEVELOPER)
+# ==========================================
+
+@router.get("/templates", response_model=List[MessageTemplateResponse])
+def get_templates(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    templates = db.query(MessageTemplate).filter(
+        MessageTemplate.tenant_id == str(current_tenant.id)
+    ).order_by(MessageTemplate.created_at.desc()).all()
+
+    # Se nao houver nenhum template cadastrado ainda, cadastrar o "primeiro_contato" padrao
+    if not templates:
+        default_tpl = MessageTemplate(
+            tenant_id=str(current_tenant.id),
+            name="primeiro_contato",
+            label="Primeiro Contato - Boas-Vindas",
+            language="pt_BR",
+            category="UTILITY"
+        )
+        db.add(default_tpl)
+        db.commit()
+        db.refresh(default_tpl)
+        templates = [default_tpl]
+
+    return templates
+
+
+@router.post("/templates", response_model=MessageTemplateResponse)
+def create_template(
+    payload: MessageTemplateCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    if current_user.role not in ["administrator", "manager"]:
+        raise HTTPException(status_code=403, detail="Apenas administradores e gestores podem cadastrar templates.")
+
+    clean_name = payload.name.strip().lower().replace(" ", "_")
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Nome do template invalido.")
+
+    existing = db.query(MessageTemplate).filter(
+        MessageTemplate.tenant_id == str(current_tenant.id),
+        MessageTemplate.name == clean_name
+    ).first()
+
+    if existing:
+        existing.label = payload.label or clean_name
+        existing.language = payload.language or "pt_BR"
+        existing.category = payload.category or "UTILITY"
+        existing.body_text = payload.body_text
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    new_tpl = MessageTemplate(
+        tenant_id=str(current_tenant.id),
+        name=clean_name,
+        label=payload.label or clean_name,
+        language=payload.language or "pt_BR",
+        category=payload.category or "UTILITY",
+        body_text=payload.body_text
+    )
+    db.add(new_tpl)
+    db.commit()
+    db.refresh(new_tpl)
+    return new_tpl
+
+
+@router.delete("/templates/{template_id}")
+def delete_template(
+    template_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    if current_user.role not in ["administrator", "manager"]:
+        raise HTTPException(status_code=403, detail="Apenas administradores e gestores podem remover templates.")
+
+    tpl = db.query(MessageTemplate).filter(
+        MessageTemplate.id == str(template_id),
+        MessageTemplate.tenant_id == str(current_tenant.id)
+    ).first()
+
+    if not tpl:
+        raise HTTPException(status_code=404, detail="Template nao encontrado.")
+
+    db.delete(tpl)
+    db.commit()
+    return {"message": "Template excluido com sucesso."}
+
+
+@router.post("/templates/sync-meta")
+async def sync_meta_templates(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    if current_user.role not in ["administrator", "manager"]:
+        raise HTTPException(status_code=403, detail="Apenas administradores e gestores podem sincronizar templates.")
+
+    creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == str(current_tenant.id)).first()
+    if not creds or not creds.waba_id or not creds.permanent_access_token:
+        raise HTTPException(status_code=400, detail="Credenciais WABA da Meta nao configuradas. Preencha a WABA ID e Token nas Configurações.")
+
+    url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{creds.waba_id}/message_templates"
+    params = {"access_token": creds.permanent_access_token, "limit": 100}
+
+    synced_count = 0
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(url, params=params)
+            if resp.status_code != 200:
+                err_text = resp.json().get("error", {}).get("message", resp.text)
+                raise HTTPException(status_code=400, detail=f"Erro ao buscar templates na Meta API: {err_text}")
+            
+            data = resp.json()
+            templates_meta = data.get("data", [])
+
+            for item in templates_meta:
+                if item.get("status") == "APPROVED":
+                    tpl_name = item.get("name")
+                    tpl_lang = item.get("language", "pt_BR")
+                    tpl_cat = item.get("category", "UTILITY")
+
+                    existing = db.query(MessageTemplate).filter(
+                        MessageTemplate.tenant_id == str(current_tenant.id),
+                        MessageTemplate.name == tpl_name
+                    ).first()
+
+                    if not existing:
+                        new_tpl = MessageTemplate(
+                            tenant_id=str(current_tenant.id),
+                            name=tpl_name,
+                            label=tpl_name,
+                            language=tpl_lang,
+                            category=tpl_cat
+                        )
+                        db.add(new_tpl)
+                        synced_count += 1
+                    else:
+                        existing.language = tpl_lang
+                        existing.category = tpl_cat
+
+            db.commit()
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Falha ao conectar com a Meta: {str(e)}")
+
+    return {"message": f"Sincronização concluida com sucesso. {synced_count} novos modelos adicionados.", "synced_count": synced_count}
 
 
 

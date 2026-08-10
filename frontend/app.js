@@ -519,6 +519,7 @@ const appRouter = {
                 Promise.allSettled([
                     this.loadMetaSettings(),
                     this.loadQuickMessages(),
+                    this.loadTemplates(),
                     this.loadDashboardMetrics()
                 ]);
             } catch (e) {
@@ -1347,6 +1348,97 @@ const appRouter = {
 
         } catch (e) {
             console.error(e);
+        }
+    },
+
+    async loadTemplates() {
+        try {
+            const listEl = document.getElementById("templates-list-tbody");
+            const selectEl = document.getElementById("start-chat-template-select");
+
+            const templates = await api.get("/api/inbox/templates");
+            state.messageTemplates = templates || [];
+
+            // 1. Atualizar Tabela em Configuracoes
+            if (listEl) {
+                listEl.innerHTML = "";
+                if (!templates || templates.length === 0) {
+                    listEl.innerHTML = "<tr><td colspan='5' style='padding: 20px; text-align: center; opacity: 0.5;'>Nenhum template cadastrado.</td></tr>";
+                } else {
+                    templates.forEach(tpl => {
+                        const tr = document.createElement("tr");
+                        tr.innerHTML = `
+                            <td><code>${tpl.name}</code></td>
+                            <td><strong>${tpl.label || tpl.name}</strong></td>
+                            <td><span style="font-size: 11px; background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">${tpl.language}</span></td>
+                            <td><span style="font-size: 11px; font-weight: 700; color: var(--color-brand);">${tpl.category}</span></td>
+                            <td style="text-align: right;"><button type="button" class="btn btn-secondary btn-sm btn-delete-template" data-id="${tpl.id}" style="border-color: var(--color-danger); color: var(--color-danger); background: transparent; padding: 4px 8px; font-size: 11px;"><i class="fa-solid fa-trash"></i> Excluir</button></td>
+                        `;
+                        listEl.appendChild(tr);
+                    });
+
+                    listEl.querySelectorAll(".btn-delete-template").forEach(btn => {
+                        btn.addEventListener("click", async (e) => {
+                            const id = e.currentTarget.getAttribute("data-id");
+                            if (confirm("Deseja realmente excluir este modelo de template?")) {
+                                try {
+                                    await api.delete(`/api/inbox/templates/${id}`);
+                                    showToast("Template excluído com sucesso!", "success");
+                                    appRouter.loadTemplates();
+                                } catch (err) {
+                                    showToast("Erro ao excluir template: " + err.message, "error");
+                                }
+                            }
+                        });
+                    });
+                }
+            }
+
+            // 2. Atualizar Dropdown na Modal Iniciar Conversa
+            if (selectEl) {
+                const currentSelection = selectEl.value;
+                selectEl.innerHTML = "";
+                if (templates && templates.length > 0) {
+                    templates.forEach(tpl => {
+                        const opt = document.createElement("option");
+                        opt.value = `${tpl.name}|${tpl.language}`;
+                        opt.innerText = `${tpl.label || tpl.name} (${tpl.name})`;
+                        selectEl.appendChild(opt);
+                    });
+                }
+                // Adicionar opção para digitar manualmente
+                const customOpt = document.createElement("option");
+                customOpt.value = "__custom__";
+                customOpt.innerText = "-- Digitar nome do template manualmente --";
+                selectEl.appendChild(customOpt);
+
+                if (currentSelection && [...selectEl.options].some(o => o.value === currentSelection)) {
+                    selectEl.value = currentSelection;
+                }
+            }
+        } catch (e) {
+            console.error("Erro ao carregar templates:", e);
+        }
+    },
+
+    async syncMetaTemplates() {
+        const btn = document.getElementById("btn-sync-meta-templates");
+        const origHtml = btn ? btn.innerHTML : "";
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Sincronizando...`;
+        }
+        try {
+            const res = await api.post("/api/inbox/templates/sync-meta");
+            showToast(res.message || "Templates sincronizados com a Meta!", "success");
+            await this.loadTemplates();
+        } catch (err) {
+            showToast("Erro na sincronização Meta: " + err.message, "error");
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+            }
         }
     },
 
@@ -2980,6 +3072,28 @@ if (openStartChatModalBtn && startChatModal) {
     openStartChatModalBtn.addEventListener("click", () => {
         startChatModal.style.display = "flex";
         document.getElementById("start-chat-phone").focus();
+        appRouter.loadTemplates();
+    });
+}
+
+const startChatTemplateSelect = document.getElementById("start-chat-template-select");
+const startChatManualContainer = document.getElementById("start-chat-manual-template-container");
+const startChatTemplateLang = document.getElementById("start-chat-template-lang");
+
+if (startChatTemplateSelect) {
+    startChatTemplateSelect.addEventListener("change", (e) => {
+        const val = e.target.value;
+        if (val === "__custom__") {
+            if (startChatManualContainer) startChatManualContainer.style.display = "flex";
+            const customInput = document.getElementById("start-chat-custom-template-name");
+            if (customInput) customInput.focus();
+        } else {
+            if (startChatManualContainer) startChatManualContainer.style.display = "none";
+            const parts = val.split("|");
+            if (parts.length > 1 && startChatTemplateLang) {
+                startChatTemplateLang.value = parts[1];
+            }
+        }
     });
 }
 
@@ -2987,6 +3101,7 @@ if (closeStartChatModalBtn && startChatModal) {
     closeStartChatModalBtn.addEventListener("click", () => {
         startChatModal.style.display = "none";
         startChatForm.reset();
+        if (startChatManualContainer) startChatManualContainer.style.display = "none";
     });
 }
 
@@ -2995,6 +3110,7 @@ if (startChatModal) {
         if (e.target === startChatModal) {
             startChatModal.style.display = "none";
             startChatForm.reset();
+            if (startChatManualContainer) startChatManualContainer.style.display = "none";
         }
     });
 }
@@ -3005,7 +3121,22 @@ if (startChatForm) {
         
         const phone = document.getElementById("start-chat-phone").value.trim();
         const name = document.getElementById("start-chat-name").value.trim();
-        const body = "primeiro_contato"; // Utiliza a string correspondente ao Template
+        const selectVal = startChatTemplateSelect ? startChatTemplateSelect.value : "";
+        let templateName = "";
+        let templateLang = startChatTemplateLang ? startChatTemplateLang.value.trim() : "pt_BR";
+
+        if (selectVal === "__custom__") {
+            const customInput = document.getElementById("start-chat-custom-template-name");
+            templateName = customInput ? customInput.value.trim() : "";
+            if (!templateName) {
+                showToast("Por favor, informe o nome exato do template na Meta.", "error");
+                return;
+            }
+        } else if (selectVal) {
+            templateName = selectVal.split("|")[0];
+        } else {
+            templateName = "primeiro_contato";
+        }
         
         const submitBtn = startChatForm.querySelector("button[type='submit']");
         const originalText = submitBtn.innerText;
@@ -3015,13 +3146,15 @@ if (startChatForm) {
         try {
             const messageRes = await api.post("/api/inbox/start-conversation", {
                 phone_number: phone,
-                body: body,
-                name: name || null
+                name: name || null,
+                template_name: templateName,
+                template_language: templateLang
             });
             
-            showToast("Conversa iniciada com sucesso!", "success");
+            showToast("Conversa iniciada com sucesso via Template!", "success");
             startChatModal.style.display = "none";
             startChatForm.reset();
+            if (startChatManualContainer) startChatManualContainer.style.display = "none";
             
             // Switch tab to "Minhas" (active) to show the new conversation
             const minhasTab = document.querySelector(".inbox-tabs button[data-status='active']");
@@ -3070,6 +3203,43 @@ if (quickForm) {
         } finally {
             btn.disabled = false;
             btn.innerText = "Adicionar";
+        }
+    });
+}
+
+// Template Message Form Submit (Configurações)
+const templateMsgForm = document.getElementById("template-message-form");
+if (templateMsgForm) {
+    templateMsgForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const name = document.getElementById("template-name").value.trim();
+        const label = document.getElementById("template-label").value.trim();
+        const language = document.getElementById("template-language").value.trim() || "pt_BR";
+        const category = document.getElementById("template-category").value;
+
+        const btn = templateMsgForm.querySelector("button[type='submit']");
+        const origHtml = btn ? btn.innerHTML : "";
+        if (btn) btn.disabled = true;
+
+        try {
+            await api.post("/api/inbox/templates", {
+                name: name,
+                label: label || name,
+                language: language,
+                category: category
+            });
+            showToast("Template cadastrado com sucesso!", "success");
+            templateMsgForm.reset();
+            const langEl = document.getElementById("template-language");
+            if (langEl) langEl.value = "pt_BR";
+            await appRouter.loadTemplates();
+        } catch (err) {
+            showToast("Erro ao cadastrar template: " + err.message, "error");
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+            }
         }
     });
 }

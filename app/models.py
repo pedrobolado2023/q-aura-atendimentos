@@ -64,6 +64,7 @@ class Tenant(Base):
     departments = relationship("Department", back_populates="tenant", cascade="all, delete-orphan")
     contacts = relationship("Contact", back_populates="tenant", cascade="all, delete-orphan")
     conversations = relationship("Conversation", back_populates="tenant", cascade="all, delete-orphan")
+    message_templates = relationship("MessageTemplate", back_populates="tenant", cascade="all, delete-orphan")
 
 class User(Base):
     __tablename__ = "qa_users"
@@ -200,6 +201,22 @@ class QuickMessage(Base):
 
     tenant = relationship("Tenant")
     user = relationship("User")
+
+
+class MessageTemplate(Base):
+    __tablename__ = "qa_message_templates"
+    id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
+    tenant_id = Column(UuidCol, ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    label = Column(String(255), nullable=False)
+    language = Column(String(20), default="pt_BR")
+    category = Column(String(50), default="UTILITY")
+    body_text = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    tenant = relationship("Tenant", back_populates="message_templates")
 
 
 class MarketingCampaign(Base):
