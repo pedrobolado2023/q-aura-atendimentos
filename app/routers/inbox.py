@@ -2220,8 +2220,11 @@ async def sync_meta_templates(
     if not creds or not creds.waba_id or not creds.permanent_access_token:
         raise HTTPException(status_code=400, detail="Credenciais WABA da Meta nao configuradas. Preencha a WABA ID e Token nas Configurações.")
 
-    url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{creds.waba_id}/message_templates"
-    params = {"access_token": creds.permanent_access_token, "limit": 100}
+    waba_id_clean = creds.waba_id.strip()
+    token_clean = creds.permanent_access_token.strip()
+
+    url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{waba_id_clean}/message_templates"
+    params = {"access_token": token_clean, "limit": 100}
 
     synced_count = 0
     async with httpx.AsyncClient() as client:

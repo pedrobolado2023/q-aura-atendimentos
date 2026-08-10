@@ -337,8 +337,8 @@ class MessageTemplateResponse(BaseModel):
     language: str
     category: str
     body_text: Optional[str] = None
-    is_active: bool
-    created_at: datetime
+    is_active: bool = True
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
