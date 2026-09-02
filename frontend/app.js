@@ -1252,7 +1252,14 @@ const appRouter = {
         status: null
     },
 
-    async loadDashboardMetrics() {
+    async loadDashboardMetrics(isManual = false) {
+        const refreshBtn = document.getElementById("btn-refresh-dashboard");
+        const iconEl = refreshBtn ? refreshBtn.querySelector("i") : null;
+        if (isManual && iconEl) {
+            iconEl.classList.add("fa-spin");
+            if (refreshBtn) refreshBtn.disabled = true;
+        }
+
         try {
             const metrics = await api.get("/api/inbox/dashboard-metrics");
             
@@ -1268,6 +1275,14 @@ const appRouter = {
             setVal("stat-bot", metrics.bot_conversations || 0);
             setVal("stat-contacts", metrics.total_contacts || 0);
             setVal("stat-messages-today", metrics.messages_today || 0);
+
+            // Update Date / Timestamp Badge
+            const dateBadge = document.getElementById("current-date");
+            if (dateBadge) {
+                const now = new Date();
+                const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+                dateBadge.innerText = `Hoje às ${timeStr}`;
+            }
 
             // Update Conversion Rate Badge
             const convBadge = document.getElementById("stat-conversion-rate-badge");
@@ -1441,8 +1456,18 @@ const appRouter = {
                     });
                 }
             }
+
+            if (isManual) {
+                showToast("Painel atualizado com dados em tempo real!", "success");
+            }
         } catch (e) {
             console.error("Erro ao carregar métricas do painel:", e);
+            if (isManual) {
+                showToast("Erro ao atualizar métricas do painel.", "error");
+            }
+        } finally {
+            if (iconEl) iconEl.classList.remove("fa-spin");
+            if (refreshBtn) refreshBtn.disabled = false;
         }
     },
 
