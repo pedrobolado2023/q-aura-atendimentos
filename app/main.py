@@ -65,7 +65,7 @@ try:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS qa_message_templates (
                     id VARCHAR(36) PRIMARY KEY,
-                    tenant_id VARCHAR(36) NOT NULL REFERENCES qa_tenants(id) ON DELETE CASCADE,
+                    tenant_id VARCHAR(36) NOT NULL,
                     name VARCHAR(255) NOT NULL,
                     label VARCHAR(255) NOT NULL,
                     language VARCHAR(20) DEFAULT 'pt_BR',
@@ -76,7 +76,10 @@ try:
                     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
                 )
             """))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_qa_msg_tpl_tenant ON qa_message_templates(tenant_id)"))
+            try:
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_qa_msg_tpl_tenant ON qa_message_templates(tenant_id)"))
+            except Exception:
+                pass
     except Exception as tpl_err:
         print(f"[Database] Notice creating qa_message_templates: {tpl_err}")
 

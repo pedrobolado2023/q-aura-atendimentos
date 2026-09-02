@@ -9,7 +9,7 @@ from uuid import UUID
 from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy import func
-from app.database import get_db, SessionLocal
+from app.database import get_db, SessionLocal, engine
 from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig, Department, QuickMessage, MarketingCampaign, CampaignRecipient, MessageTemplate
 from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, CampaignResponse, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, StartConversationRequest, QuickMessageCreate, QuickMessageResponse, ContactResponse, MessageTemplateCreate, MessageTemplateResponse
 from app.auth import get_current_user, get_current_tenant, ModuleRequired
@@ -2139,34 +2139,29 @@ def update_contact(
 # MESSAGE TEMPLATES ENDPOINTS (META DEVELOPER)
 # ==========================================
 
-def ensure_templates_table_exists(db: Session):
+def ensure_templates_table_exists(db: Session = None):
     try:
         from sqlalchemy import text
-        db.execute(text("""
-            CREATE TABLE IF NOT EXISTS qa_message_templates (
-                id VARCHAR(36) PRIMARY KEY,
-                tenant_id VARCHAR(36) NOT NULL REFERENCES qa_tenants(id) ON DELETE CASCADE,
-                name VARCHAR(255) NOT NULL,
-                label VARCHAR(255) NOT NULL,
-                language VARCHAR(20) DEFAULT 'pt_BR',
-                category VARCHAR(50) DEFAULT 'UTILITY',
-                body_text TEXT,
-                is_active BOOLEAN DEFAULT TRUE,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            )
-        """))
-        db.commit()
-        try:
-            db.execute(text("CREATE INDEX IF NOT EXISTS idx_qa_msg_tpl_tenant ON qa_message_templates(tenant_id)"))
-            db.commit()
-        except Exception:
-            db.rollback()
+        with engine.begin() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS qa_message_templates (
+                    id VARCHAR(36) PRIMARY KEY,
+                    tenant_id VARCHAR(36) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    label VARCHAR(255) NOT NULL,
+                    language VARCHAR(20) DEFAULT 'pt_BR',
+                    category VARCHAR(50) DEFAULT 'UTILITY',
+                    body_text TEXT,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            try:
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_qa_msg_tpl_tenant ON qa_message_templates(tenant_id)"))
+            except Exception:
+                pass
     except Exception as ex:
-        try:
-            db.rollback()
-        except Exception:
-            pass
         print(f"[Database] Notice creating qa_message_templates: {ex}")
 
 @router.get("/templates", response_model=List[MessageTemplateResponse])
