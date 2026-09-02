@@ -102,6 +102,18 @@ function showToast(message, type = "success") {
     }, 4000);
 }
 
+// --- HTML Escape Helper ---
+function escapeHTML(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+window.escapeHTML = escapeHTML;
+
 // --- WhatsApp Formatting Helper ---
 function formatMessageBody(body) {
     if (!body) return "";
@@ -109,12 +121,7 @@ function formatMessageBody(body) {
         return `<span style="opacity: 0.85; font-style: italic; display: inline-flex; align-items: center; gap: 4px;"><i class="fa-solid fa-circle-info" style="color: var(--color-primary);"></i> [Mensagem de Sistema / Autenticação do WhatsApp]</span>`;
     }
     // Safe escape HTML to prevent XSS
-    let escaped = body
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+    let escaped = escapeHTML(body);
         
     // Replace *bold* with <strong>bold</strong>
     escaped = escaped.replace(/\*(.*?)\*/g, "<strong>$1</strong>");
