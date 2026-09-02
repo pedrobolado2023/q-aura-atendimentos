@@ -209,10 +209,9 @@ async def create_mp_pix_recharge(
             qr_code = tx_data.get("qr_code")
             qr_code_base64 = tx_data.get("qr_code_base64")
 
-            # Salva a transação temporária com status 'pending' (como débito/crédito zerado até ser aprovado)
-            # Para não inflar o saldo antes do pagamento, criamos uma transação com categoria 'recharge_pending'
+            # Salva a transação temporária com status 'pending'
             tx = BillingTransaction(
-                id=payment_id, # Usamos o próprio ID de pagamento do MP como chave primária do extrato temporário
+                id=str(uuid.uuid4()),
                 tenant_id=tenant.id,
                 category="recharge_pending",
                 amount=Decimal(str(amount)),
@@ -282,11 +281,7 @@ async def create_plan_subscription_pix(
         "payer": {
             "email": current_user.email,
             "first_name": current_user.name.split(" ")[0] if current_user.name else "Cliente",
-            "last_name": "SaaS",
-            "identification": {
-                "type": "CPF",
-                "number": "00000000000"
-            }
+            "last_name": "SaaS"
         }
     }
 
@@ -314,7 +309,7 @@ async def create_plan_subscription_pix(
             qr_code_base64 = tx_data.get("qr_code_base64")
 
             tx = BillingTransaction(
-                id=payment_id,
+                id=str(uuid.uuid4()),
                 tenant_id=tenant.id,
                 category="plan_pending",
                 amount=Decimal(str(amount)),
@@ -350,10 +345,17 @@ def check_recharge_status(
     Consulta o status de um pagamento Pix de recarga ou plano.
     """
     tx = db.query(BillingTransaction).filter(
-        BillingTransaction.id == payment_id,
+        BillingTransaction.description.like(f"%ID MP: {payment_id}%"),
         BillingTransaction.tenant_id == current_tenant.id
     ).first()
     
+    if not tx:
+        # Tenta buscar por ID direto caso seja SQLite legado
+        tx = db.query(BillingTransaction).filter(
+            BillingTransaction.id == payment_id,
+            BillingTransaction.tenant_id == current_tenant.id
+        ).first()
+
     if not tx:
         raise HTTPException(status_code=404, detail="Transação não encontrada.")
 
@@ -439,7 +441,7 @@ async def mercadopago_webhook(
                 if mp_status == "approved":
                     # Busca a transação pendente correspondente no nosso BD
                     tx = db.query(BillingTransaction).filter(
-                        BillingTransaction.id == str(data_id),
+                        BillingTransaction.description.like(f"%ID MP: {data_id}%"),
                         BillingTransaction.category.in_(["recharge_pending", "plan_pending"])
                     ).first()
 
