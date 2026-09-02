@@ -1905,39 +1905,46 @@ def get_dashboard_metrics(
     Calculates live dashboard metrics from the database for the current tenant.
     """
     from datetime import datetime, timezone, timedelta
-    tenant_id_str = str(current_tenant.id)
+    t_id = current_tenant.id
 
     # 1. Real Conversation Counts by Status
-    total_convos = db.query(Conversation).filter(Conversation.tenant_id == tenant_id_str).count()
-    active_convos = db.query(Conversation).filter(Conversation.tenant_id == tenant_id_str, Conversation.status == "active").count()
-    waiting_convos = db.query(Conversation).filter(Conversation.tenant_id == tenant_id_str, Conversation.status == "waiting").count()
-    bot_convos = db.query(Conversation).filter(Conversation.tenant_id == tenant_id_str, Conversation.status == "bot").count()
-    resolved_convos = db.query(Conversation).filter(Conversation.tenant_id == tenant_id_str, Conversation.status == "resolved").count()
+    total_convos = db.query(Conversation).filter(Conversation.tenant_id == t_id).count()
+    active_convos = db.query(Conversation).filter(Conversation.tenant_id == t_id, Conversation.status == "active").count()
+    waiting_convos = db.query(Conversation).filter(Conversation.tenant_id == t_id, Conversation.status == "waiting").count()
+    bot_convos = db.query(Conversation).filter(Conversation.tenant_id == t_id, Conversation.status == "bot").count()
+    resolved_convos = db.query(Conversation).filter(Conversation.tenant_id == t_id, Conversation.status == "resolved").count()
 
     # 2. Real Contacts & Messages Counts
-    total_contacts = db.query(Contact).filter(Contact.tenant_id == tenant_id_str).count()
-    total_messages = db.query(Message).join(Conversation, Message.conversation_id == Conversation.id).filter(Conversation.tenant_id == tenant_id_str).count()
+    total_contacts = db.query(Contact).filter(Contact.tenant_id == t_id).count()
+    total_messages = db.query(Message).join(Conversation, Message.conversation_id == Conversation.id).filter(Conversation.tenant_id == t_id).count()
 
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    messages_today = db.query(Message).join(Conversation, Message.conversation_id == Conversation.id).filter(
-        Conversation.tenant_id == tenant_id_str,
-        Message.created_at >= today_start
-    ).count()
+    messages_today = 0
+    try:
+        messages_today = db.query(Message).join(Conversation, Message.conversation_id == Conversation.id).filter(
+            Conversation.tenant_id == t_id,
+            Message.created_at >= today_start
+        ).count()
+    except Exception:
+        # Fallback for naive date comparisons
+        messages_today = db.query(Message).join(Conversation, Message.conversation_id == Conversation.id).filter(
+            Conversation.tenant_id == t_id,
+            Message.created_at >= today_start.replace(tzinfo=None)
+        ).count()
 
     # 3. Real Bot Resolution Rate
     bot_resolved = db.query(Conversation).filter(
-        Conversation.tenant_id == tenant_id_str,
+        Conversation.tenant_id == t_id,
         Conversation.status == "resolved",
         Conversation.assigned_user_id == None
     ).count()
     bot_rate = (bot_resolved / resolved_convos * 100.0) if resolved_convos > 0 else 0.0
 
     # 4. Real Contacts Funnel Stages
-    leads_count = db.query(Contact).filter(Contact.tenant_id == tenant_id_str, Contact.sales_funnel_stage == "lead").count()
-    prospects_count = db.query(Contact).filter(Contact.tenant_id == tenant_id_str, Contact.sales_funnel_stage == "prospect").count()
-    customers_count = db.query(Contact).filter(Contact.tenant_id == tenant_id_str, Contact.sales_funnel_stage == "customer").count()
+    leads_count = db.query(Contact).filter(Contact.tenant_id == t_id, Contact.sales_funnel_stage == "lead").count()
+    prospects_count = db.query(Contact).filter(Contact.tenant_id == t_id, Contact.sales_funnel_stage == "prospect").count()
+    customers_count = db.query(Contact).filter(Contact.tenant_id == t_id, Contact.sales_funnel_stage == "customer").count()
 
-    # If contacts don't have explicit stages yet, categorize based on conversation history
     if total_contacts > 0 and (leads_count + prospects_count + customers_count == 0):
         leads_count = total_contacts
 
@@ -1951,11 +1958,11 @@ def get_dashboard_metrics(
     ]
 
     # 5. Real Department Breakdown
-    depts = db.query(Department).filter(Department.tenant_id == tenant_id_str).all()
+    depts = db.query(Department).filter(Department.tenant_id == t_id).all()
     dep_metrics = []
     for d in depts:
         count = db.query(Conversation).filter(
-            Conversation.tenant_id == tenant_id_str,
+            Conversation.tenant_id == t_id,
             Conversation.assigned_department_id == d.id
         ).count()
         dep_metrics.append(DepartmentMetric(name=d.name, count=count))
@@ -1965,45 +1972,67 @@ def get_dashboard_metrics(
             DepartmentMetric(name="Atendimento Geral", count=total_convos)
         ]
 
-    # 6. Real Daily Traffic (Last 7 Days)
-    daily_traffic = []
-    for i in range(6, -1, -1):
-        day_date = (datetime.now(timezone.utc) - timedelta(days=i)).date()
-        day_start = datetime.combine(day_date, datetime.min.time()).replace(tzinfo=timezone.utc)
-        day_end = datetime.combine(day_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+    # 6. Real Daily Traffic (Last 7 Days) - High Performance Single Aggregation Query
+    cutoff_date = (datetime.now(timezone.utc) - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
+    traffic_map = {}
+    for i in range(7):
+        d_str = (datetime.now(timezone.utc) - timedelta(days=6 - i)).strftime("%d/%m")
+        traffic_map[d_str] = {"incoming": 0, "outgoing": 0}
 
-        inc_count = db.query(Message).join(Conversation, Message.conversation_id == Conversation.id).filter(
-            Conversation.tenant_id == tenant_id_str,
-            Message.sender_type == "contact",
-            Message.created_at >= day_start,
-            Message.created_at <= day_end
-        ).count()
+    try:
+        recent_msgs = db.query(
+            Message.sender_type,
+            Message.created_at
+        ).join(Conversation, Message.conversation_id == Conversation.id).filter(
+            Conversation.tenant_id == t_id,
+            Message.created_at >= cutoff_date
+        ).all()
 
-        out_count = db.query(Message).join(Conversation, Message.conversation_id == Conversation.id).filter(
-            Conversation.tenant_id == tenant_id_str,
-            Message.sender_type.in_(["agent", "bot"]),
-            Message.created_at >= day_start,
-            Message.created_at <= day_end
-        ).count()
+        for msg in recent_msgs:
+            if msg.created_at:
+                d_key = msg.created_at.strftime("%d/%m")
+                if d_key in traffic_map:
+                    if msg.sender_type == "contact":
+                        traffic_map[d_key]["incoming"] += 1
+                    else:
+                        traffic_map[d_key]["outgoing"] += 1
+    except Exception as err:
+        try:
+            recent_msgs = db.query(
+                Message.sender_type,
+                Message.created_at
+            ).join(Conversation, Message.conversation_id == Conversation.id).filter(
+                Conversation.tenant_id == t_id,
+                Message.created_at >= cutoff_date.replace(tzinfo=None)
+            ).all()
+            for msg in recent_msgs:
+                if msg.created_at:
+                    d_key = msg.created_at.strftime("%d/%m")
+                    if d_key in traffic_map:
+                        if msg.sender_type == "contact":
+                            traffic_map[d_key]["incoming"] += 1
+                        else:
+                            traffic_map[d_key]["outgoing"] += 1
+        except Exception as e2:
+            print(f"[Dashboard Traffic Query Error] {e2}")
 
-        daily_traffic.append(DailyTrafficMetric(
-            date=day_date.strftime("%d/%m"),
-            incoming_count=inc_count,
-            outgoing_count=out_count
-        ))
+    daily_traffic = [
+        DailyTrafficMetric(date=d_key, incoming_count=counts["incoming"], outgoing_count=counts["outgoing"])
+        for d_key, counts in traffic_map.items()
+    ]
 
     # 7. Real Team Performance
-    team_users = db.query(User).filter(User.tenant_id == tenant_id_str).all()
+    team_users = db.query(User).filter(User.tenant_id == t_id).all()
     team_performance = []
     for u in team_users:
         u_str = str(u.id)
         active_cnt = db.query(Conversation).filter(
-            Conversation.tenant_id == tenant_id_str,
+            Conversation.tenant_id == t_id,
             Conversation.assigned_user_id == u_str,
             Conversation.status == "active"
         ).count()
         resolved_cnt = db.query(Conversation).filter(
-            Conversation.tenant_id == tenant_id_str,
+            Conversation.tenant_id == t_id,
             Conversation.assigned_user_id == u_str,
             Conversation.status == "resolved"
         ).count()
@@ -2016,11 +2045,11 @@ def get_dashboard_metrics(
             resolved_count=resolved_cnt
         ))
 
-    # 8. Avg Response Time Calculation (estimate in seconds from actual first agent reply timestamps)
+    # 8. Avg Response Time Calculation
     avg_seconds = 0.0
     try:
         recent_convos_with_msgs = db.query(Conversation).filter(
-            Conversation.tenant_id == tenant_id_str
+            Conversation.tenant_id == t_id
         ).order_by(Conversation.created_at.desc()).limit(20).all()
         
         response_deltas = []

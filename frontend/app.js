@@ -479,8 +479,7 @@ const appRouter = {
             this.loadConversations();
             this.loadQuickMessages();
         } else if (targetView === "dashboard-view") {
-            this.loadDashboardMetrics();
-
+            setTimeout(() => this.loadDashboardMetrics(), 60);
         } else if (targetView === "settings-view") {
             this.loadMetaSettings();
             this.loadQuickMessages();
@@ -1291,10 +1290,12 @@ const appRouter = {
             }
 
             // 2. Render Real Chart 1: Daily Traffic Chart (Line Chart with Gradients)
+            const ChartConstructor = window.Chart || (typeof Chart !== "undefined" ? Chart : null);
             const trafficCanvas = document.getElementById("dashboard-traffic-chart");
-            if (trafficCanvas && window.Chart && metrics.daily_traffic) {
+            if (trafficCanvas && ChartConstructor && metrics.daily_traffic) {
                 if (this.dashboardCharts.traffic) {
-                    this.dashboardCharts.traffic.destroy();
+                    try { this.dashboardCharts.traffic.destroy(); } catch(e){}
+                    this.dashboardCharts.traffic = null;
                 }
 
                 const labels = metrics.daily_traffic.map(d => d.date);
@@ -1302,7 +1303,7 @@ const appRouter = {
                 const outgoingData = metrics.daily_traffic.map(d => d.outgoing_count);
 
                 const ctx = trafficCanvas.getContext("2d");
-                this.dashboardCharts.traffic = new Chart(ctx, {
+                this.dashboardCharts.traffic = new ChartConstructor(ctx, {
                     type: "line",
                     data: {
                         labels: labels,
@@ -1311,23 +1312,23 @@ const appRouter = {
                                 label: "Recebidas (Clientes)",
                                 data: incomingData,
                                 borderColor: "#3b82f6",
-                                backgroundColor: "rgba(59, 130, 246, 0.12)",
+                                backgroundColor: "rgba(59, 130, 246, 0.15)",
                                 fill: true,
                                 tension: 0.35,
                                 borderWidth: 2.5,
                                 pointBackgroundColor: "#3b82f6",
-                                pointRadius: 3
+                                pointRadius: 4
                             },
                             {
                                 label: "Enviadas (Equipe / Bot)",
                                 data: outgoingData,
                                 borderColor: "#22c55e",
-                                backgroundColor: "rgba(34, 197, 94, 0.08)",
+                                backgroundColor: "rgba(34, 197, 94, 0.10)",
                                 fill: true,
                                 tension: 0.35,
                                 borderWidth: 2.5,
                                 pointBackgroundColor: "#22c55e",
-                                pointRadius: 3
+                                pointRadius: 4
                             }
                         ]
                     },
@@ -1366,9 +1367,10 @@ const appRouter = {
 
             // 3. Render Real Chart 2: Status Breakdown (Doughnut Chart)
             const statusCanvas = document.getElementById("dashboard-status-chart");
-            if (statusCanvas && window.Chart) {
+            if (statusCanvas && ChartConstructor) {
                 if (this.dashboardCharts.status) {
-                    this.dashboardCharts.status.destroy();
+                    try { this.dashboardCharts.status.destroy(); } catch(e){}
+                    this.dashboardCharts.status = null;
                 }
 
                 const waitingCount = metrics.waiting_conversations || 0;
@@ -1379,12 +1381,16 @@ const appRouter = {
                 const hasData = (waitingCount + activeCount + botCount + resolvedCount) > 0;
                 const statusCtx = statusCanvas.getContext("2d");
 
-                this.dashboardCharts.status = new Chart(statusCtx, {
+                this.dashboardCharts.status = new ChartConstructor(statusCtx, {
                     type: "doughnut",
                     data: {
-                        labels: ["Fila de Espera", "Em Atendimento", "Com Robô", "Resolvidas"],
+                        labels: hasData 
+                            ? ["Fila de Espera", "Em Atendimento", "Com Robô", "Resolvidas"] 
+                            : ["Sem atendimentos no momento"],
                         datasets: [{
-                            data: hasData ? [waitingCount, activeCount, botCount, resolvedCount] : [0, 0, 0, 1],
+                            data: hasData 
+                                ? [waitingCount, activeCount, botCount, resolvedCount] 
+                                : [1],
                             backgroundColor: hasData 
                                 ? ["#f59e0b", "#3b82f6", "#a855f7", "#22c55e"]
                                 : ["#334155"],
