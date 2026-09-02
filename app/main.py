@@ -60,12 +60,25 @@ try:
             conn.execute(text("ALTER TABLE qa_messages ADD COLUMN internal_note BOOLEAN DEFAULT FALSE"))
 
     # Ensure qa_message_templates table exists
-    if not inspector.has_table("qa_message_templates"):
-        print("[Database] Creating qa_message_templates table...")
-        try:
-            models.MessageTemplate.__table__.create(bind=engine, checkfirst=True)
-        except Exception as tpl_err:
-            print(f"[Database] Notice creating qa_message_templates: {tpl_err}")
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS qa_message_templates (
+                    id VARCHAR(36) PRIMARY KEY,
+                    tenant_id VARCHAR(36) NOT NULL REFERENCES qa_tenants(id) ON DELETE CASCADE,
+                    name VARCHAR(255) NOT NULL,
+                    label VARCHAR(255) NOT NULL,
+                    language VARCHAR(20) DEFAULT 'pt_BR',
+                    category VARCHAR(50) DEFAULT 'UTILITY',
+                    body_text TEXT,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_qa_msg_tpl_tenant ON qa_message_templates(tenant_id);
+            """))
+    except Exception as tpl_err:
+        print(f"[Database] Notice creating qa_message_templates: {tpl_err}")
 
     # Check qa_tenants columns for all tenant fields and billing
     if inspector.has_table("qa_tenants"):

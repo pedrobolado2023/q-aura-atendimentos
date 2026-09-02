@@ -293,6 +293,26 @@ async def send_message(
                 "language": {"code": template_lang}
             }
         }
+        
+        # Se o template tiver variáveis no corpo, injeta o nome do cliente como parâmetro
+        try:
+            tpl_db = db.query(MessageTemplate).filter(
+                MessageTemplate.tenant_id == str(current_tenant.id),
+                MessageTemplate.name == target_template
+            ).first()
+            if tpl_db and tpl_db.body_text and "{{" in tpl_db.body_text:
+                contact_name = (contact.name or "Cliente").strip()
+                meta_payload["template"]["components"] = [
+                    {
+                        "type": "body",
+                        "parameters": [
+                            {"type": "text", "text": contact_name}
+                        ]
+                    }
+                ]
+        except Exception:
+            pass
+
         msg_body_record = f"[Template: {target_template}]"
         msg_type_record = "template"
     else:
@@ -2121,11 +2141,24 @@ def update_contact(
 
 def ensure_templates_table_exists(db: Session):
     try:
-        from sqlalchemy import inspect
-        bind = db.get_bind()
-        inspector = inspect(bind)
-        if not inspector.has_table("qa_message_templates"):
-            Base.metadata.tables["qa_message_templates"].create(bind=bind, checkfirst=True)
+        from sqlalchemy import text
+        create_sql = text("""
+            CREATE TABLE IF NOT EXISTS qa_message_templates (
+                id VARCHAR(36) PRIMARY KEY,
+                tenant_id VARCHAR(36) NOT NULL REFERENCES qa_tenants(id) ON DELETE CASCADE,
+                name VARCHAR(255) NOT NULL,
+                label VARCHAR(255) NOT NULL,
+                language VARCHAR(20) DEFAULT 'pt_BR',
+                category VARCHAR(50) DEFAULT 'UTILITY',
+                body_text TEXT,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_qa_msg_tpl_tenant ON qa_message_templates(tenant_id);
+        """)
+        db.execute(create_sql)
+        db.commit()
     except Exception as ex:
         try:
             db.rollback()
@@ -2293,10 +2326,17 @@ async def sync_meta_templates(
             templates_meta = data.get("data", [])
 
             for item in templates_meta:
-                if item.get("status") == "APPROVED":
+                status_raw = str(item.get("status", "")).upper()
+                if status_raw in ["APPROVED", "ACTIVE"]:
                     tpl_name = item.get("name")
                     tpl_lang = item.get("language", "pt_BR")
                     tpl_cat = item.get("category", "UTILITY")
+
+                    body_text = None
+                    for comp in item.get("components", []):
+                        if comp.get("type", "").upper() == "BODY":
+                            body_text = comp.get("text")
+                            break
 
                     existing = db.query(MessageTemplate).filter(
                         MessageTemplate.tenant_id == str(current_tenant.id),
@@ -2307,15 +2347,18 @@ async def sync_meta_templates(
                         new_tpl = MessageTemplate(
                             tenant_id=str(current_tenant.id),
                             name=tpl_name,
-                            label=tpl_name,
+                            label=tpl_name.replace("_", " ").title(),
                             language=tpl_lang,
-                            category=tpl_cat
+                            category=tpl_cat,
+                            body_text=body_text
                         )
                         db.add(new_tpl)
                         synced_count += 1
                     else:
                         existing.language = tpl_lang
                         existing.category = tpl_cat
+                        if body_text:
+                            existing.body_text = body_text
 
             db.commit()
         except HTTPException:
