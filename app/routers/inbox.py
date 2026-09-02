@@ -206,7 +206,7 @@ def get_messages(
     return list(reversed(recent_messages))
 
 class SendMessagePayload(BaseModel):
-    conversation_id: UUID
+    conversation_id: Union[UUID, str, Any]
     body: Optional[str] = ""
     template_name: Optional[str] = None
     template_language: Optional[str] = "pt_BR"
@@ -217,7 +217,7 @@ async def send_message(
     payload: SendMessagePayload,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+    current_tenant: Tenant = Depends(get_current_tenant)
 ):
     conversation_id = payload.conversation_id
     body = (payload.body or "").strip()
@@ -238,7 +238,7 @@ async def send_message(
     # 1.1 Se for Nota Interna Privada, grava direto no DB e envia WebSocket apenas para a equipe
     if is_internal:
         note_msg = Message(
-            conversation_id=str(conversation_id),
+            conversation_id=convo.id,
             sender_type="agent",
             sender_id=current_user.id,
             message_type="text",

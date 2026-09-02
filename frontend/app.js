@@ -2734,25 +2734,24 @@ document.getElementById("btn-save-guest-name").addEventListener("click", async (
 // Hide Context Panel (Ficha)
 document.getElementById("btn-hide-context").addEventListener("click", () => {
     state.isContextPanelVisible = false;
-    document.getElementById("guest-context").style.display = "none";
-    
+    const guestContext = document.getElementById("guest-context");
+    if (guestContext) guestContext.style.display = "none";
     const layout = document.querySelector(".inbox-layout");
     if (layout) layout.classList.add("hide-context");
-    
-    const showContextBtn = document.getElementById("btn-show-context");
-    if (showContextBtn) showContextBtn.style.display = "block";
 });
 
-// Show Context Panel (Ficha)
+// Show / Toggle Context Panel (Ficha)
 document.getElementById("btn-show-context").addEventListener("click", () => {
-    state.isContextPanelVisible = true;
-    document.getElementById("guest-context").style.display = "block";
-    
+    const guestContext = document.getElementById("guest-context");
+    if (!guestContext) return;
+    const isVisible = guestContext.style.display !== "none";
+    state.isContextPanelVisible = !isVisible;
+    guestContext.style.display = isVisible ? "none" : "block";
     const layout = document.querySelector(".inbox-layout");
-    if (layout) layout.classList.remove("hide-context");
-    
-    const showContextBtn = document.getElementById("btn-show-context");
-    if (showContextBtn) showContextBtn.style.display = "none";
+    if (layout) {
+        if (isVisible) layout.classList.add("hide-context");
+        else layout.classList.remove("hide-context");
+    }
 });
 
 // Transfer Conversation back to Bot

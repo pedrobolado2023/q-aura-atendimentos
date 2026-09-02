@@ -1099,7 +1099,7 @@
                                         </div>
                                     </div>
                                     <div class="chat-actions" style="display: flex; gap: 8px;">
-                                        <button class="btn btn-secondary btn-sm" id="btn-show-context" style="display: none;" title="Exibir Ficha do Hóspede"><i class="fa-solid fa-circle-info"></i> Ficha</button>
+                                        <button class="btn btn-secondary btn-sm" id="btn-show-context" style="display: inline-flex; align-items: center; gap: 4px;" title="Exibir/Ocultar Ficha do Cliente"><i class="fa-solid fa-circle-info"></i> Ficha</button>
                                         <button class="btn btn-info btn-sm" id="btn-transfer-to-bot" title="Enviar para o Bot"><i class="fa-solid fa-robot"></i> Enviar para o Bot</button>
                                         <button class="btn btn-secondary btn-sm" id="btn-transfer-chat"><i class="fa-solid fa-arrow-right-arrow-left"></i> Transferir</button>
                                         <button class="btn btn-success btn-sm" id="btn-resolve-chat" onclick="uiHelpers.openResolveCSATModal()"><i class="fa-solid fa-check"></i> Resolver</button>
@@ -1201,7 +1201,7 @@
                         </div>
 
                         <!-- Right: Context panel -->
-                        <div class="context-panel" id="guest-context" style="display: none; position: relative;">
+                        <div class="context-panel" id="guest-context" style="display: block; position: relative;">
                             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; margin-bottom: 12px;">
                                 <h3 style="margin: 0; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-secondary); border: none; padding: 0;">Ficha do Hóspede</h3>
                                 <button id="btn-hide-context" title="Ocultar Ficha" style="background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 4px;"><i class="fa-solid fa-chevron-right"></i></button>
@@ -1680,6 +1680,6 @@
     <!-- SheetJS for Native Excel (.xlsx, .xls) Parsing -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="config.js"></script>
-    <script src="app.js?v=1.4.3"></script>
+    <script src="app.js?v=1.4.4"></script>
 </body>
 </html>

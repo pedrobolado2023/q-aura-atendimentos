@@ -163,17 +163,17 @@ class MetaCredentialDetailsResponse(BaseModel):
 
 # Conversation and Messages
 class MessageResponse(BaseModel):
-    id: UUID
-    conversation_id: UUID
+    id: Union[UUID, str, Any]
+    conversation_id: Union[UUID, str, Any]
     sender_type: str
-    sender_id: Optional[UUID] = None
+    sender_id: Optional[Union[UUID, str, Any]] = None
     message_type: Optional[str] = "text"
     body: Optional[str] = None
     media_url: Optional[str] = None
     media_mime_type: Optional[str] = None
     status: Optional[str] = "sent"
     internal_note: Optional[bool] = False
-    created_at: Optional[datetime] = None
+    created_at: Optional[Any] = None
 
     class Config:
         from_attributes = True
