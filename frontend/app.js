@@ -1097,37 +1097,81 @@ const appRouter = {
             await this.loadTemplates();
         }
 
-        const templates = state.messageTemplates || [];
-        let chosenTemplate = "primeiro_contato";
-        let chosenLang = "pt_BR";
+        this.openTemplatePreviewModal();
+    },
 
-        if (templates.length > 0) {
-            if (templates.length === 1) {
-                chosenTemplate = templates[0].name;
-                chosenLang = templates[0].language || "pt_BR";
-            } else {
-                // Monta opções para o usuário escolher o template desejado
-                const optionsStr = templates.map((t, i) => `${i + 1} - ${t.label || t.name} (${t.name})`).join("\n");
-                const resp = prompt(`Escolha o modelo de reativação digitando o número correspondente:\n\n${optionsStr}\n\nOu digite o nome exato do template na Meta:`, "1");
-                if (!resp || !resp.trim()) return;
-                
-                const num = parseInt(resp.trim(), 10);
-                if (!isNaN(num) && num >= 1 && num <= templates.length) {
-                    chosenTemplate = templates[num - 1].name;
-                    chosenLang = templates[num - 1].language || "pt_BR";
-                } else {
-                    chosenTemplate = resp.trim();
-                }
-            }
+    openTemplatePreviewModal() {
+        const modal = document.getElementById("template-preview-modal");
+        const select = document.getElementById("template-preview-select");
+        const bodyPreview = document.getElementById("template-preview-body-text");
+        const catBadge = document.getElementById("template-preview-category-badge");
+        if (!modal || !select) return;
+
+        const templates = state.messageTemplates || [];
+        if (templates.length === 0) {
+            showToast("Nenhum modelo de mensagem sincronizado da Meta. Sincronize na aba Configurações.", "warning");
+            return;
         }
 
-        const btn = document.getElementById("btn-send-reactivation-msg");
-        const originalText = btn ? btn.innerHTML : "";
+        const activeConvo = state.conversations.find(c => c.id === state.activeConversationId);
+        const contactName = (activeConvo && activeConvo.contact && activeConvo.contact.name) ? activeConvo.contact.name : "Cliente";
 
+        select.innerHTML = "";
+        templates.forEach(t => {
+            const opt = document.createElement("option");
+            opt.value = t.name;
+            opt.innerText = `${t.label || t.name} (${t.name}) - [${t.category || "UTILITY"}]`;
+            select.appendChild(opt);
+        });
+
+        const updatePreview = () => {
+            const selectedName = select.value;
+            const tpl = templates.find(t => t.name === selectedName);
+            if (tpl) {
+                let previewText = tpl.body_text || `[Modelo: ${tpl.name}]`;
+                // Substitui variáveis {{1}} ou {{contact_name}} com o nome real do cliente
+                previewText = previewText.replace(/\{\{1\}\}/g, contactName)
+                                         .replace(/\{\{contact_name\}\}/gi, contactName)
+                                         .replace(/\{\{nome\}\}/gi, contactName);
+                bodyPreview.innerText = previewText;
+                catBadge.innerText = tpl.category || "UTILITY";
+                if (tpl.category === "MARKETING") {
+                    catBadge.style.background = "rgba(59,130,246,0.15)";
+                    catBadge.style.color = "#60a5fa";
+                } else {
+                    catBadge.style.background = "rgba(16,185,129,0.15)";
+                    catBadge.style.color = "#34d399";
+                }
+            }
+        };
+
+        select.onchange = updatePreview;
+        updatePreview();
+
+        modal.style.display = "flex";
+    },
+
+    closeTemplatePreviewModal() {
+        const modal = document.getElementById("template-preview-modal");
+        if (modal) modal.style.display = "none";
+    },
+
+    async confirmSendTemplate() {
+        const convoId = state.activeConversationId;
+        const select = document.getElementById("template-preview-select");
+        const sendBtn = document.getElementById("btn-confirm-send-template");
+        if (!convoId || !select) return;
+
+        const chosenTemplate = select.value;
+        const templates = state.messageTemplates || [];
+        const tpl = templates.find(t => t.name === chosenTemplate);
+        const chosenLang = (tpl && tpl.language) ? tpl.language : "pt_BR";
+
+        const originalBtnHtml = sendBtn ? sendBtn.innerHTML : "";
         try {
-            if (btn) {
-                btn.disabled = true;
-                btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Enviando modelo...`;
+            if (sendBtn) {
+                sendBtn.disabled = true;
+                sendBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Enviando...`;
             }
 
             await api.post("/api/inbox/send-message", {
@@ -1136,17 +1180,16 @@ const appRouter = {
                 template_language: chosenLang
             });
 
-            showToast(`Mensagem de reativação enviada com sucesso (Modelo: ${chosenTemplate})!`, "success");
-            
-            // Reload conversation messages
+            this.closeTemplatePreviewModal();
+            showToast(`Mensagem enviada com sucesso (Modelo: ${chosenTemplate})!`, "success");
             await this.loadConversation(convoId);
         } catch (err) {
-            console.error("Erro ao enviar mensagem de reativação:", err);
-            showToast("Erro ao enviar mensagem: " + (err.message || err), "error");
+            console.error("Erro ao enviar modelo:", err);
+            showToast("Erro ao enviar modelo: " + (err.message || err), "error");
         } finally {
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = originalText;
+            if (sendBtn) {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = originalBtnHtml;
             }
         }
     },
@@ -2531,6 +2574,200 @@ if (flagToggleBtn && flagSelectorMenu) {
             }
         });
     });
+}
+
+// --- AUDIO RECORDING MANAGER ---
+let mediaRecorder = null;
+let audioChunks = [];
+let recordingStartTime = null;
+let recordingTimerInterval = null;
+
+async function startAudioRecording() {
+    if (!state.activeConversationId) {
+        showToast("Selecione uma conversa para gravar áudio.", "warning");
+        return;
+    }
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        let mimeType = "audio/webm;codecs=opus";
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+            if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")) {
+                mimeType = "audio/ogg;codecs=opus";
+            } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+                mimeType = "audio/mp4";
+            } else {
+                mimeType = "";
+            }
+        }
+
+        mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) {
+                audioChunks.push(e.data);
+            }
+        };
+
+        mediaRecorder.onstop = () => {
+            stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorder.start(100);
+        recordingStartTime = Date.now();
+
+        // Switch UI to recording bar
+        document.getElementById("chat-input-form").style.display = "none";
+        const recordingBar = document.getElementById("chat-recording-bar");
+        recordingBar.style.display = "flex";
+        
+        const timerSpan = document.getElementById("recording-timer");
+        timerSpan.innerText = "00:00";
+
+        clearInterval(recordingTimerInterval);
+        recordingTimerInterval = setInterval(() => {
+            const elapsedSeconds = Math.floor((Date.now() - recordingStartTime) / 1000);
+            const mins = String(Math.floor(elapsedSeconds / 60)).padStart(2, "0");
+            const secs = String(elapsedSeconds % 60).padStart(2, "0");
+            timerSpan.innerText = `${mins}:${secs}`;
+        }, 500);
+
+    } catch (err) {
+        console.error("Erro ao acessar microfone:", err);
+        showToast("Não foi possível acessar o microfone. Verifique as permissões do seu navegador.", "error");
+    }
+}
+
+function cancelAudioRecording() {
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+    }
+    clearInterval(recordingTimerInterval);
+    audioChunks = [];
+    const recBar = document.getElementById("chat-recording-bar");
+    if (recBar) recBar.style.display = "none";
+    const inputForm = document.getElementById("chat-input-form");
+    if (inputForm) inputForm.style.display = "flex";
+}
+
+async function sendRecordedAudio() {
+    if (!mediaRecorder) return;
+
+    clearInterval(recordingTimerInterval);
+
+    const stopped = new Promise(resolve => {
+        mediaRecorder.onstop = () => {
+            resolve();
+        };
+    });
+
+    if (mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+    }
+    await stopped;
+
+    if (audioChunks.length === 0) {
+        cancelAudioRecording();
+        return;
+    }
+
+    const mimeType = mediaRecorder.mimeType || "audio/ogg";
+    const extension = mimeType.includes("mp4") ? "mp4" : (mimeType.includes("webm") ? "webm" : "ogg");
+    const audioBlob = new Blob(audioChunks, { type: mimeType });
+    const audioFile = new File([audioBlob], `audio_${Date.now()}.${extension}`, { type: mimeType });
+
+    // Reset UI
+    const recBar = document.getElementById("chat-recording-bar");
+    if (recBar) recBar.style.display = "none";
+    const inputForm = document.getElementById("chat-input-form");
+    if (inputForm) inputForm.style.display = "flex";
+
+    // Send via send-media
+    const scroll = document.getElementById("message-scroll");
+    const tempId = `temp_${Date.now()}`;
+    const userDisplayName = (state.user && state.user.name) ? state.user.name : "Pedro";
+    const tempBlobUrl = URL.createObjectURL(audioBlob);
+
+    const tempMsgObj = {
+        id: tempId,
+        conversation_id: state.activeConversationId,
+        sender_type: "agent",
+        body: `*Atendente ${userDisplayName}:* [Áudio]`,
+        message_type: "audio",
+        media_url: tempBlobUrl,
+        media_mime_type: mimeType,
+        created_at: new Date().toISOString()
+    };
+
+    let tempBubble = null;
+    if (scroll) {
+        if (scroll.innerText.includes("Nenhuma mensagem ainda")) scroll.innerHTML = "";
+        tempBubble = renderMessageBubble(tempMsgObj);
+        tempBubble.style.opacity = "0.75";
+        scroll.appendChild(tempBubble);
+        scroll.scrollTop = scroll.scrollHeight;
+    }
+
+    appRouter._updateConversationInList({
+        ...tempMsgObj,
+        preview: `🎤 Áudio gravado`
+    });
+
+    try {
+        const formData = new FormData();
+        formData.append("conversation_id", state.activeConversationId);
+        formData.append("file", audioFile);
+
+        const newMsg = await api.postForm("/api/inbox/send-media", formData);
+        if (newMsg && newMsg.id) {
+            if (tempBubble) {
+                tempBubble.setAttribute("data-msg-id", newMsg.id);
+                tempBubble.style.opacity = "1";
+                if (newMsg.media_url) {
+                    const audioElem = tempBubble.querySelector("audio");
+                    if (audioElem) audioElem.src = getMediaSrc(newMsg.media_url);
+                }
+            }
+        }
+        showToast("Áudio enviado com sucesso!", "success");
+    } catch (err) {
+        if (tempBubble) tempBubble.remove();
+        showToast("Erro ao enviar áudio: " + (err.message || err), "error");
+    }
+}
+
+// Audio Recording Event Listeners
+const chatMicBtn = document.getElementById("chat-mic-btn");
+if (chatMicBtn) {
+    chatMicBtn.addEventListener("click", startAudioRecording);
+}
+
+const btnCancelRecording = document.getElementById("btn-cancel-recording");
+if (btnCancelRecording) {
+    btnCancelRecording.addEventListener("click", cancelAudioRecording);
+}
+
+const btnSendRecording = document.getElementById("btn-send-recording");
+if (btnSendRecording) {
+    btnSendRecording.addEventListener("click", sendRecordedAudio);
+}
+
+// Template Preview Modal Event Listeners
+const btnCloseTemplatePreview = document.getElementById("btn-close-template-preview-modal");
+if (btnCloseTemplatePreview) {
+    btnCloseTemplatePreview.addEventListener("click", () => appRouter.closeTemplatePreviewModal());
+}
+
+const btnCancelTemplatePreview = document.getElementById("btn-cancel-template-preview");
+if (btnCancelTemplatePreview) {
+    btnCancelTemplatePreview.addEventListener("click", () => appRouter.closeTemplatePreviewModal());
+}
+
+const btnConfirmSendTemplate = document.getElementById("btn-confirm-send-template");
+if (btnConfirmSendTemplate) {
+    btnConfirmSendTemplate.addEventListener("click", () => appRouter.confirmSendTemplate());
 }
 
 // --- CRM & Marketing Campaign Handler ---

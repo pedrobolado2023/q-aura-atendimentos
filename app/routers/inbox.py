@@ -496,17 +496,7 @@ async def send_media(
         f.write(file_bytes)
 
     local_media_url = f"/uploads/{current_tenant.id}/{unique_filename}"
-
     recipient_phone = format_brazilian_phone(contact.phone_number)
-    if len(recipient_phone) == 12 and recipient_phone.startswith("55"):
-        try:
-            ddd = int(recipient_phone[2:4])
-            if ddd >= 31:
-                recipient_phone = recipient_phone[:4] + "9" + recipient_phone[4:]
-                contact.phone_number = recipient_phone
-                db.commit()
-        except Exception:
-            pass
 
     # 3. Upload media binary to Meta WhatsApp Cloud API
     meta_media_id = None
@@ -514,14 +504,24 @@ async def send_media(
     meta_media_upload_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{creds.phone_number_id}/media"
     headers_auth = {"Authorization": f"Bearer {creds.permanent_access_token}"}
 
+    # Meta Cloud API requires strict MIME types for audio
+    meta_upload_mime = mime_type
+    if wa_media_type == "audio":
+        if "webm" in mime_type or "ogg" in mime_type:
+            meta_upload_mime = "audio/ogg"
+        elif "mp4" in mime_type or "m4a" in mime_type or "aac" in mime_type:
+            meta_upload_mime = "audio/mp4"
+        elif "mpeg" in mime_type or "mp3" in mime_type:
+            meta_upload_mime = "audio/mpeg"
+
     async with httpx.AsyncClient() as client:
         try:
             files_payload = {
-                "file": (original_filename, file_bytes, mime_type)
+                "file": (original_filename, file_bytes, meta_upload_mime)
             }
             data_payload = {
                 "messaging_product": "whatsapp",
-                "type": mime_type
+                "type": meta_upload_mime
             }
             res_upload = await client.post(meta_media_upload_url, headers=headers_auth, data=data_payload, files=files_payload, timeout=30.0)
             if res_upload.status_code == 200:
