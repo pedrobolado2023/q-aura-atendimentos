@@ -402,9 +402,65 @@ def delete_tenant(
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Empresa não encontrada.")
-    db.delete(tenant)
-    db.commit()
-    return {"message": f"Empresa '{tenant.name}' excluída com sucesso."}
+    
+    tenant_name = tenant.name
+    tenant_id_str = str(tenant.id)
+    
+    try:
+        from sqlalchemy import text
+        # 1. Mensagens e Conversas
+        db.execute(text("""
+            DELETE FROM qa_messages WHERE conversation_id IN (
+                SELECT id FROM qa_conversations WHERE tenant_id = :tid
+            )
+        """), {"tid": tenant_id_str})
+        db.execute(text("DELETE FROM qa_conversations WHERE tenant_id = :tid"), {"tid": tenant_id_str})
+        
+        # 2. Contatos
+        db.execute(text("DELETE FROM qa_contacts WHERE tenant_id = :tid"), {"tid": tenant_id_str})
+        
+        # 3. Campanhas e Destinatários
+        db.execute(text("""
+            DELETE FROM qa_campaign_recipients WHERE campaign_id IN (
+                SELECT id FROM qa_marketing_campaigns WHERE tenant_id = :tid
+            )
+        """), {"tid": tenant_id_str})
+        db.execute(text("DELETE FROM qa_marketing_campaigns WHERE tenant_id = :tid"), {"tid": tenant_id_str})
+        
+        # 4. Departamentos e Agentes vinculados
+        db.execute(text("""
+            DELETE FROM qa_agents_departments WHERE department_id IN (
+                SELECT id FROM qa_departments WHERE tenant_id = :tid
+            ) OR user_id IN (
+                SELECT id FROM qa_users WHERE tenant_id = :tid
+            )
+        """), {"tid": tenant_id_str})
+        db.execute(text("DELETE FROM qa_departments WHERE tenant_id = :tid"), {"tid": tenant_id_str})
+        
+        # 5. Usuários
+        db.execute(text("DELETE FROM qa_users WHERE tenant_id = :tid"), {"tid": tenant_id_str})
+        
+        # 6. Credenciais Meta, Bot, Templates, Respostas Rápidas, Cobrança, Webhooks
+        db.execute(text("DELETE FROM qa_meta_credentials WHERE tenant_id = :tid"), {"tid": tenant_id_str})
+        db.execute(text("DELETE FROM qa_bot_configs WHERE tenant_id = :tid"), {"tid": tenant_id_str})
+        db.execute(text("DELETE FROM qa_quick_messages WHERE tenant_id = :tid"), {"tid": tenant_id_str})
+        try:
+            db.execute(text("DELETE FROM qa_message_templates WHERE tenant_id = :tid"), {"tid": tenant_id_str})
+        except Exception:
+            pass
+        db.execute(text("DELETE FROM qa_billing_transactions WHERE tenant_id = :tid"), {"tid": tenant_id_str})
+        db.execute(text("DELETE FROM qa_webhook_events WHERE tenant_id = :tid"), {"tid": tenant_id_str})
+        
+        # 7. Por fim, remove a Empresa
+        db.execute(text("DELETE FROM qa_tenants WHERE id = :tid"), {"tid": tenant_id_str})
+        db.commit()
+        
+        return {"message": f"Empresa '{tenant_name}' e todos os seus dados foram excluídos com sucesso."}
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao excluir empresa: {str(e)}")
 
 
 # ─── Tenant Users (view only) ─────────────────────────────────────────────────
