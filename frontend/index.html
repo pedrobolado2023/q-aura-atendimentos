@@ -178,8 +178,11 @@
                     <a href="#" class="menu-item" data-target="inbox-view" data-module="inbox" onclick="appRouter.selectTab(event)">
                         <i class="fa-solid fa-comments"></i> <span>Caixa de Entrada</span>
                     </a>
+                    <a href="#" class="menu-item" data-target="kanban-view" data-module="crm" onclick="appRouter.selectTab(event)">
+                        <i class="fa-solid fa-table-columns"></i> <span>Kanban CRM</span>
+                    </a>
                     <a href="#" class="menu-item admin-manager-only" data-target="crm-view" data-module="crm" onclick="appRouter.selectTab(event)">
-                        <i class="fa-solid fa-bullhorn"></i> <span>CRM & Marketing</span>
+                        <i class="fa-solid fa-bullhorn"></i> <span>Campanhas</span>
                     </a>
                     <a href="#" class="menu-item admin-manager-only" data-target="chatbot-view" data-module="chatbot" onclick="appRouter.selectTab(event)">
                         <i class="fa-solid fa-robot"></i> <span>Robô Chatbot</span>
@@ -1008,6 +1011,31 @@
                     </div>
                 </div>
 
+                <!-- 3.1 KANBAN CRM VIEW (Pipeline de Vendas Drag & Drop) -->
+                <div id="kanban-view" class="workspace-view">
+                    <header class="workspace-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+                        <div>
+                            <h1 style="margin: 0; font-size: 22px; font-weight: 800; display: flex; align-items: center; gap: 10px;">
+                                <i class="fa-solid fa-table-columns" style="color: var(--color-brand);"></i> Pipeline de Vendas & CRM (Kanban)
+                            </h1>
+                            <p style="margin: 4px 0 0 0; font-size: 13px; color: var(--text-muted);">Arraste e solte os cards entre os estágios do funil para gerenciar negociações e oportunidades.</p>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 20px; padding: 6px 14px; font-size: 12px; font-weight: 700; color: #22c55e; box-shadow: var(--shadow-sm);">
+                                Total no Funil: <span id="kanban-grand-total">R$ 0,00</span> • <span id="kanban-deals-count">0</span> oportunidades
+                            </div>
+                            <button class="btn btn-secondary btn-sm" onclick="appRouter.loadKanbanBoard()" style="padding: 6px 12px; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;">
+                                <i class="fa-solid fa-rotate"></i> Atualizar
+                            </button>
+                        </div>
+                    </header>
+
+                    <!-- Kanban Board Horizontal Scroll Container -->
+                    <div class="kanban-board" id="kanban-board-container" style="display: flex; gap: 16px; overflow-x: auto; padding-bottom: 16px; min-height: calc(100vh - 220px); align-items: flex-start;">
+                        <p style="text-align: center; color: var(--text-muted); width: 100%; padding: 40px;">Carregando quadro de negociações...</p>
+                    </div>
+                </div>
+
                 <!-- 6. INBOX VIEW (Real-time Inbox Interface) -->
                 <div id="inbox-view" class="workspace-view">
                     <div class="inbox-layout">
@@ -1023,9 +1051,12 @@
                                     <i class="fa-brands fa-whatsapp"></i> Iniciar Conversa
                                 </button>
                             </div>
-                            <div class="conversation-search">
+                            <div class="conversation-search" style="display: flex; align-items: center; gap: 6px;">
                                 <i class="fa-solid fa-magnifying-glass"></i>
-                                <input type="text" id="convo-search-input" placeholder="Pesquisar conversa..." oninput="appRouter.filterConversations(this.value)">
+                                <input type="text" id="convo-search-input" placeholder="Pesquisar conversa..." oninput="appRouter.filterConversations(this.value)" style="flex: 1;">
+                                <button type="button" id="btn-global-search" class="btn btn-secondary btn-sm" onclick="uiHelpers.openGlobalSearchModal()" title="Busca Global em todo o Histórico de Mensagens" style="padding: 4px 8px; font-size: 11px; display: flex; align-items: center; gap: 4px;">
+                                    <i class="fa-solid fa-globe"></i>
+                                </button>
                             </div>
                             <div class="conversation-list" id="convo-list">
                                 <!-- Loaded dynamically -->
@@ -1058,14 +1089,20 @@
                                                     </div>
                                                 </div>
                                             </h4>
-                                            <span class="status-indicator online" id="active-contact-status">Aguardando Atendente</span>
+                                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px;">
+                                                <span class="status-indicator online" id="active-contact-status">Aguardando Atendente</span>
+                                                <div id="active-chat-tags-list" style="display: flex; gap: 4px; flex-wrap: wrap;"></div>
+                                                <button type="button" id="btn-open-tag-selector" class="btn btn-secondary" onclick="uiHelpers.openTagSelectorModal()" style="padding: 1px 6px; font-size: 10px; border-radius: 4px; display: flex; align-items: center; gap: 4px; height: 18px;" title="Adicionar ou Remover Tags">
+                                                    <i class="fa-solid fa-tag"></i> + Tag
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="chat-actions" style="display: flex; gap: 8px;">
                                         <button class="btn btn-secondary btn-sm" id="btn-show-context" style="display: none;" title="Exibir Ficha do Hóspede"><i class="fa-solid fa-circle-info"></i> Ficha</button>
                                         <button class="btn btn-info btn-sm" id="btn-transfer-to-bot" title="Enviar para o Bot"><i class="fa-solid fa-robot"></i> Enviar para o Bot</button>
                                         <button class="btn btn-secondary btn-sm" id="btn-transfer-chat"><i class="fa-solid fa-arrow-right-arrow-left"></i> Transferir</button>
-                                        <button class="btn btn-success btn-sm" id="btn-resolve-chat"><i class="fa-solid fa-check"></i> Resolver</button>
+                                        <button class="btn btn-success btn-sm" id="btn-resolve-chat" onclick="uiHelpers.openResolveCSATModal()"><i class="fa-solid fa-check"></i> Resolver</button>
                                     </div>
                                 </div>
                                 <div class="chat-messages" id="message-scroll">
@@ -1088,34 +1125,45 @@
                                     </button>
                                 </div>
 
-                                <form id="chat-input-form" class="chat-input-area" style="position: relative; display: flex; align-items: flex-end; gap: 8px;">
-                                    <!-- Autocomplete Dropdown Menu -->
-                                    <div id="quick-replies-dropdown" class="quick-replies-dropdown" style="display: none;"></div>
-                                    
-                                    <!-- Attachment Button & Hidden File Input -->
-                                    <input type="file" id="chat-file-input" style="display: none;" accept="image/*,video/*,audio/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,.zip,.rar" />
-                                    <button type="button" class="btn-emoji" id="chat-attach-btn" style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted); padding: 8px 4px; display: flex; align-items: center;" title="Anexar Arquivo ou Imagem">
-                                        <i class="fa-solid fa-paperclip"></i>
-                                    </button>
-                                    
-                                    <!-- Emoji Button -->
-                                    <button type="button" class="btn-emoji" id="chat-emoji-btn" style="background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted); padding: 8px 4px; display: flex; align-items: center;" title="Inserir Emoji">
-                                        <i class="fa-regular fa-face-smile"></i>
-                                    </button>
-                                    
-                                    <!-- Emoji Picker Popup -->
-                                    <div id="emoji-picker-popup" style="display: none; position: absolute; bottom: 65px; left: 24px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); width: 280px; z-index: 1000; box-sizing: border-box;">
-                                        <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; max-height: 180px; overflow-y: auto; text-align: center; font-size: 18px; cursor: pointer;" id="emoji-grid">
-                                            <!-- Emojis will be populated here -->
-                                        </div>
+                                <!-- Chat Input Container with Mode Tabs (Message vs Internal Note) -->
+                                <div class="chat-input-wrapper" style="display: flex; flex-direction: column; width: 100%;">
+                                    <div class="chat-mode-tabs" style="display: flex; gap: 4px; padding: 2px 8px; background: var(--bg-tertiary); border-radius: 8px 8px 0 0; border: 1px solid var(--border-color); border-bottom: none; width: fit-content; margin-bottom: -1px; z-index: 2;">
+                                        <button type="button" id="tab-mode-msg" class="mode-tab-btn active-mode" onclick="uiHelpers.setChatMode('message')" style="background: none; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 700; color: var(--color-brand); display: flex; align-items: center; gap: 5px;">
+                                            <i class="fa-solid fa-paper-plane"></i> Mensagem WhatsApp
+                                        </button>
+                                        <button type="button" id="tab-mode-note" class="mode-tab-btn" onclick="uiHelpers.setChatMode('note')" style="background: none; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 700; color: var(--text-muted); display: flex; align-items: center; gap: 5px;">
+                                            <i class="fa-solid fa-lock" style="color: #fbbf24;"></i> Nota Interna (Equipe)
+                                        </button>
                                     </div>
 
-                                    <textarea id="chat-message-input" placeholder="Digite uma mensagem, cole imagens (Ctrl+V) ou digite / para respostas rápidas..." autocomplete="off"></textarea>
-                                    
-                                    <!-- Microphone Button for Audio Recording -->
-                                    <button type="button" class="btn-emoji" id="chat-mic-btn" style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted); padding: 8px 4px; display: flex; align-items: center; transition: color 0.2s ease;" title="Gravar Mensagem de Áudio">
-                                        <i class="fa-solid fa-microphone"></i>
-                                    </button>
+                                    <form id="chat-input-form" class="chat-input-area" style="position: relative; display: flex; align-items: flex-end; gap: 8px; border-radius: 0 8px 8px 8px;">
+                                        <!-- Autocomplete Dropdown Menu -->
+                                        <div id="quick-replies-dropdown" class="quick-replies-dropdown" style="display: none;"></div>
+                                        
+                                        <!-- Attachment Button & Hidden File Input -->
+                                        <input type="file" id="chat-file-input" style="display: none;" accept="image/*,video/*,audio/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,.zip,.rar" />
+                                        <button type="button" class="btn-emoji" id="chat-attach-btn" style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted); padding: 8px 4px; display: flex; align-items: center;" title="Anexar Arquivo ou Imagem">
+                                            <i class="fa-solid fa-paperclip"></i>
+                                        </button>
+                                        
+                                        <!-- Emoji Button -->
+                                        <button type="button" class="btn-emoji" id="chat-emoji-btn" style="background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted); padding: 8px 4px; display: flex; align-items: center;" title="Inserir Emoji">
+                                            <i class="fa-regular fa-face-smile"></i>
+                                        </button>
+                                        
+                                        <!-- Emoji Picker Popup -->
+                                        <div id="emoji-picker-popup" style="display: none; position: absolute; bottom: 65px; left: 24px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); width: 280px; z-index: 1000; box-sizing: border-box;">
+                                            <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; max-height: 180px; overflow-y: auto; text-align: center; font-size: 18px; cursor: pointer;" id="emoji-grid">
+                                                <!-- Emojis will be populated here -->
+                                            </div>
+                                        </div>
+
+                                        <textarea id="chat-message-input" placeholder="Digite uma mensagem, cole imagens (Ctrl+V) ou digite / para respostas rápidas..." autocomplete="off"></textarea>
+                                        
+                                        <!-- Microphone Button for Audio Recording -->
+                                        <button type="button" class="btn-emoji" id="chat-mic-btn" style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted); padding: 8px 4px; display: flex; align-items: center; transition: color 0.2s ease;" title="Gravar Mensagem de Áudio">
+                                            <i class="fa-solid fa-microphone"></i>
+                                        </button>
 
                                     <button type="submit" class="btn-send"><i class="fa-solid fa-paper-plane"></i></button>
                                 </form>
@@ -1547,11 +1595,91 @@
             <div class="email-log-empty"><div class="empty-state-icon"><i class="fa-solid fa-inbox"></i></div><h4>Nenhum envio registrado</h4><p>Os logs de envio aparecerão aqui após a configuração do SMTP e o primeiro disparo.</p></div>
         </div>
     </div>
+
+    <!-- MODAL 1: GERENCIADOR E SELETOR DE TAGS / ETIQUETAS -->
+    <div id="tags-manager-modal" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div class="modal-content" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; width: 440px; max-width: 95vw; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.3);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3 style="margin: 0; font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-tags" style="color: var(--color-brand);"></i> Etiquetas & Tags da Conversa
+                </h3>
+                <button type="button" onclick="uiHelpers.closeTagsModal()" style="background: none; border: none; font-size: 18px; color: var(--text-muted); cursor: pointer;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <!-- Tags disponíveis para vincular à conversa ativa -->
+            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Clique nas tags para adicionar ou remover da conversa atual:</p>
+            <div id="modal-tags-selector-list" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; max-height: 140px; overflow-y: auto; padding: 8px; background: var(--bg-tertiary); border-radius: 8px; border: 1px solid var(--border-color);">
+                <!-- Loaded dynamically -->
+            </div>
+
+            <!-- Formulário para criar nova Tag -->
+            <div style="border-top: 1px solid var(--border-color); padding-top: 16px;">
+                <h4 style="margin: 0 0 10px 0; font-size: 13px; font-weight: 700;">Criar Nova Etiqueta</h4>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <input type="text" id="new-tag-name" placeholder="Ex: Lead Quente, VIP, Pagamento..." style="flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); font-size: 13px;">
+                    <input type="color" id="new-tag-color" value="#6366f1" style="width: 36px; height: 36px; padding: 2px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-primary); cursor: pointer;" title="Escolha a cor da tag">
+                    <button type="button" class="btn btn-primary" onclick="uiHelpers.createNewTag()" style="padding: 8px 14px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                        <i class="fa-solid fa-plus"></i> Criar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: RESOLUÇÃO DE CONVERSA COM PESQUISA CSAT -->
+    <div id="resolve-csat-modal" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div class="modal-content" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; width: 440px; max-width: 95vw; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.3);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3 style="margin: 0; font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-circle-check" style="color: #22c55e;"></i> Finalizar Atendimento
+                </h3>
+                <button type="button" onclick="uiHelpers.closeResolveCSATModal()" style="background: none; border: none; font-size: 18px; color: var(--text-muted); cursor: pointer;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <p style="font-size: 13px; color: var(--text-primary); margin-bottom: 16px;">Tem certeza que deseja resolver esta conversa?</p>
+            
+            <div style="background: var(--bg-tertiary); padding: 14px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 20px;">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-primary);">
+                    <input type="checkbox" id="resolve-send-csat-checkbox" checked style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--color-brand);">
+                    <span>⭐ Enviar Pesquisa de Satisfação (CSAT) no WhatsApp</span>
+                </label>
+                <p style="margin: 6px 0 0 28px; font-size: 11px; color: var(--text-muted);">O cliente receberá uma mensagem automática solicitando uma avaliação de 1 a 5 estrelas.</p>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-secondary" onclick="uiHelpers.closeResolveCSATModal()" style="padding: 8px 16px;">Cancelar</button>
+                <button type="button" class="btn btn-success" id="btn-confirm-resolve-csat" onclick="uiHelpers.confirmResolveWithCSAT()" style="padding: 8px 18px; font-weight: 700;">
+                    <i class="fa-solid fa-check"></i> Finalizar Agora
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 3: BUSCA GLOBAL DE MENSAGENS -->
+    <div id="global-search-modal" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div class="modal-content" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; width: 620px; max-width: 95vw; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); max-height: 85vh; display: flex; flex-direction: column;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3 style="margin: 0; font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-magnifying-glass" style="color: var(--color-brand);"></i> Busca Global de Mensagens
+                </h3>
+                <button type="button" onclick="uiHelpers.closeGlobalSearchModal()" style="background: none; border: none; font-size: 18px; color: var(--text-muted); cursor: pointer;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div style="position: relative; margin-bottom: 16px;">
+                <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);"></i>
+                <input type="text" id="global-search-query-input" placeholder="Digite uma palavra, número de telefone ou nome..." oninput="uiHelpers.handleGlobalSearchInput(this.value)" style="width: 100%; padding: 10px 12px 10px 38px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); font-size: 14px; box-sizing: border-box;">
+            </div>
+
+            <div id="global-search-results-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; max-height: 380px; padding-right: 4px;">
+                <p style="text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px;">Digite ao menos 2 caracteres para pesquisar em todo o histórico de mensagens.</p>
+            </div>
+        </div>
+    </div>
+
     <!-- Chart.js for Interactive Real-Time Dashboard Charts -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <!-- SheetJS for Native Excel (.xlsx, .xls) Parsing -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="config.js"></script>
-    <script src="app.js?v=1.3.7"></script>
+    <script src="app.js?v=1.3.8"></script>
 </body>
 </html>

@@ -325,8 +325,43 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                         db.commit()
                         db.refresh(convo)
                     else:
-                        # Se a conversa já estava ativa com atendente humano, NUNCA manda pro bot!
+                        # Se a conversa estava resolvida e foi enviada pesquisa CSAT recentemente:
                         if convo.status == "resolved":
+                            clean_txt = (body_content or "").strip()
+                            csat_val = None
+                            if clean_txt in ["1", "2", "3", "4", "5"]:
+                                csat_val = int(clean_txt)
+                            elif "⭐" in clean_txt:
+                                csat_val = min(max(clean_txt.count("⭐"), 1), 5)
+                            elif clean_txt.lower() in ["excelente", "otimo", "ótimo", "muito bom", "perfeito", "10"]:
+                                csat_val = 5
+                            elif clean_txt.lower() in ["bom", "legal", "ok", "positivo"]:
+                                csat_val = 4
+                            elif clean_txt.lower() in ["regular", "médio"]:
+                                csat_val = 3
+                            elif clean_txt.lower() in ["ruim", "péssimo"]:
+                                csat_val = 1
+
+                            if csat_val and convo.csat_sent_at and convo.csat_score is None:
+                                convo.csat_score = csat_val
+                                stars_str = "⭐" * csat_val
+                                sys_msg = Message(
+                                    conversation_id=convo.id,
+                                    sender_type="system",
+                                    message_type="system",
+                                    body=f"⭐ Avaliação CSAT recebida do cliente: Nota {csat_val}/5 ({stars_str})",
+                                    internal_note=True,
+                                    created_at=msg_created_at
+                                )
+                                db.add(sys_msg)
+                                db.commit()
+
+                                # Responde com agradecimento automático via WhatsApp
+                                thanks_msg = f"Obrigado pela sua avaliação com nota {csat_val} estrelas! Sua opinião nos ajuda a evoluir sempre. Tenha um excelente dia! ✨"
+                                send_whatsapp_text(tenant_id, contact.phone_number, thanks_msg, db, convo.id)
+                                continue
+
+                            # Caso não seja nota de CSAT, reabre a conversa normalmente
                             convo.status = "bot" if is_any_bot_enabled else "waiting"
                             convo.assigned_user_id = None # Reinicia atendimento se foi resolvida
                             sys_text = "🤖 Conversa reaberta e enviada ao Robô Chatbot" if is_any_bot_enabled else "⏳ Conversa reaberta e enviada para a fila de atendimento"

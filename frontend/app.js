@@ -148,8 +148,33 @@ function formatRelativeTime(isoStr) {
 
 // --- Render Message Bubble Helper ---
 function renderMessageBubble(m) {
-    // Renderização de Notas Internas e Eventos do Sistema (Visíveis apenas para os atendentes, nunca enviadas para o cliente)
-    if (m.internal_note || m.sender_type === "system" || m.message_type === "system") {
+    // Renderização de Notas Internas Privadas (Anotações da Equipe)
+    if (m.internal_note && m.sender_type !== "system" && m.message_type !== "system") {
+        const noteCard = document.createElement("div");
+        noteCard.className = "message-bubble outgoing internal-note";
+        if (m.id) noteCard.setAttribute("data-msg-id", m.id);
+        
+        let cleanStr = m.created_at ? String(m.created_at) : "";
+        if (cleanStr && !cleanStr.endsWith("Z") && !cleanStr.includes("+") && !cleanStr.includes("-")) {
+            cleanStr += "Z";
+        }
+        const d = cleanStr ? new Date(cleanStr) : null;
+        const timeStr = d ? `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : "";
+        
+        noteCard.style.cssText = "background: rgba(245, 158, 11, 0.15) !important; border: 1px solid rgba(245, 158, 11, 0.4) !important; border-left: 4px solid #f59e0b !important; color: #fef08a !important; margin-left: auto; max-width: 80%; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;";
+        
+        noteCard.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; font-size: 11px; font-weight: 700; color: #fbbf24;">
+                <span><i class="fa-solid fa-lock" style="margin-right: 4px;"></i> Nota Interna Privada</span>
+                <span style="opacity: 0.8; font-size: 10px;">${timeStr}</span>
+            </div>
+            <div style="font-size: 13px; color: #fff; line-height: 1.4; white-space: pre-wrap;">${escapeHTML(m.body || "")}</div>
+        `;
+        return noteCard;
+    }
+
+    // Renderização de Eventos do Sistema
+    if (m.sender_type === "system" || m.message_type === "system") {
         const sysEvent = document.createElement("div");
         sysEvent.className = "chat-system-event";
         if (m.id) sysEvent.setAttribute("data-msg-id", m.id);
@@ -492,6 +517,8 @@ const appRouter = {
             tempContacts = [];
             updateContactsPreview();
             this.loadCampaigns();
+        } else if (targetView === "kanban-view") {
+            this.loadKanbanBoard();
         }
     },
 
@@ -985,6 +1012,24 @@ const appRouter = {
                 else if (convo.flag_type === "green") color = "#10b981";
                 flagToggle.style.color = color;
             }
+
+            // Renderiza as Etiquetas/Tags da Conversa Ativa
+            const tagsListEl = document.getElementById("active-chat-tags-list");
+            if (tagsListEl) {
+                tagsListEl.innerHTML = "";
+                if (convo.tags && convo.tags.length > 0) {
+                    convo.tags.forEach(t => {
+                        const tagBadge = document.createElement("span");
+                        tagBadge.className = "tag-badge";
+                        tagBadge.style.background = t.color || "#6366f1";
+                        tagBadge.innerHTML = `
+                            <span>${escapeHTML(t.name)}</span>
+                            <i class="fa-solid fa-xmark tag-remove-btn" title="Remover tag" onclick="event.stopPropagation(); uiHelpers.removeTagFromActiveConvo('${t.id}')"></i>
+                        `;
+                        tagsListEl.appendChild(tagBadge);
+                    });
+                }
+            }
         } else if (convo) {
             // Sem contato mas tem conversa — usar ID como fallback
             document.getElementById("active-contact-name").innerText = "Contato Desconhecido";
@@ -1000,7 +1045,11 @@ const appRouter = {
                     "active": "✅ Em Atendimento",
                     "resolved": "✔ Resolvida"
                 };
-                statusEl.innerText = statusMap[convo.status] || convo.status;
+                let statusText = statusMap[convo.status] || convo.status;
+                if (convo.csat_score) {
+                    statusText += ` • ⭐ CSAT ${convo.csat_score}/5`;
+                }
+                statusEl.innerText = statusText;
             }
 
             // Botão Assumir vs Transferir
@@ -2503,14 +2552,16 @@ document.getElementById("chat-input-form").addEventListener("submit", async (e) 
         return;
     }
 
-    // CASO 2: Envio de Texto Puro
-    const formattedBody = `*Atendente ${userDisplayName}:* ${body}`;
+    // CASO 2: Envio de Texto Puro (Mensagem WhatsApp ou Nota Interna Privada)
+    const isInternalNote = state.chatMode === "note";
+    const formattedBody = isInternalNote ? body : `*Atendente ${userDisplayName}:* ${body}`;
     const tempMsgObj = {
         id: tempId,
         conversation_id: state.activeConversationId,
         sender_type: "agent",
         body: formattedBody,
         message_type: "text",
+        internal_note: isInternalNote,
         created_at: new Date().toISOString()
     };
 
@@ -2525,12 +2576,15 @@ document.getElementById("chat-input-form").addEventListener("submit", async (e) 
         scroll.scrollTop = scroll.scrollHeight;
     }
 
-    appRouter._updateConversationInList(tempMsgObj);
+    if (!isInternalNote) {
+        appRouter._updateConversationInList(tempMsgObj);
+    }
 
     try {
         const newMsg = await api.post("/api/inbox/send-message", {
             conversation_id: state.activeConversationId,
-            body: body
+            body: body,
+            internal_note: isInternalNote
         });
 
         if (newMsg && newMsg.id) {
@@ -4401,10 +4455,413 @@ const uiHelpers = {
         };
         console.log("[Notification Settings - Pendente Backend]", settings);
         showToast("Configurações de notificação salvas com sucesso!", "success");
+    },
+
+    // --- 🔒 Chat Mode (Mensagem vs Nota Interna) ---
+    setChatMode(mode) {
+        state.chatMode = mode;
+        const msgTab = document.getElementById("tab-mode-msg");
+        const noteTab = document.getElementById("tab-mode-note");
+        const input = document.getElementById("chat-message-input");
+        const sendBtn = document.querySelector(".btn-send");
+        
+        if (mode === "note") {
+            if (msgTab) msgTab.classList.remove("active-mode");
+            if (noteTab) noteTab.classList.add("active-mode");
+            if (input) {
+                input.placeholder = "🔒 Digite uma anotação interna visível apenas para a equipe (não será enviada para o WhatsApp)...";
+                input.style.borderColor = "#f59e0b";
+            }
+            if (sendBtn) {
+                sendBtn.innerHTML = `<i class="fa-solid fa-lock"></i>`;
+                sendBtn.style.background = "#f59e0b";
+            }
+        } else {
+            if (msgTab) msgTab.classList.add("active-mode");
+            if (noteTab) noteTab.classList.remove("active-mode");
+            if (input) {
+                input.placeholder = "Digite uma mensagem, cole imagens (Ctrl+V) ou digite / para respostas rápidas...";
+                input.style.borderColor = "var(--border-color)";
+            }
+            if (sendBtn) {
+                sendBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i>`;
+                sendBtn.style.background = "var(--color-brand)";
+            }
+        }
+    },
+
+    // --- 🏷️ Gerenciamento de Tags / Etiquetas ---
+    async openTagSelectorModal() {
+        if (!state.activeConversationId) return;
+        const modal = document.getElementById("tags-manager-modal");
+        if (!modal) return;
+        modal.style.display = "flex";
+        await this.loadAndRenderTagsModal();
+    },
+
+    closeTagsModal() {
+        const modal = document.getElementById("tags-manager-modal");
+        if (modal) modal.style.display = "none";
+    },
+
+    async loadAndRenderTagsModal() {
+        const listEl = document.getElementById("modal-tags-selector-list");
+        if (!listEl) return;
+        listEl.innerHTML = `<p style="font-size:12px;color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Carregando etiquetas...</p>`;
+        
+        try {
+            const allTags = await api.get("/api/inbox/tags");
+            state.cachedTags = allTags;
+            
+            const convo = state.conversations.find(c => c.id === state.activeConversationId);
+            const activeTagIds = new Set((convo?.tags || []).map(t => t.id));
+            
+            if (allTags.length === 0) {
+                listEl.innerHTML = `<p style="font-size:12px;color:var(--text-muted);margin:4px 0;">Nenhuma etiqueta criada ainda. Crie uma abaixo!</p>`;
+                return;
+            }
+            
+            listEl.innerHTML = "";
+            allTags.forEach(tag => {
+                const isSelected = activeTagIds.has(tag.id);
+                const item = document.createElement("div");
+                item.className = `tag-selectable-item ${isSelected ? 'selected' : ''}`;
+                item.style.cssText = `background: ${tag.color || '#6366f1'}; color: #fff; padding: 4px 10px; border-radius: 16px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;`;
+                item.innerHTML = `
+                    <i class="fa-solid ${isSelected ? 'fa-check' : 'fa-tag'}" style="font-size: 10px;"></i>
+                    <span>${escapeHTML(tag.name)}</span>
+                `;
+                item.onclick = () => uiHelpers.toggleTagInActiveConvo(tag);
+                listEl.appendChild(item);
+            });
+        } catch (err) {
+            listEl.innerHTML = `<p style="font-size:12px;color:#ef4444;">Erro ao carregar tags: ${err.message}</p>`;
+        }
+    },
+
+    async toggleTagInActiveConvo(tag) {
+        if (!state.activeConversationId) return;
+        const convo = state.conversations.find(c => c.id === state.activeConversationId);
+        if (!convo) return;
+        
+        if (!convo.tags) convo.tags = [];
+        const exists = convo.tags.some(t => t.id === tag.id);
+        
+        try {
+            if (exists) {
+                await api.delete(`/api/inbox/conversations/${state.activeConversationId}/tags/${tag.id}`);
+                convo.tags = convo.tags.filter(t => t.id !== tag.id);
+            } else {
+                await api.post(`/api/inbox/conversations/${state.activeConversationId}/tags/${tag.id}`, {});
+                convo.tags.push(tag);
+            }
+            
+            // Re-render chat header tags
+            const tagsListEl = document.getElementById("active-chat-tags-list");
+            if (tagsListEl) {
+                tagsListEl.innerHTML = "";
+                convo.tags.forEach(t => {
+                    const tagBadge = document.createElement("span");
+                    tagBadge.className = "tag-badge";
+                    tagBadge.style.background = t.color || "#6366f1";
+                    tagBadge.innerHTML = `
+                        <span>${escapeHTML(t.name)}</span>
+                        <i class="fa-solid fa-xmark tag-remove-btn" onclick="event.stopPropagation(); uiHelpers.removeTagFromActiveConvo('${t.id}')"></i>
+                    `;
+                    tagsListEl.appendChild(tagBadge);
+                });
+            }
+            
+            await this.loadAndRenderTagsModal();
+        } catch (err) {
+            showToast("Erro ao atualizar tag: " + err.message, "error");
+        }
+    },
+
+    async removeTagFromActiveConvo(tagId) {
+        if (!state.activeConversationId) return;
+        const convo = state.conversations.find(c => c.id === state.activeConversationId);
+        if (!convo) return;
+        
+        try {
+            await api.delete(`/api/inbox/conversations/${state.activeConversationId}/tags/${tagId}`);
+            convo.tags = (convo.tags || []).filter(t => t.id !== tagId);
+            
+            const tagsListEl = document.getElementById("active-chat-tags-list");
+            if (tagsListEl) {
+                tagsListEl.innerHTML = "";
+                convo.tags.forEach(t => {
+                    const tagBadge = document.createElement("span");
+                    tagBadge.className = "tag-badge";
+                    tagBadge.style.background = t.color || "#6366f1";
+                    tagBadge.innerHTML = `
+                        <span>${escapeHTML(t.name)}</span>
+                        <i class="fa-solid fa-xmark tag-remove-btn" onclick="event.stopPropagation(); uiHelpers.removeTagFromActiveConvo('${t.id}')"></i>
+                    `;
+                    tagsListEl.appendChild(tagBadge);
+                });
+            }
+        } catch (err) {
+            showToast("Erro ao remover tag: " + err.message, "error");
+        }
+    },
+
+    async createNewTag() {
+        const nameInput = document.getElementById("new-tag-name");
+        const colorInput = document.getElementById("new-tag-color");
+        const name = (nameInput?.value || "").trim();
+        const color = colorInput?.value || "#6366f1";
+        
+        if (!name) {
+            showToast("Informe o nome da tag.", "warning");
+            return;
+        }
+        
+        try {
+            const newTag = await api.post("/api/inbox/tags", { name, color });
+            nameInput.value = "";
+            showToast(`Etiqueta "${newTag.name}" criada com sucesso!`, "success");
+            if (state.activeConversationId) {
+                await this.toggleTagInActiveConvo(newTag);
+            } else {
+                await this.loadAndRenderTagsModal();
+            }
+        } catch (err) {
+            showToast("Erro ao criar tag: " + err.message, "error");
+        }
+    },
+
+    // --- ⭐ Resolução com CSAT ---
+    openResolveCSATModal() {
+        if (!state.activeConversationId) return;
+        const modal = document.getElementById("resolve-csat-modal");
+        if (modal) modal.style.display = "flex";
+    },
+
+    closeResolveCSATModal() {
+        const modal = document.getElementById("resolve-csat-modal");
+        if (modal) modal.style.display = "none";
+    },
+
+    async confirmResolveWithCSAT() {
+        if (!state.activeConversationId) return;
+        const sendCsat = document.getElementById("resolve-send-csat-checkbox")?.checked ?? true;
+        const btn = document.getElementById("btn-confirm-resolve-csat");
+        if (btn) btn.disabled = true;
+        
+        try {
+            await api.post(`/api/inbox/conversations/${state.activeConversationId}/resolve-with-csat`, {
+                send_csat: sendCsat
+            });
+            showToast(sendCsat ? "Conversa resolvida e Pesquisa CSAT enviada!" : "Conversa resolvida com sucesso!", "success");
+            this.closeResolveCSATModal();
+            
+            // Recarrega conversas
+            await appRouter.loadConversations("resolved");
+            // Atualiza status local
+            const convo = state.conversations.find(c => c.id === state.activeConversationId);
+            if (convo) convo.status = "resolved";
+            const statusEl = document.getElementById("active-contact-status");
+            if (statusEl) statusEl.innerText = "✔ Resolvida";
+        } catch (err) {
+            showToast("Erro ao resolver conversa: " + err.message, "error");
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    },
+
+    // --- 🔍 Busca Global de Mensagens ---
+    openGlobalSearchModal() {
+        const modal = document.getElementById("global-search-modal");
+        if (modal) {
+            modal.style.display = "flex";
+            const input = document.getElementById("global-search-query-input");
+            if (input) {
+                input.value = "";
+                input.focus();
+            }
+            document.getElementById("global-search-results-list").innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px;">Digite ao menos 2 caracteres para pesquisar em todo o histórico de mensagens.</p>`;
+        }
+    },
+
+    closeGlobalSearchModal() {
+        const modal = document.getElementById("global-search-modal");
+        if (modal) modal.style.display = "none";
+    },
+
+    _searchDebounceTimer: null,
+    handleGlobalSearchInput(val) {
+        clearTimeout(this._searchDebounceTimer);
+        const q = (val || "").trim();
+        const resultsEl = document.getElementById("global-search-results-list");
+        if (!resultsEl) return;
+        
+        if (q.length < 2) {
+            resultsEl.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px;">Digite ao menos 2 caracteres para pesquisar.</p>`;
+            return;
+        }
+        
+        resultsEl.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px;"><i class="fa-solid fa-spinner fa-spin"></i> Pesquisando no histórico...</p>`;
+        
+        this._searchDebounceTimer = setTimeout(async () => {
+            try {
+                const results = await api.get(`/api/inbox/messages/search?q=${encodeURIComponent(q)}`);
+                if (!results || results.length === 0) {
+                    resultsEl.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px;">Nenhuma mensagem encontrada para "<strong>${escapeHTML(q)}</strong>".</p>`;
+                    return;
+                }
+                
+                resultsEl.innerHTML = "";
+                results.forEach(res => {
+                    const card = document.createElement("div");
+                    card.className = "global-search-result-card";
+                    
+                    let cleanStr = res.matched_at ? String(res.matched_at) : "";
+                    if (cleanStr && !cleanStr.endsWith("Z") && !cleanStr.includes("+") && !cleanStr.includes("-")) cleanStr += "Z";
+                    const d = cleanStr ? new Date(cleanStr) : null;
+                    const dateStr = d ? `${d.toLocaleDateString('pt-BR')} às ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : "";
+                    
+                    const senderLabel = res.is_note ? "🔒 Nota Interna" : (res.sender_type === "contact" ? "👤 Cliente" : "💼 Atendente");
+                    
+                    card.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <strong style="font-size: 13px; color: var(--text-primary);">${escapeHTML(res.contact_name)} <span style="font-weight: 400; color: var(--text-muted); font-size: 11px;">(${res.phone_number})</span></strong>
+                            <span style="font-size: 10px; color: var(--text-muted);">${dateStr}</span>
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.4; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                            <span style="font-weight: 700; color: ${res.is_note ? '#fbbf24' : 'var(--color-brand)'};">${senderLabel}:</span> ${escapeHTML(res.snippet)}
+                        </div>
+                    `;
+                    card.onclick = () => {
+                        uiHelpers.closeGlobalSearchModal();
+                        appRouter.selectTabByName("inbox-view");
+                        appRouter.selectConversation(res.conversation_id);
+                    };
+                    resultsEl.appendChild(card);
+                });
+            } catch (err) {
+                resultsEl.innerHTML = `<p style="text-align: center; color: #ef4444; padding: 40px 0; font-size: 13px;">Erro na pesquisa: ${err.message}</p>`;
+            }
+        }, 300);
     }
 };
 
 window.uiHelpers = uiHelpers;
+
+// --- 📌 KANBAN CRM PIPELINE WITH DRAG & DROP ---
+appRouter.loadKanbanBoard = async function() {
+    const container = document.getElementById("kanban-board-container");
+    if (!container) return;
+    
+    container.innerHTML = `<div style="text-align:center;padding:60px;width:100%;color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:24px;"></i><p style="margin-top:10px;">Carregando pipeline de oportunidades...</p></div>`;
+    
+    try {
+        const data = await api.get("/api/inbox/crm/kanban");
+        
+        // Atualiza resumo no header
+        const grandTotalEl = document.getElementById("kanban-grand-total");
+        const grandDealsEl = document.getElementById("kanban-deals-count");
+        if (grandTotalEl) grandTotalEl.innerText = `R$ ${data.grand_total_value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+        if (grandDealsEl) grandDealsEl.innerText = data.grand_total_deals;
+        
+        container.innerHTML = "";
+        
+        data.columns.forEach(col => {
+            const colEl = document.createElement("div");
+            colEl.className = "kanban-col";
+            colEl.setAttribute("data-stage", col.stage);
+            
+            colEl.innerHTML = `
+                <div class="kanban-col-header">
+                    <div>
+                        <div class="kanban-col-title">
+                            <span>${col.label}</span>
+                            <span class="kanban-col-count">${col.total_deals}</span>
+                        </div>
+                        <div class="kanban-col-total-val">R$ ${col.total_value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                    </div>
+                </div>
+                <div class="kanban-cards-wrapper" id="kanban-cards-${col.stage}"></div>
+            `;
+            
+            // Drag & drop handlers on column
+            const cardsWrapper = colEl.querySelector(".kanban-cards-wrapper");
+            
+            colEl.addEventListener("dragover", (e) => {
+                e.preventDefault();
+                colEl.classList.add("drag-over");
+            });
+            
+            colEl.addEventListener("dragleave", (e) => {
+                colEl.classList.remove("drag-over");
+            });
+            
+            colEl.addEventListener("drop", async (e) => {
+                e.preventDefault();
+                colEl.classList.remove("drag-over");
+                const contactId = e.dataTransfer.getData("text/plain");
+                if (!contactId) return;
+                
+                try {
+                    await api.patch(`/api/inbox/contacts/${contactId}/kanban-stage`, {
+                        kanban_stage: col.stage
+                    });
+                    showToast(`Card movido para "${col.label}"!`, "success");
+                    appRouter.loadKanbanBoard();
+                } catch (err) {
+                    showToast("Erro ao mover card: " + err.message, "error");
+                }
+            });
+            
+            // Render cards
+            col.cards.forEach(card => {
+                const cardEl = document.createElement("div");
+                cardEl.className = "kanban-card";
+                cardEl.draggable = true;
+                cardEl.setAttribute("data-contact-id", card.contact_id);
+                
+                cardEl.addEventListener("dragstart", (e) => {
+                    e.dataTransfer.setData("text/plain", card.contact_id);
+                    cardEl.classList.add("dragging");
+                });
+                
+                cardEl.addEventListener("dragend", () => {
+                    cardEl.classList.remove("dragging");
+                });
+                
+                const tagsHtml = card.tags.map(t => `<span class="tag-badge" style="background:${t.color || '#6366f1'};font-size:9px;padding:1px 5px;">${escapeHTML(t.name)}</span>`).join("");
+                
+                cardEl.innerHTML = `
+                    <div class="kanban-card-name">
+                        <span>${escapeHTML(card.name)}</span>
+                        <span class="kanban-deal-badge">R$ ${card.deal_value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div class="kanban-card-phone"><i class="fa-brands fa-whatsapp" style="color:#22c55e;margin-right:4px;"></i>${escapeHTML(card.phone_number)}</div>
+                    <div class="kanban-card-snippet">${escapeHTML(card.last_message || 'Nenhuma mensagem recente')}</div>
+                    ${tagsHtml ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">${tagsHtml}</div>` : ''}
+                    <div class="kanban-card-footer">
+                        <span style="color:var(--text-muted);">${card.assigned_agent_name ? `👤 ${card.assigned_agent_name}` : 'Sem atendente'}</span>
+                        <button class="btn btn-secondary btn-xs" style="padding:2px 8px;font-size:10px;" onclick="event.stopPropagation(); appRouter.openChatFromKanban('${card.id}')">
+                            <i class="fa-solid fa-comments"></i> Abrir Chat
+                        </button>
+                    </div>
+                `;
+                
+                cardEl.onclick = () => appRouter.openChatFromKanban(card.id);
+                cardsWrapper.appendChild(cardEl);
+            });
+            
+            container.appendChild(colEl);
+        });
+    } catch (err) {
+        container.innerHTML = `<div style="text-align:center;padding:60px;width:100%;color:#ef4444;"><p>Erro ao carregar Kanban: ${err.message}</p></div>`;
+    }
+};
+
+appRouter.openChatFromKanban = function(convoId) {
+    appRouter.selectTabByName("inbox-view");
+    appRouter.selectConversation(convoId);
+};
 
 // ============================================================
 // TYPEBOT FLOW BUILDER ENGINE

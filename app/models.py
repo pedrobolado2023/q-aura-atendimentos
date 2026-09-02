@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, DateTime, Boolean, Text, JSON, Table, Integer, Numeric, Uuid
+from sqlalchemy import Column, String, ForeignKey, DateTime, Boolean, Text, JSON, Table, Integer, Numeric, Float, Uuid
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base, db_url
@@ -123,6 +123,24 @@ class Department(Base):
     tenant = relationship("Tenant", back_populates="departments")
     agents = relationship("User", secondary=qa_agents_departments, back_populates="departments")
 
+qa_conversation_tags = Table(
+    "qa_conversation_tags",
+    Base.metadata,
+    Column("conversation_id", UuidCol, ForeignKey("qa_conversations.id", ondelete="CASCADE"), primary_key=True),
+    Column("tag_id", UuidCol, ForeignKey("qa_tags.id", ondelete="CASCADE"), primary_key=True)
+)
+
+class Tag(Base):
+    __tablename__ = "qa_tags"
+    id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
+    tenant_id = Column(UuidCol, ForeignKey("qa_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(50), nullable=False)
+    color = Column(String(20), default="#6366f1")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    tenant = relationship("Tenant")
+    conversations = relationship("Conversation", secondary=qa_conversation_tags, back_populates="tags")
+
 class Contact(Base):
     __tablename__ = "qa_contacts"
     id = Column(UuidCol, primary_key=True, default=generate_uuid_str)
@@ -134,6 +152,8 @@ class Contact(Base):
     loyalty_level = Column(String(50), default="none")
     pms_id = Column(String(100))
     sales_funnel_stage = Column(String(50), default="lead") # lead, qualified, quotation, reservation_pending, reservation_confirmed, lost
+    deal_value = Column(Float, default=0.0)
+    kanban_stage = Column(String(50), default="lead") # lead, qualificacao, prospect, negociacao, customer, perdido
     avatar_url = Column(String(500))
     is_list_contact = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -155,6 +175,8 @@ class Conversation(Base):
     unread_count = Column(Integer, default=0)
     is_flagged = Column(Boolean, default=False)
     flag_type = Column(String(20), default="none")
+    csat_score = Column(Integer, nullable=True) # 1 to 5
+    csat_sent_at = Column(DateTime(timezone=True), nullable=True)
     last_message_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -162,6 +184,7 @@ class Conversation(Base):
     tenant = relationship("Tenant", back_populates="conversations")
     contact = relationship("Contact", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
+    tags = relationship("Tag", secondary=qa_conversation_tags, back_populates="conversations")
 
 class Message(Base):
     __tablename__ = "qa_messages"

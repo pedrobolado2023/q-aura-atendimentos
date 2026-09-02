@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy import func
 from app.database import get_db, SessionLocal, engine
-from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig, Department, QuickMessage, MarketingCampaign, CampaignRecipient, MessageTemplate
-from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, CampaignResponse, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, AgentPerformanceMetric, DailyTrafficMetric, StartConversationRequest, QuickMessageCreate, QuickMessageResponse, ContactResponse, MessageTemplateCreate, MessageTemplateResponse
+from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig, Department, QuickMessage, MarketingCampaign, CampaignRecipient, MessageTemplate, Tag
+from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, CampaignResponse, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, AgentPerformanceMetric, DailyTrafficMetric, StartConversationRequest, QuickMessageCreate, QuickMessageResponse, ContactResponse, MessageTemplateCreate, MessageTemplateResponse, TagCreate, TagResponse, KanbanBoardResponse, KanbanColumn, KanbanCard, KanbanStageUpdateRequest, GlobalSearchResult, ResolveCSATRequest
 from app.auth import get_current_user, get_current_tenant, ModuleRequired
 from app.config import settings
 
@@ -204,6 +204,7 @@ class SendMessagePayload(BaseModel):
     body: Optional[str] = ""
     template_name: Optional[str] = None
     template_language: Optional[str] = "pt_BR"
+    internal_note: Optional[bool] = False
 
 @router.post("/send-message", response_model=MessageResponse)
 async def send_message(
@@ -215,10 +216,10 @@ async def send_message(
     conversation_id = payload.conversation_id
     body = (payload.body or "").strip()
     is_template = bool(payload.template_name and payload.template_name.strip())
+    is_internal = bool(payload.internal_note)
     
     if not body and not is_template:
         raise HTTPException(status_code=400, detail="O conteúdo da mensagem ou o nome do modelo (template) deve ser informado.")
-
 
     # 1. Verify conversation
     convo = db.query(Conversation).filter(
@@ -227,6 +228,45 @@ async def send_message(
     ).first()
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # 1.1 Se for Nota Interna Privada, grava direto no DB e envia WebSocket apenas para a equipe
+    if is_internal:
+        note_msg = Message(
+            conversation_id=str(conversation_id),
+            sender_type="agent",
+            sender_id=current_user.id,
+            message_type="text",
+            body=body,
+            internal_note=True,
+            status="sent"
+        )
+        db.add(note_msg)
+        convo.last_message_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(note_msg)
+
+        try:
+            from app.services.websocket_manager import manager
+            import asyncio
+            asyncio.create_task(manager.broadcast_to_tenant(str(current_tenant.id), {
+                "type": "NEW_MESSAGE",
+                "conversation_id": str(convo.id),
+                "message": {
+                    "id": str(note_msg.id),
+                    "conversation_id": str(note_msg.conversation_id),
+                    "sender_type": "agent",
+                    "sender_id": str(current_user.id),
+                    "sender_name": current_user.name or current_user.email,
+                    "message_type": "text",
+                    "body": body,
+                    "internal_note": True,
+                    "created_at": note_msg.created_at.isoformat() if note_msg.created_at else datetime.now(timezone.utc).isoformat()
+                }
+            }))
+        except Exception:
+            pass
+
+        return note_msg
         
     # Validar saldo / limite antes de enviar nova mensagem ativa
     from app.services.charge_service import can_initiate_conversation, charge_tenant_conversation
@@ -2482,6 +2522,337 @@ def get_debug_webhook_events(
     from app.models import WebhookEvent
     events = db.query(WebhookEvent).order_by(WebhookEvent.created_at.desc()).limit(20).all()
     return [{"id": str(e.id), "created_at": str(e.created_at), "payload": e.payload} for e in events]
+
+
+# --- 🏷️ TAGS / ETIQUETAS ENDPOINTS ---
+@router.get("/tags", response_model=List[TagResponse])
+def get_tags(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    """List all tags for tenant."""
+    return db.query(Tag).filter(Tag.tenant_id == current_tenant.id).order_by(Tag.name.asc()).all()
+
+@router.post("/tags", response_model=TagResponse)
+def create_tag(
+    payload: TagCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    """Create a new tag with custom name and color."""
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="O nome da tag é obrigatório.")
+        
+    existing = db.query(Tag).filter(Tag.tenant_id == current_tenant.id, Tag.name.ilike(name)).first()
+    if existing:
+        return existing
+        
+    tag = Tag(
+        tenant_id=current_tenant.id,
+        name=name,
+        color=payload.color or "#6366f1"
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+    return tag
+
+@router.delete("/tags/{tag_id}")
+def delete_tag(
+    tag_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    """Delete a tag."""
+    tag = db.query(Tag).filter(Tag.id == tag_id, Tag.tenant_id == current_tenant.id).first()
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag não encontrada.")
+    db.delete(tag)
+    db.commit()
+    return {"message": "Tag excluída com sucesso."}
+
+@router.post("/conversations/{conversation_id}/tags/{tag_id}", response_model=ConversationResponse)
+def add_tag_to_conversation(
+    conversation_id: UUID,
+    tag_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    """Assigns a tag to a conversation."""
+    convo = db.query(Conversation).filter(
+        Conversation.id == str(conversation_id),
+        Conversation.tenant_id == current_tenant.id
+    ).first()
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada.")
+        
+    tag = db.query(Tag).filter(Tag.id == tag_id, Tag.tenant_id == current_tenant.id).first()
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag não encontrada.")
+        
+    if tag not in convo.tags:
+        convo.tags.append(tag)
+        db.commit()
+        db.refresh(convo)
+    return convo
+
+@router.delete("/conversations/{conversation_id}/tags/{tag_id}", response_model=ConversationResponse)
+def remove_tag_from_conversation(
+    conversation_id: UUID,
+    tag_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    """Removes a tag from a conversation."""
+    convo = db.query(Conversation).filter(
+        Conversation.id == str(conversation_id),
+        Conversation.tenant_id == current_tenant.id
+    ).first()
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada.")
+        
+    tag = db.query(Tag).filter(Tag.id == tag_id, Tag.tenant_id == current_tenant.id).first()
+    if tag and tag in convo.tags:
+        convo.tags.remove(tag)
+        db.commit()
+        db.refresh(convo)
+    return convo
+
+
+# --- 🔍 GLOBAL MESSAGE SEARCH ENDPOINT ---
+@router.get("/messages/search", response_model=List[GlobalSearchResult])
+def search_messages(
+    q: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    """Search messages across all conversations for the tenant."""
+    query_str = (q or "").strip()
+    if not query_str:
+        return []
+        
+    results = db.query(Message, Conversation, Contact).join(
+        Conversation, Message.conversation_id == Conversation.id
+    ).join(
+        Contact, Conversation.contact_id == Contact.id
+    ).filter(
+        Conversation.tenant_id == current_tenant.id,
+        (Message.body.ilike(f"%{query_str}%") | Contact.name.ilike(f"%{query_str}%") | Contact.phone_number.ilike(f"%{query_str}%"))
+    ).order_by(Message.created_at.desc()).limit(30).all()
+    
+    out = []
+    for msg, cv, ct in results:
+        out.append(GlobalSearchResult(
+            id=msg.id,
+            conversation_id=cv.id,
+            contact_name=ct.name or ct.phone_number,
+            phone_number=ct.phone_number,
+            snippet=msg.body[:150] if msg.body else "",
+            matched_at=msg.created_at or datetime.now(timezone.utc),
+            sender_type=msg.sender_type,
+            is_note=bool(msg.internal_note)
+        ))
+    return out
+
+
+# --- 📌 KANBAN CRM PIPELINE ENDPOINTS ---
+@router.get("/crm/kanban", response_model=KanbanBoardResponse)
+def get_kanban_board(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("crm"))
+):
+    """Returns the CRM sales pipeline grouped by stages."""
+    stages = [
+        {"stage": "lead", "label": "Novo Lead 📥"},
+        {"stage": "qualificacao", "label": "Qualificação 💬"},
+        {"stage": "prospect", "label": "Orçamento Enviado 📄"},
+        {"stage": "negociacao", "label": "Em Negociação 🤝"},
+        {"stage": "customer", "label": "Fechado / Ganho 🎉"},
+        {"stage": "perdido", "label": "Perdido ❌"}
+    ]
+    
+    contacts = db.query(Contact).filter(Contact.tenant_id == current_tenant.id).all()
+    columns_map = {s["stage"]: [] for s in stages}
+    
+    for ct in contacts:
+        stage_key = ct.kanban_stage or ct.sales_funnel_stage or "lead"
+        if stage_key not in columns_map:
+            stage_key = "lead"
+            
+        latest_cv = db.query(Conversation).filter(
+            Conversation.contact_id == ct.id,
+            Conversation.tenant_id == current_tenant.id
+        ).order_by(Conversation.last_message_at.desc()).first()
+        
+        assigned_name = None
+        card_tags = []
+        last_body = None
+        last_at = ct.created_at
+        cv_id = latest_cv.id if latest_cv else ct.id
+        
+        if latest_cv:
+            card_tags = [TagResponse.from_orm(t) for t in latest_cv.tags]
+            last_at = latest_cv.last_message_at
+            if latest_cv.assigned_user_id:
+                u = db.query(User).filter(User.id == latest_cv.assigned_user_id).first()
+                if u:
+                    assigned_name = u.name or u.email
+            
+            last_msg = db.query(Message).filter(Message.conversation_id == latest_cv.id).order_by(Message.created_at.desc()).first()
+            if last_msg:
+                last_body = last_msg.body
+                
+        card = KanbanCard(
+            id=cv_id,
+            contact_id=ct.id,
+            name=ct.name or ct.phone_number,
+            phone_number=ct.phone_number,
+            deal_value=float(ct.deal_value or 0.0),
+            kanban_stage=stage_key,
+            last_message=last_body[:100] if last_body else "Nenhuma mensagem recente",
+            last_message_at=last_at,
+            tags=card_tags,
+            assigned_agent_name=assigned_name
+        )
+        columns_map[stage_key].append(card)
+        
+    columns_out = []
+    grand_total_val = 0.0
+    grand_total_deals = 0
+    
+    for s in stages:
+        cards_list = columns_map[s["stage"]]
+        col_val = sum(c.deal_value for c in cards_list)
+        grand_total_val += col_val
+        grand_total_deals += len(cards_list)
+        
+        columns_out.append(KanbanColumn(
+            stage=s["stage"],
+            label=s["label"],
+            total_deals=len(cards_list),
+            total_value=round(col_val, 2),
+            cards=cards_list
+        ))
+        
+    return KanbanBoardResponse(
+        columns=columns_out,
+        grand_total_value=round(grand_total_val, 2),
+        grand_total_deals=grand_total_deals
+    )
+
+@router.patch("/contacts/{contact_id}/kanban-stage")
+def update_contact_kanban_stage(
+    contact_id: UUID,
+    payload: KanbanStageUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("crm"))
+):
+    """Moves a contact to a new Kanban stage and optionally updates deal value."""
+    contact = db.query(Contact).filter(Contact.id == contact_id, Contact.tenant_id == current_tenant.id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contato não encontrado.")
+        
+    contact.kanban_stage = payload.kanban_stage
+    contact.sales_funnel_stage = payload.kanban_stage
+    if payload.deal_value is not None:
+        contact.deal_value = float(payload.deal_value)
+        
+    db.commit()
+    db.refresh(contact)
+    return {"message": "Estágio atualizado com sucesso.", "kanban_stage": contact.kanban_stage, "deal_value": contact.deal_value}
+
+
+# --- ⭐ CSAT SATISFACTION SURVEY ENDPOINT ---
+@router.post("/conversations/{conversation_id}/resolve-with-csat")
+async def resolve_conversation_with_csat(
+    conversation_id: UUID,
+    payload: ResolveCSATRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    """Resolves conversation and optionally sends a WhatsApp 1-5 star CSAT survey."""
+    convo = db.query(Conversation).filter(
+        Conversation.id == str(conversation_id),
+        Conversation.tenant_id == current_tenant.id
+    ).first()
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada.")
+        
+    convo.status = "resolved"
+    now_utc = datetime.now(timezone.utc)
+    
+    # Save system resolution message
+    user_name = current_user.name or current_user.email
+    db.add(Message(
+        conversation_id=convo.id,
+        sender_type="system",
+        sender_id=current_user.id,
+        message_type="system",
+        body=f"✅ Atendimento finalizado por {user_name}.",
+        internal_note=True,
+        created_at=now_utc
+    ))
+    
+    if payload.send_csat:
+        convo.csat_sent_at = now_utc
+        contact = db.query(Contact).filter(Contact.id == convo.contact_id).first()
+        creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == current_tenant.id).first()
+        
+        if contact and creds and creds.phone_number_id and creds.permanent_access_token:
+            phone = format_brazilian_phone(contact.phone_number)
+            csat_text = (
+                payload.rating_question or 
+                "Como você avalia o nosso atendimento hoje? Responda com uma nota de 1 a 5 estrelas:\n\n"
+                "⭐⭐⭐⭐⭐ 5 - Excelente\n"
+                "⭐⭐⭐⭐ 4 - Muito Bom\n"
+                "⭐⭐⭐ 3 - Bom\n"
+                "⭐⭐ 2 - Regular\n"
+                "⭐ 1 - Ruim"
+            )
+            
+            meta_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{creds.phone_number_id}/messages"
+            headers = {
+                "Authorization": f"Bearer {creds.permanent_access_token}",
+                "Content-Type": "application/json"
+            }
+            meta_payload = {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": phone,
+                "type": "text",
+                "text": {"body": csat_text}
+            }
+            
+            async with httpx.AsyncClient() as client:
+                try:
+                    res = await client.post(meta_url, headers=headers, json=meta_payload, timeout=10.0)
+                    if res.status_code == 200:
+                        m_id = res.json().get("messages", [{}])[0].get("id")
+                        db.add(Message(
+                            conversation_id=convo.id,
+                            sender_type="bot",
+                            message_type="text",
+                            body=csat_text,
+                            meta_message_id=m_id,
+                            status="sent",
+                            created_at=now_utc
+                        ))
+                except Exception as err:
+                    print(f"[CSAT Send Error] {err}")
+                    
+    db.commit()
+    db.refresh(convo)
+    return convo
 
 
 

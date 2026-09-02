@@ -191,6 +191,20 @@ class ContactResponse(BaseModel):
     class Config:
         from_attributes = True
 
+# Tags Schemas
+class TagCreate(BaseModel):
+    name: str
+    color: Optional[str] = "#6366f1"
+
+class TagResponse(BaseModel):
+    id: UUID
+    name: str
+    color: str
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
 class ConversationResponse(BaseModel):
     id: UUID
     tenant_id: UUID
@@ -201,6 +215,7 @@ class ConversationResponse(BaseModel):
     routing_mode: Optional[str] = "queue"
     is_flagged: Optional[bool] = False
     flag_type: Optional[str] = "none"
+    csat_score: Optional[int] = None
     last_message_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     unread: Optional[bool] = False
@@ -209,6 +224,7 @@ class ConversationResponse(BaseModel):
     last_message_body: Optional[str] = None
     last_message_sender_type: Optional[str] = None
     has_active_window: Optional[bool] = True
+    tags: Optional[List[TagResponse]] = []
 
     class Config:
         from_attributes = True
@@ -361,11 +377,51 @@ class MessageTemplateResponse(BaseModel):
     language: Optional[str] = "pt_BR"
     category: Optional[str] = "UTILITY"
     body_text: Optional[str] = None
-    is_active: Optional[bool] = True
-    created_at: Optional[datetime] = None
+# Kanban CRM Schemas
+class KanbanCard(BaseModel):
+    id: UUID
+    contact_id: UUID
+    name: str
+    phone_number: str
+    deal_value: float = 0.0
+    kanban_stage: str
+    last_message: Optional[str] = None
+    last_message_at: Optional[datetime] = None
+    tags: List[TagResponse] = []
+    assigned_agent_name: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+class KanbanColumn(BaseModel):
+    stage: str
+    label: str
+    total_deals: int
+    total_value: float
+    cards: List[KanbanCard]
+
+class KanbanBoardResponse(BaseModel):
+    columns: List[KanbanColumn]
+    grand_total_value: float
+    grand_total_deals: int
+
+class KanbanStageUpdateRequest(BaseModel):
+    kanban_stage: str
+    deal_value: Optional[float] = None
+
+# Global Search Schemas
+class GlobalSearchResult(BaseModel):
+    id: UUID
+    conversation_id: UUID
+    contact_name: str
+    phone_number: str
+    snippet: str
+    matched_at: datetime
+    sender_type: str
+    is_note: bool = False
+
+# CSAT Schemas
+class ResolveCSATRequest(BaseModel):
+    send_csat: bool = True
+    rating_question: Optional[str] = None
+
 
 
 
