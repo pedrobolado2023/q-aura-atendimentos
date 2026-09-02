@@ -4,7 +4,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, status, Response, BackgroundTasks, UploadFile, File, Request, Form
 from pydantic import BaseModel
 from jose import jwt, JWTError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from uuid import UUID
 from datetime import datetime, timezone
 from typing import List, Optional, Union, Any
