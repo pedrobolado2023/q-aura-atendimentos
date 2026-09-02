@@ -2535,29 +2535,31 @@ def get_debug_webhook_events(
 def get_tags(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+    current_tenant: Tenant = Depends(get_current_tenant)
 ):
     """List all tags for tenant."""
-    return db.query(Tag).filter(Tag.tenant_id == current_tenant.id).order_by(Tag.name.asc()).all()
+    t_id = str(current_tenant.id)
+    return db.query(Tag).filter(Tag.tenant_id == t_id).order_by(Tag.name.asc()).all()
 
 @router.post("/tags", response_model=TagResponse)
 def create_tag(
     payload: TagCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+    current_tenant: Tenant = Depends(get_current_tenant)
 ):
     """Create a new tag with custom name and color."""
+    t_id = str(current_tenant.id)
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="O nome da tag é obrigatório.")
         
-    existing = db.query(Tag).filter(Tag.tenant_id == current_tenant.id, Tag.name.ilike(name)).first()
+    existing = db.query(Tag).filter(Tag.tenant_id == t_id, Tag.name.ilike(name)).first()
     if existing:
         return existing
         
     tag = Tag(
-        tenant_id=current_tenant.id,
+        tenant_id=t_id,
         name=name,
         color=payload.color or "#6366f1"
     )
@@ -2568,13 +2570,15 @@ def create_tag(
 
 @router.delete("/tags/{tag_id}")
 def delete_tag(
-    tag_id: UUID,
+    tag_id: Union[UUID, str],
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+    current_tenant: Tenant = Depends(get_current_tenant)
 ):
     """Delete a tag."""
-    tag = db.query(Tag).filter(Tag.id == tag_id, Tag.tenant_id == current_tenant.id).first()
+    tid_str = str(tag_id)
+    t_id = str(current_tenant.id)
+    tag = db.query(Tag).filter(Tag.id == tid_str, Tag.tenant_id == t_id).first()
     if not tag:
         raise HTTPException(status_code=404, detail="Tag não encontrada.")
     db.delete(tag)
@@ -2583,51 +2587,77 @@ def delete_tag(
 
 @router.post("/conversations/{conversation_id}/tags/{tag_id}", response_model=ConversationResponse)
 def add_tag_to_conversation(
-    conversation_id: UUID,
-    tag_id: UUID,
+    conversation_id: Union[UUID, str],
+    tag_id: Union[UUID, str],
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+    current_tenant: Tenant = Depends(get_current_tenant)
 ):
     """Assigns a tag to a conversation."""
+    cid_str = str(conversation_id)
+    tid_str = str(tag_id)
+    t_id = str(current_tenant.id)
+    
     convo = db.query(Conversation).filter(
-        Conversation.id == str(conversation_id),
-        Conversation.tenant_id == current_tenant.id
+        Conversation.id == cid_str,
+        Conversation.tenant_id == t_id
     ).first()
     if not convo:
         raise HTTPException(status_code=404, detail="Conversa não encontrada.")
         
-    tag = db.query(Tag).filter(Tag.id == tag_id, Tag.tenant_id == current_tenant.id).first()
+    tag = db.query(Tag).filter(Tag.id == tid_str, Tag.tenant_id == t_id).first()
     if not tag:
         raise HTTPException(status_code=404, detail="Tag não encontrada.")
         
-    if tag not in convo.tags:
-        convo.tags.append(tag)
+    try:
+        db.execute(text("""
+            INSERT INTO qa_conversation_tags (conversation_id, tag_id)
+            VALUES (:cid, :tid)
+            ON CONFLICT DO NOTHING
+        """), {"cid": cid_str, "tid": tid_str})
         db.commit()
-        db.refresh(convo)
+    except Exception:
+        db.rollback()
+        try:
+            db.execute(text("""
+                INSERT OR IGNORE INTO qa_conversation_tags (conversation_id, tag_id)
+                VALUES (:cid, :tid)
+            """), {"cid": cid_str, "tid": tid_str})
+            db.commit()
+        except Exception:
+            pass
+
+    convo = db.query(Conversation).options(
+        joinedload(Conversation.contact),
+        joinedload(Conversation.tags)
+    ).filter(Conversation.id == cid_str).first()
     return convo
 
 @router.delete("/conversations/{conversation_id}/tags/{tag_id}", response_model=ConversationResponse)
 def remove_tag_from_conversation(
-    conversation_id: UUID,
-    tag_id: UUID,
+    conversation_id: Union[UUID, str],
+    tag_id: Union[UUID, str],
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+    current_tenant: Tenant = Depends(get_current_tenant)
 ):
     """Removes a tag from a conversation."""
-    convo = db.query(Conversation).filter(
-        Conversation.id == str(conversation_id),
-        Conversation.tenant_id == current_tenant.id
-    ).first()
+    cid_str = str(conversation_id)
+    tid_str = str(tag_id)
+    t_id = str(current_tenant.id)
+    
+    db.execute(text("""
+        DELETE FROM qa_conversation_tags 
+        WHERE conversation_id = :cid AND tag_id = :tid
+    """), {"cid": cid_str, "tid": tid_str})
+    db.commit()
+    
+    convo = db.query(Conversation).options(
+        joinedload(Conversation.contact),
+        joinedload(Conversation.tags)
+    ).filter(Conversation.id == cid_str).first()
     if not convo:
         raise HTTPException(status_code=404, detail="Conversa não encontrada.")
-        
-    tag = db.query(Tag).filter(Tag.id == tag_id, Tag.tenant_id == current_tenant.id).first()
-    if tag and tag in convo.tags:
-        convo.tags.remove(tag)
-        db.commit()
-        db.refresh(convo)
     return convo
 
 

@@ -4499,7 +4499,10 @@ const uiHelpers = {
 
     // --- 🏷️ Gerenciamento de Tags / Etiquetas ---
     async openTagSelectorModal() {
-        if (!state.activeConversationId) return;
+        if (!state.activeConversationId) {
+            showToast("Selecione uma conversa para gerenciar etiquetas.", "warning");
+            return;
+        }
         const modal = document.getElementById("tags-manager-modal");
         if (!modal) return;
         modal.style.display = "flex";
@@ -4518,22 +4521,22 @@ const uiHelpers = {
         
         try {
             const allTags = await api.get("/api/inbox/tags");
-            state.cachedTags = allTags;
+            state.cachedTags = allTags || [];
             
-            const convo = state.conversations.find(c => c.id === state.activeConversationId);
-            const activeTagIds = new Set((convo?.tags || []).map(t => t.id));
+            const convo = state.conversations.find(c => String(c.id) === String(state.activeConversationId));
+            const activeTagIds = new Set((convo?.tags || []).map(t => String(t.id)));
             
-            if (allTags.length === 0) {
-                listEl.innerHTML = `<p style="font-size:12px;color:var(--text-muted);margin:4px 0;">Nenhuma etiqueta criada ainda. Crie uma abaixo!</p>`;
+            if (!allTags || allTags.length === 0) {
+                listEl.innerHTML = `<p style="font-size:12px;color:var(--text-muted);margin:4px 0;">Nenhuma etiqueta criada ainda. Digite um nome e clique em Criar abaixo!</p>`;
                 return;
             }
             
             listEl.innerHTML = "";
             allTags.forEach(tag => {
-                const isSelected = activeTagIds.has(tag.id);
+                const isSelected = activeTagIds.has(String(tag.id));
                 const item = document.createElement("div");
                 item.className = `tag-selectable-item ${isSelected ? 'selected' : ''}`;
-                item.style.cssText = `background: ${tag.color || '#6366f1'}; color: #fff; padding: 4px 10px; border-radius: 16px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;`;
+                item.style.cssText = `background: ${tag.color || '#6366f1'}; color: #fff; padding: 5px 12px; border-radius: 16px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; border: 2px solid ${isSelected ? '#fff' : 'transparent'}; box-shadow: ${isSelected ? '0 0 8px rgba(255,255,255,0.4)' : 'none'};`;
                 item.innerHTML = `
                     <i class="fa-solid ${isSelected ? 'fa-check' : 'fa-tag'}" style="font-size: 10px;"></i>
                     <span>${escapeHTML(tag.name)}</span>
@@ -4548,16 +4551,16 @@ const uiHelpers = {
 
     async toggleTagInActiveConvo(tag) {
         if (!state.activeConversationId) return;
-        const convo = state.conversations.find(c => c.id === state.activeConversationId);
+        const convo = state.conversations.find(c => String(c.id) === String(state.activeConversationId));
         if (!convo) return;
         
         if (!convo.tags) convo.tags = [];
-        const exists = convo.tags.some(t => t.id === tag.id);
+        const exists = convo.tags.some(t => String(t.id) === String(tag.id));
         
         try {
             if (exists) {
                 await api.delete(`/api/inbox/conversations/${state.activeConversationId}/tags/${tag.id}`);
-                convo.tags = convo.tags.filter(t => t.id !== tag.id);
+                convo.tags = convo.tags.filter(t => String(t.id) !== String(tag.id));
             } else {
                 await api.post(`/api/inbox/conversations/${state.activeConversationId}/tags/${tag.id}`, {});
                 convo.tags.push(tag);
@@ -4587,12 +4590,12 @@ const uiHelpers = {
 
     async removeTagFromActiveConvo(tagId) {
         if (!state.activeConversationId) return;
-        const convo = state.conversations.find(c => c.id === state.activeConversationId);
+        const convo = state.conversations.find(c => String(c.id) === String(state.activeConversationId));
         if (!convo) return;
         
         try {
             await api.delete(`/api/inbox/conversations/${state.activeConversationId}/tags/${tagId}`);
-            convo.tags = (convo.tags || []).filter(t => t.id !== tagId);
+            convo.tags = (convo.tags || []).filter(t => String(t.id) !== String(tagId));
             
             const tagsListEl = document.getElementById("active-chat-tags-list");
             if (tagsListEl) {
@@ -4608,6 +4611,7 @@ const uiHelpers = {
                     tagsListEl.appendChild(tagBadge);
                 });
             }
+            await this.loadAndRenderTagsModal();
         } catch (err) {
             showToast("Erro ao remover tag: " + err.message, "error");
         }
@@ -4626,7 +4630,7 @@ const uiHelpers = {
         
         try {
             const newTag = await api.post("/api/inbox/tags", { name, color });
-            nameInput.value = "";
+            if (nameInput) nameInput.value = "";
             showToast(`Etiqueta "${newTag.name}" criada com sucesso!`, "success");
             if (state.activeConversationId) {
                 await this.toggleTagInActiveConvo(newTag);
