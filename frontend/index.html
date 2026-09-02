@@ -698,14 +698,14 @@
                             
                             <!-- Column 1: Import Contacts -->
                             <div class="settings-card" style="display: flex; flex-direction: column; height: 100%; box-sizing: border-box;">
-                                <h3><i class="fa-solid fa-file-csv"></i> Importar Lista de Contatos</h3>
-                                 <p class="settings-desc">Arraste ou selecione uma planilha de contatos em formato CSV. <a href="#" id="download-csv-template" style="color: var(--color-brand); font-weight: 600; text-decoration: underline; margin-left: 4px;"><i class="fa-solid fa-download"></i> Baixar Modelo</a></p>
+                                <h3><i class="fa-solid fa-file-excel" style="color: var(--color-success); margin-right: 6px;"></i> Importar Lista de Contatos (Excel / CSV)</h3>
+                                 <p class="settings-desc">Arraste ou selecione uma planilha Excel (.xlsx, .xls) ou CSV com seu público-alvo. <a href="#" id="download-csv-template" style="color: var(--color-brand); font-weight: 600; text-decoration: underline; margin-left: 4px;"><i class="fa-solid fa-download"></i> Baixar Modelo</a></p>
                                 
                                 <div class="drag-drop-area" id="contacts-drag-drop" style="border: 2px dashed var(--border-color); padding: 30px 20px; border-radius: var(--radius-md); text-align: center; cursor: pointer; background: var(--bg-primary); transition: var(--transition-smooth); margin-bottom: 16px;">
                                     <i class="fa-solid fa-cloud-arrow-up" style="font-size: 32px; color: var(--color-primary); margin-bottom: 12px;"></i>
-                                    <p style="font-size: 13px; font-weight: 500;">Escolha um arquivo CSV</p>
+                                    <p style="font-size: 13px; font-weight: 500;">Escolha ou arraste uma planilha Excel (.xlsx) ou CSV</p>
                                     <span style="font-size: 11px; opacity: 0.6;">(Colunas necessárias: Nome, Telefone)</span>
-                                    <input type="file" id="contacts-file-input" accept=".csv" style="display: none;">
+                                    <input type="file" id="contacts-file-input" accept=".csv,.xlsx,.xls" style="display: none;">
                                 </div>
                                 
                                 <div style="flex: 1; overflow-y: auto; margin-bottom: 16px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-primary); padding: 8px;">
@@ -1450,9 +1450,9 @@
             <div class="email-log-empty"><div class="empty-state-icon"><i class="fa-solid fa-inbox"></i></div><h4>Nenhum envio registrado</h4><p>Os logs de envio aparecerão aqui após a configuração do SMTP e o primeiro disparo.</p></div>
         </div>
     </div>
-    </script>
-
+    <!-- SheetJS for Native Excel (.xlsx, .xls) Parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="config.js"></script>
-    <script src="app.js?v=1.3.4"></script>
+    <script src="app.js?v=1.3.5"></script>
 </body>
 </html>

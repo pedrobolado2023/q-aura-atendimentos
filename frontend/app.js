@@ -2807,17 +2807,59 @@ if (dragDropArea && fileInput) {
 }
 
 function handleContactsFile(file) {
-    if (!file || !file.name || !file.name.toLowerCase().endsWith(".csv")) {
-        showToast("Por favor, envie um arquivo contendo uma planilha CSV.", "error");
+    if (!file || !file.name) return;
+    const name = file.name.toLowerCase();
+    if (!name.endsWith(".csv") && !name.endsWith(".xlsx") && !name.endsWith(".xls")) {
+        showToast("Por favor, envie um arquivo Excel (.xlsx, .xls) ou CSV.", "error");
         return;
     }
     
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const text = e.target.result;
-        parseCSVContacts(text);
-    };
-    reader.readAsText(file, "UTF-8");
+    if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+        try {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const csv = XLSX.utils.sheet_to_csv(worksheet);
+                    parseCSVContacts(csv);
+                } catch (err) {
+                    console.error("Erro ao ler Excel:", err);
+                    showToast("Erro ao processar planilha Excel: " + err.message, "error");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        } catch (e) {
+            console.error("Erro no leitor de Excel:", e);
+            showToast("Falha ao abrir o arquivo Excel.", "error");
+        }
+    } else {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const text = e.target.result;
+            parseCSVContacts(text);
+        };
+        reader.readAsText(file, "UTF-8");
+    }
+}
+
+// Download template Excel/CSV
+const downloadCsvTemplateBtn = document.getElementById("download-csv-template");
+if (downloadCsvTemplateBtn) {
+    downloadCsvTemplateBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const csvContent = "Nome,Telefone\nJoão Silva,5562993473656\nMaria Santos,5511987654321\n";
+        const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", "modelo_lista_contatos.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
 }
 
 function parseCSVContacts(text) {
