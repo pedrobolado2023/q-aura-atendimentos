@@ -39,7 +39,10 @@ def get_conversations(
         tenant_id_str = str(current_tenant.id)
         user_id_str = str(current_user.id)
 
-        query = db.query(Conversation).options(joinedload(Conversation.contact)).filter(Conversation.tenant_id == tenant_id_str)
+        query = db.query(Conversation).options(
+            joinedload(Conversation.contact),
+            joinedload(Conversation.tags)
+        ).filter(Conversation.tenant_id == tenant_id_str)
         if status_filter:
             if status_filter == "waiting":
                 query = query.filter(Conversation.status.in_(["waiting", "bot"]))
@@ -136,7 +139,10 @@ def get_conversation_detail(
     tenant_id_str = str(current_tenant.id)
     convo = (
         db.query(Conversation)
-        .options(joinedload(Conversation.contact))
+        .options(
+            joinedload(Conversation.contact),
+            joinedload(Conversation.tags)
+        )
         .filter(
             Conversation.id == convo_id_str,
             Conversation.tenant_id == tenant_id_str
