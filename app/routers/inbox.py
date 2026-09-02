@@ -11,7 +11,7 @@ from typing import List, Optional
 from sqlalchemy import func
 from app.database import get_db, SessionLocal, engine
 from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig, Department, QuickMessage, MarketingCampaign, CampaignRecipient, MessageTemplate
-from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, CampaignResponse, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, StartConversationRequest, QuickMessageCreate, QuickMessageResponse, ContactResponse, MessageTemplateCreate, MessageTemplateResponse
+from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, CampaignResponse, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, AgentPerformanceMetric, DailyTrafficMetric, StartConversationRequest, QuickMessageCreate, QuickMessageResponse, ContactResponse, MessageTemplateCreate, MessageTemplateResponse
 from app.auth import get_current_user, get_current_tenant, ModuleRequired
 from app.config import settings
 
@@ -1904,83 +1904,154 @@ def get_dashboard_metrics(
     """
     Calculates live dashboard metrics from the database for the current tenant.
     """
-    # 1. Total conversations
-    total_convos = db.query(Conversation).filter(Conversation.tenant_id == current_tenant.id).count()
-    
-    # 2. Bot resolution rate
-    resolved_convos = db.query(Conversation).filter(
-        Conversation.tenant_id == current_tenant.id,
-        Conversation.status == "resolved"
+    from datetime import datetime, timezone, timedelta
+    tenant_id_str = str(current_tenant.id)
+
+    # 1. Real Conversation Counts by Status
+    total_convos = db.query(Conversation).filter(Conversation.tenant_id == tenant_id_str).count()
+    active_convos = db.query(Conversation).filter(Conversation.tenant_id == tenant_id_str, Conversation.status == "active").count()
+    waiting_convos = db.query(Conversation).filter(Conversation.tenant_id == tenant_id_str, Conversation.status == "waiting").count()
+    bot_convos = db.query(Conversation).filter(Conversation.tenant_id == tenant_id_str, Conversation.status == "bot").count()
+    resolved_convos = db.query(Conversation).filter(Conversation.tenant_id == tenant_id_str, Conversation.status == "resolved").count()
+
+    # 2. Real Contacts & Messages Counts
+    total_contacts = db.query(Contact).filter(Contact.tenant_id == tenant_id_str).count()
+    total_messages = db.query(Message).join(Conversation, Message.conversation_id == Conversation.id).filter(Conversation.tenant_id == tenant_id_str).count()
+
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    messages_today = db.query(Message).join(Conversation, Message.conversation_id == Conversation.id).filter(
+        Conversation.tenant_id == tenant_id_str,
+        Message.created_at >= today_start
     ).count()
+
+    # 3. Real Bot Resolution Rate
     bot_resolved = db.query(Conversation).filter(
-        Conversation.tenant_id == current_tenant.id,
+        Conversation.tenant_id == tenant_id_str,
         Conversation.status == "resolved",
         Conversation.assigned_user_id == None
     ).count()
-    bot_rate = (bot_resolved / resolved_convos * 100) if resolved_convos > 0 else 76.4
-    
-    # 3. Avg response time (fallback baseline or calculated)
-    avg_seconds = 45.0
-    
-    # 4. Contacts Funnel stages
-    leads_count = db.query(Contact).filter(Contact.tenant_id == current_tenant.id, Contact.sales_funnel_stage == "lead").count()
-    prospects_count = db.query(Contact).filter(Contact.tenant_id == current_tenant.id, Contact.sales_funnel_stage == "prospect").count()
-    customers_count = db.query(Contact).filter(Contact.tenant_id == current_tenant.id, Contact.sales_funnel_stage == "customer").count()
-    
-    total_contacts = leads_count + prospects_count + customers_count
-    conversion_rate = (customers_count / total_contacts * 100) if total_contacts > 0 else 18.2
-    
-    # Funnel stages calculation:
-    # 1. Pesquisa: Everyone starts as a lead or higher
-    pesquisa_count = total_contacts
-    pesquisa_pct = 100.0
-    
-    # 2. Orçamento Enviado: Prospects and Customers
-    orcamento_count = prospects_count + customers_count
-    orcamento_pct = (orcamento_count / total_contacts * 100) if total_contacts > 0 else 62.0
-    
-    # 3. Checkout Aberto: Simulated dropoff or customer bookings
-    checkout_count = int(orcamento_count * 0.55) + customers_count
-    checkout_pct = (checkout_count / total_contacts * 100) if total_contacts > 0 else 34.0
-    
-    # 4. Confirmada: Customers
-    confirmada_count = customers_count
-    confirmada_pct = (confirmada_count / total_contacts * 100) if total_contacts > 0 else 18.0
-    
+    bot_rate = (bot_resolved / resolved_convos * 100.0) if resolved_convos > 0 else 0.0
+
+    # 4. Real Contacts Funnel Stages
+    leads_count = db.query(Contact).filter(Contact.tenant_id == tenant_id_str, Contact.sales_funnel_stage == "lead").count()
+    prospects_count = db.query(Contact).filter(Contact.tenant_id == tenant_id_str, Contact.sales_funnel_stage == "prospect").count()
+    customers_count = db.query(Contact).filter(Contact.tenant_id == tenant_id_str, Contact.sales_funnel_stage == "customer").count()
+
+    # If contacts don't have explicit stages yet, categorize based on conversation history
+    if total_contacts > 0 and (leads_count + prospects_count + customers_count == 0):
+        leads_count = total_contacts
+
+    stage_total = max(total_contacts, 1)
+    conversion_rate = (customers_count / stage_total * 100.0) if total_contacts > 0 else 0.0
+
     funnel = [
-        FunnelStageMetric(stage="Pesquisa", count=pesquisa_count, percentage=round(pesquisa_pct, 1)),
-        FunnelStageMetric(stage="Orçamento Enviado", count=orcamento_count, percentage=round(orcamento_pct, 1)),
-        FunnelStageMetric(stage="Checkout Aberto", count=checkout_count, percentage=round(checkout_pct, 1)),
-        FunnelStageMetric(stage="Confirmada", count=confirmada_count, percentage=round(confirmada_pct, 1))
+        FunnelStageMetric(stage="Novos Leads", count=leads_count, percentage=round(leads_count / stage_total * 100.0, 1)),
+        FunnelStageMetric(stage="Em Negociação (Prospects)", count=prospects_count, percentage=round(prospects_count / stage_total * 100.0, 1)),
+        FunnelStageMetric(stage="Clientes Convertidos", count=customers_count, percentage=round(conversion_rate, 1))
     ]
-    
-    # 5. Pending contacts by department (waiting queue conversations grouped by department)
-    depts = db.query(Department).filter(Department.tenant_id == current_tenant.id).all()
-    
+
+    # 5. Real Department Breakdown
+    depts = db.query(Department).filter(Department.tenant_id == tenant_id_str).all()
     dep_metrics = []
     for d in depts:
         count = db.query(Conversation).filter(
-            Conversation.tenant_id == current_tenant.id,
-            Conversation.assigned_department_id == d.id,
-            Conversation.status == "waiting"
+            Conversation.tenant_id == tenant_id_str,
+            Conversation.assigned_department_id == d.id
         ).count()
         dep_metrics.append(DepartmentMetric(name=d.name, count=count))
-        
+
     if not dep_metrics:
-        # Default placeholders if tenant is brand new and has no departments yet
         dep_metrics = [
-            DepartmentMetric(name="Reservas", count=0),
-            DepartmentMetric(name="Recepção", count=0),
-            DepartmentMetric(name="Eventos", count=0)
+            DepartmentMetric(name="Atendimento Geral", count=total_convos)
         ]
+
+    # 6. Real Daily Traffic (Last 7 Days)
+    daily_traffic = []
+    for i in range(6, -1, -1):
+        day_date = (datetime.now(timezone.utc) - timedelta(days=i)).date()
+        day_start = datetime.combine(day_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+        day_end = datetime.combine(day_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+
+        inc_count = db.query(Message).join(Conversation, Message.conversation_id == Conversation.id).filter(
+            Conversation.tenant_id == tenant_id_str,
+            Message.sender_type == "contact",
+            Message.created_at >= day_start,
+            Message.created_at <= day_end
+        ).count()
+
+        out_count = db.query(Message).join(Conversation, Message.conversation_id == Conversation.id).filter(
+            Conversation.tenant_id == tenant_id_str,
+            Message.sender_type.in_(["agent", "bot"]),
+            Message.created_at >= day_start,
+            Message.created_at <= day_end
+        ).count()
+
+        daily_traffic.append(DailyTrafficMetric(
+            date=day_date.strftime("%d/%m"),
+            incoming_count=inc_count,
+            outgoing_count=out_count
+        ))
+
+    # 7. Real Team Performance
+    team_users = db.query(User).filter(User.tenant_id == tenant_id_str).all()
+    team_performance = []
+    for u in team_users:
+        u_str = str(u.id)
+        active_cnt = db.query(Conversation).filter(
+            Conversation.tenant_id == tenant_id_str,
+            Conversation.assigned_user_id == u_str,
+            Conversation.status == "active"
+        ).count()
+        resolved_cnt = db.query(Conversation).filter(
+            Conversation.tenant_id == tenant_id_str,
+            Conversation.assigned_user_id == u_str,
+            Conversation.status == "resolved"
+        ).count()
+        team_performance.append(AgentPerformanceMetric(
+            id=u_str,
+            name=u.name or u.email,
+            email=u.email,
+            role="Administrador" if u.role == "administrator" else ("Supervisor" if u.role == "manager" else "Atendente"),
+            active_count=active_cnt,
+            resolved_count=resolved_cnt
+        ))
+
+    # 8. Avg Response Time Calculation (estimate in seconds from actual first agent reply timestamps)
+    avg_seconds = 0.0
+    try:
+        recent_convos_with_msgs = db.query(Conversation).filter(
+            Conversation.tenant_id == tenant_id_str
+        ).order_by(Conversation.created_at.desc()).limit(20).all()
         
+        response_deltas = []
+        for cv in recent_convos_with_msgs:
+            first_in = db.query(Message).filter(Message.conversation_id == cv.id, Message.sender_type == "contact").order_by(Message.created_at.asc()).first()
+            first_out = db.query(Message).filter(Message.conversation_id == cv.id, Message.sender_type.in_(["agent", "bot"])).order_by(Message.created_at.asc()).first()
+            if first_in and first_out and first_out.created_at > first_in.created_at:
+                diff = (first_out.created_at - first_in.created_at).total_seconds()
+                if 0 < diff < 3600:
+                    response_deltas.append(diff)
+        if response_deltas:
+            avg_seconds = round(sum(response_deltas) / len(response_deltas), 1)
+    except Exception:
+        avg_seconds = 0.0
+
     return DashboardMetricsResponse(
         total_conversations=total_convos,
+        active_conversations=active_convos,
+        waiting_conversations=waiting_convos,
+        bot_conversations=bot_convos,
+        resolved_conversations=resolved_convos,
+        total_contacts=total_contacts,
+        total_messages=total_messages,
+        messages_today=messages_today,
         bot_resolution_rate=round(bot_rate, 1),
         avg_response_time_seconds=avg_seconds,
         conversion_rate=round(conversion_rate, 1),
         funnel_stages=funnel,
-        department_counts=dep_metrics
+        department_counts=dep_metrics,
+        team_performance=team_performance,
+        daily_traffic=daily_traffic
     )
 
 

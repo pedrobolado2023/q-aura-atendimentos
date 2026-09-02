@@ -288,13 +288,35 @@ class FunnelStageMetric(BaseModel):
     count: int
     percentage: float
 
+class AgentPerformanceMetric(BaseModel):
+    id: str
+    name: str
+    email: str
+    role: str
+    active_count: int
+    resolved_count: int
+
+class DailyTrafficMetric(BaseModel):
+    date: str
+    incoming_count: int
+    outgoing_count: int
+
 class DashboardMetricsResponse(BaseModel):
     total_conversations: int
+    active_conversations: int
+    waiting_conversations: int
+    bot_conversations: int
+    resolved_conversations: int
+    total_contacts: int
+    total_messages: int
+    messages_today: int
     bot_resolution_rate: float
     avg_response_time_seconds: float
     conversion_rate: float
     funnel_stages: List[FunnelStageMetric]
     department_counts: List[DepartmentMetric]
+    team_performance: List[AgentPerformanceMetric]
+    daily_traffic: List[DailyTrafficMetric]
 
 
 class StartConversationRequest(BaseModel):

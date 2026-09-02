@@ -1246,39 +1246,200 @@ const appRouter = {
         }
     },
 
+    // Holds Chart instances for clean destruction and re-creation
+    dashboardCharts: {
+        traffic: null,
+        status: null
+    },
+
     async loadDashboardMetrics() {
         try {
             const metrics = await api.get("/api/inbox/dashboard-metrics");
             
-            // Populate Cards
-            document.getElementById("stat-conversations").innerText = metrics.total_conversations;
-            document.getElementById("stat-bot-resolution").innerText = `${metrics.bot_resolution_rate}%`;
-            document.getElementById("stat-frt").innerText = `${metrics.avg_response_time_seconds}s`;
-            document.getElementById("stat-conversion").innerText = `${metrics.conversion_rate}%`;
-            
-            // Populate Funnel
+            // 1. Populate 6 Real KPI Cards
+            const setVal = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.innerText = val !== undefined && val !== null ? val : 0;
+            };
+
+            setVal("stat-conversations", metrics.total_conversations || 0);
+            setVal("stat-waiting", metrics.waiting_conversations || 0);
+            setVal("stat-active", metrics.active_conversations || 0);
+            setVal("stat-bot", metrics.bot_conversations || 0);
+            setVal("stat-contacts", metrics.total_contacts || 0);
+            setVal("stat-messages-today", metrics.messages_today || 0);
+
+            // Update Conversion Rate Badge
+            const convBadge = document.getElementById("stat-conversion-rate-badge");
+            if (convBadge) {
+                convBadge.innerText = `${metrics.conversion_rate || 0}% Conversão`;
+            }
+
+            // 2. Render Real Chart 1: Daily Traffic Chart (Line Chart with Gradients)
+            const trafficCanvas = document.getElementById("dashboard-traffic-chart");
+            if (trafficCanvas && window.Chart && metrics.daily_traffic) {
+                if (this.dashboardCharts.traffic) {
+                    this.dashboardCharts.traffic.destroy();
+                }
+
+                const labels = metrics.daily_traffic.map(d => d.date);
+                const incomingData = metrics.daily_traffic.map(d => d.incoming_count);
+                const outgoingData = metrics.daily_traffic.map(d => d.outgoing_count);
+
+                const ctx = trafficCanvas.getContext("2d");
+                this.dashboardCharts.traffic = new Chart(ctx, {
+                    type: "line",
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: "Recebidas (Clientes)",
+                                data: incomingData,
+                                borderColor: "#3b82f6",
+                                backgroundColor: "rgba(59, 130, 246, 0.12)",
+                                fill: true,
+                                tension: 0.35,
+                                borderWidth: 2.5,
+                                pointBackgroundColor: "#3b82f6",
+                                pointRadius: 3
+                            },
+                            {
+                                label: "Enviadas (Equipe / Bot)",
+                                data: outgoingData,
+                                borderColor: "#22c55e",
+                                backgroundColor: "rgba(34, 197, 94, 0.08)",
+                                fill: true,
+                                tension: 0.35,
+                                borderWidth: 2.5,
+                                pointBackgroundColor: "#22c55e",
+                                pointRadius: 3
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: "top",
+                                labels: {
+                                    boxWidth: 12,
+                                    font: { size: 11, family: "Inter, sans-serif" },
+                                    color: "#94a3b8"
+                                }
+                            },
+                            tooltip: {
+                                mode: "index",
+                                intersect: false
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: { color: "rgba(255,255,255,0.04)" },
+                                ticks: { font: { size: 10 }, color: "#94a3b8" }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: "rgba(255,255,255,0.04)" },
+                                ticks: { precision: 0, font: { size: 10 }, color: "#94a3b8" }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // 3. Render Real Chart 2: Status Breakdown (Doughnut Chart)
+            const statusCanvas = document.getElementById("dashboard-status-chart");
+            if (statusCanvas && window.Chart) {
+                if (this.dashboardCharts.status) {
+                    this.dashboardCharts.status.destroy();
+                }
+
+                const waitingCount = metrics.waiting_conversations || 0;
+                const activeCount = metrics.active_conversations || 0;
+                const botCount = metrics.bot_conversations || 0;
+                const resolvedCount = metrics.resolved_conversations || 0;
+
+                const hasData = (waitingCount + activeCount + botCount + resolvedCount) > 0;
+                const statusCtx = statusCanvas.getContext("2d");
+
+                this.dashboardCharts.status = new Chart(statusCtx, {
+                    type: "doughnut",
+                    data: {
+                        labels: ["Fila de Espera", "Em Atendimento", "Com Robô", "Resolvidas"],
+                        datasets: [{
+                            data: hasData ? [waitingCount, activeCount, botCount, resolvedCount] : [0, 0, 0, 1],
+                            backgroundColor: hasData 
+                                ? ["#f59e0b", "#3b82f6", "#a855f7", "#22c55e"]
+                                : ["#334155"],
+                            borderWidth: 0,
+                            hoverOffset: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: "right",
+                                labels: {
+                                    boxWidth: 12,
+                                    font: { size: 11, family: "Inter, sans-serif" },
+                                    color: "#94a3b8"
+                                }
+                            }
+                        },
+                        cutout: "70%"
+                    }
+                });
+            }
+
+            // 4. Populate Real CRM Funnel
             const funnelContainer = document.getElementById("funnel-container-stats");
             if (funnelContainer && metrics.funnel_stages) {
                 funnelContainer.innerHTML = "";
+                const colors = ["#6366f1", "#f59e0b", "#22c55e"];
                 metrics.funnel_stages.forEach((stage, idx) => {
-                    const el = document.createElement("div");
-                    el.className = `funnel-stage stage-${idx + 1}`;
-                    el.style.width = `${Math.max(stage.percentage, 15)}%`;
-                    el.innerHTML = `<span>${stage.stage} (${stage.percentage}%) - ${stage.count} contatos</span>`;
-                    funnelContainer.appendChild(el);
+                    const row = document.createElement("div");
+                    row.style.cssText = "display: flex; flex-direction: column; gap: 4px;";
+                    row.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 600;">
+                            <span>${stage.stage}</span>
+                            <span style="color: var(--text-muted);">${stage.count} contatos (${stage.percentage}%)</span>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.05); height: 8px; border-radius: 4px; overflow: hidden;">
+                            <div style="background: ${colors[idx % colors.length]}; width: ${Math.max(stage.percentage, 2)}%; height: 100%; border-radius: 4px; transition: width 0.6s ease;"></div>
+                        </div>
+                    `;
+                    funnelContainer.appendChild(row);
                 });
             }
-            
-            // Populate Departments
-            const depList = document.getElementById("department-list-stats");
-            if (depList && metrics.department_counts) {
-                depList.innerHTML = "";
-                metrics.department_counts.forEach(dep => {
-                    const el = document.createElement("div");
-                    el.className = "dep-row";
-                    el.innerHTML = `<span>${dep.name}</span><strong>${dep.count}</strong>`;
-                    depList.appendChild(el);
-                });
+
+            // 5. Populate Real Team Productivity Table
+            const teamBody = document.getElementById("dashboard-team-body");
+            if (teamBody && metrics.team_performance) {
+                teamBody.innerHTML = "";
+                if (metrics.team_performance.length === 0) {
+                    teamBody.innerHTML = "<tr><td colspan='4' style='text-align: center; padding: 20px; opacity: 0.6;'>Nenhum atendente cadastrado.</td></tr>";
+                } else {
+                    metrics.team_performance.forEach(agent => {
+                        const tr = document.createElement("tr");
+                        tr.style.cssText = "border-bottom: 1px solid var(--border-color);";
+                        tr.innerHTML = `
+                            <td style="padding: 10px 6px;">
+                                <div style="font-weight: 600; color: var(--text-primary);">${agent.name}</div>
+                                <div style="font-size: 10px; color: var(--text-muted);">${agent.email}</div>
+                            </td>
+                            <td style="padding: 10px 6px;">
+                                <span style="font-size: 10px; padding: 2px 6px; border-radius: 6px; background: rgba(99,102,241,0.12); color: #818cf8; font-weight: 600;">${agent.role}</span>
+                            </td>
+                            <td style="padding: 10px 6px; text-align: center; font-weight: 700; color: #3b82f6;">${agent.active_count}</td>
+                            <td style="padding: 10px 6px; text-align: center; font-weight: 700; color: #22c55e;">${agent.resolved_count}</td>
+                        `;
+                        teamBody.appendChild(tr);
+                    });
+                }
             }
         } catch (e) {
             console.error("Erro ao carregar métricas do painel:", e);
