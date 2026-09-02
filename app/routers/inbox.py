@@ -2374,5 +2374,16 @@ async def sync_meta_templates(
     return {"message": f"Sincronização concluida com sucesso. {synced_count} novos modelos adicionados.", "synced_count": synced_count}
 
 
+@router.get("/debug/webhook-events")
+def get_debug_webhook_events(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from app.models import WebhookEvent
+    events = db.query(WebhookEvent).order_by(WebhookEvent.created_at.desc()).limit(20).all()
+    return [{"id": str(e.id), "created_at": str(e.created_at), "payload": e.payload} for e in events]
+
+
+
 
 
