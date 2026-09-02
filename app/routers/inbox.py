@@ -262,16 +262,6 @@ async def send_message(
         raise HTTPException(status_code=400, detail="Meta credentials not configured for this tenant")
 
     recipient_phone = format_brazilian_phone(contact.phone_number)
-    # Auto-repair legacy numbers saved with 12 digits for DDD >= 31
-    if len(recipient_phone) == 12 and recipient_phone.startswith("55"):
-        try:
-            ddd = int(recipient_phone[2:4])
-            if ddd >= 31:
-                recipient_phone = recipient_phone[:4] + "9" + recipient_phone[4:]
-                contact.phone_number = recipient_phone
-                db.commit()
-        except Exception:
-            pass
 
     # 3. Post to Meta API (WhatsApp Cloud API)
     meta_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{creds.phone_number_id}/messages"
