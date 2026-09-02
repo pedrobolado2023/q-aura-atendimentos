@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List
+from typing import Optional, List, Union, Any
 from datetime import datetime
 from uuid import UUID
 from decimal import Decimal
@@ -197,20 +197,20 @@ class TagCreate(BaseModel):
     color: Optional[str] = "#6366f1"
 
 class TagResponse(BaseModel):
-    id: UUID
+    id: Union[UUID, str, Any]
     name: str
-    color: str
+    color: Optional[str] = "#6366f1"
     created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
 
 class ConversationResponse(BaseModel):
-    id: UUID
-    tenant_id: UUID
-    contact_id: UUID
-    assigned_user_id: Optional[UUID] = None
-    assigned_department_id: Optional[UUID] = None
+    id: Union[UUID, str, Any]
+    tenant_id: Union[UUID, str, Any]
+    contact_id: Union[UUID, str, Any]
+    assigned_user_id: Optional[Union[UUID, str, Any]] = None
+    assigned_department_id: Optional[Union[UUID, str, Any]] = None
     status: Optional[str] = "waiting"
     routing_mode: Optional[str] = "queue"
     is_flagged: Optional[bool] = False
@@ -379,15 +379,15 @@ class MessageTemplateResponse(BaseModel):
     body_text: Optional[str] = None
 # Kanban CRM Schemas
 class KanbanCard(BaseModel):
-    id: UUID
-    contact_id: UUID
+    id: Union[UUID, str, Any]
+    contact_id: Union[UUID, str, Any]
     name: str
     phone_number: str
     deal_value: float = 0.0
     kanban_stage: str
     last_message: Optional[str] = None
     last_message_at: Optional[datetime] = None
-    tags: List[TagResponse] = []
+    tags: Optional[List[TagResponse]] = []
     assigned_agent_name: Optional[str] = None
 
 class KanbanColumn(BaseModel):
@@ -408,12 +408,12 @@ class KanbanStageUpdateRequest(BaseModel):
 
 # Global Search Schemas
 class GlobalSearchResult(BaseModel):
-    id: UUID
-    conversation_id: UUID
+    id: Union[UUID, str, Any]
+    conversation_id: Union[UUID, str, Any]
     contact_name: str
     phone_number: str
     snippet: str
-    matched_at: datetime
+    matched_at: Optional[datetime] = None
     sender_type: str
     is_note: bool = False
 
