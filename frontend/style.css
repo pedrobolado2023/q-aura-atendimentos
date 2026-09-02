@@ -722,7 +722,16 @@ body {
 }
 
 .inbox-layout.hide-context {
-    grid-template-columns: 360px 1fr;
+    grid-template-columns: 360px 1fr !important;
+}
+
+.inbox-layout.hide-context .context-panel,
+.inbox-layout:has(.chat-area.empty) .context-panel {
+    display: none !important;
+}
+
+.inbox-layout:has(.chat-area.empty) {
+    grid-template-columns: 360px 1fr !important;
 }
 
 .inbox-layout > * {
