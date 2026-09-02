@@ -39,6 +39,7 @@ def get_phone_variations(phone: str) -> list:
 
 async def send_whatsapp_text(phone_number_id: str, token: str, to_phone: str, body: str) -> Optional[str]:
     """Helper function to send a text WhatsApp message via Meta Cloud API."""
+    clean_to_phone = format_brazilian_phone(to_phone)
     meta_url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{phone_number_id}/messages"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -47,7 +48,7 @@ async def send_whatsapp_text(phone_number_id: str, token: str, to_phone: str, bo
     payload = {
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
-        "to": to_phone,
+        "to": clean_to_phone,
         "type": "text",
         "text": {
             "preview_url": False,
@@ -56,13 +57,13 @@ async def send_whatsapp_text(phone_number_id: str, token: str, to_phone: str, bo
     }
     async with httpx.AsyncClient() as client:
         try:
-            res = await client.post(meta_url, headers=headers, json=payload)
+            res = await client.post(meta_url, headers=headers, json=payload, timeout=15.0)
             if res.status_code == 200:
                 return res.json().get("messages", [{}])[0].get("id")
             else:
-                print(f"Meta API send error: {res.text}")
+                print(f"[Meta Bot Send Error HTTP {res.status_code}]: {res.text}")
         except Exception as e:
-            print(f"Error sending WhatsApp message: {str(e)}")
+            print(f"[Meta Bot Send Exception]: {str(e)}")
     return None
 
 async def relay_webhook_to_n8n(url: str, payload: dict):
@@ -413,19 +414,20 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                             bot_reply_body = ""
                             if should_transfer:
                                 convo.status = "waiting" # Transfer to human queue
+                                convo.assigned_user_id = None
                                 db.commit()
                                 bot_reply_body = "Certo, estou te transferindo para a fila de atendimento humano. Um momento, por favor!"
                             else:
-                                # Count previous messages from contact to decide between welcome or fallback
+                                # Count previous messages from contact in this conversation to decide between welcome or fallback
                                 contact_msg_count = db.query(Message).filter(
                                     Message.conversation_id == convo.id,
                                     Message.sender_type == "contact"
                                 ).count()
 
                                 if contact_msg_count <= 1:
-                                    bot_reply_body = bot_config.welcome_message
+                                    bot_reply_body = bot_config.welcome_message or bot_config.fallback_message or "Olá! Como posso te ajudar hoje?"
                                 else:
-                                    bot_reply_body = bot_config.fallback_message
+                                    bot_reply_body = bot_config.fallback_message or bot_config.welcome_message or "Olá! Como posso te ajudar hoje?"
 
                             if bot_reply_body:
                                 # Send reply via WhatsApp API
@@ -447,7 +449,7 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                                 db.add(bot_msg)
                                 
                                 # Mark conversation last message timestamp
-                                convo.last_message_at = datetime.utcnow()
+                                convo.last_message_at = datetime.now(timezone.utc)
                                 db.commit()
                                 db.refresh(bot_msg)
 
