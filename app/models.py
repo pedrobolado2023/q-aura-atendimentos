@@ -11,7 +11,7 @@ if db_url.startswith("sqlite"):
 else:
     from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
     ArrayType = PG_ARRAY(String)
-    UuidCol = String(36)  # String(36) para compatibilidade universal com Postgres e SQLite
+    UuidCol = Uuid  # Postgres nativo UUID para compatibilidade com chaves estrangeiras existentes
 
 def generate_uuid_str():
     return str(uuid.uuid4())
