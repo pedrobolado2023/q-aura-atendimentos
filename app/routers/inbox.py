@@ -2598,7 +2598,7 @@ def add_tag_to_conversation(
     tid_str = str(tag_id)
     t_id = str(current_tenant.id)
     
-    convo = db.query(Conversation).filter(
+    convo = db.query(Conversation).options(joinedload(Conversation.tags)).filter(
         Conversation.id == cid_str,
         Conversation.tenant_id == t_id
     ).first()
@@ -2610,18 +2610,16 @@ def add_tag_to_conversation(
         raise HTTPException(status_code=404, detail="Tag não encontrada.")
         
     try:
-        db.execute(text("""
-            INSERT INTO qa_conversation_tags (conversation_id, tag_id)
-            VALUES (:cid, :tid)
-            ON CONFLICT DO NOTHING
-        """), {"cid": cid_str, "tid": tid_str})
-        db.commit()
+        if tag not in convo.tags:
+            convo.tags.append(tag)
+            db.commit()
     except Exception:
         db.rollback()
         try:
             db.execute(text("""
-                INSERT OR IGNORE INTO qa_conversation_tags (conversation_id, tag_id)
-                VALUES (:cid, :tid)
+                INSERT INTO qa_conversation_tags (conversation_id, tag_id)
+                VALUES (CAST(:cid AS uuid), CAST(:tid AS uuid))
+                ON CONFLICT DO NOTHING
             """), {"cid": cid_str, "tid": tid_str})
             db.commit()
         except Exception:
@@ -2646,18 +2644,31 @@ def remove_tag_from_conversation(
     tid_str = str(tag_id)
     t_id = str(current_tenant.id)
     
-    db.execute(text("""
-        DELETE FROM qa_conversation_tags 
-        WHERE conversation_id = :cid AND tag_id = :tid
-    """), {"cid": cid_str, "tid": tid_str})
-    db.commit()
+    convo = db.query(Conversation).options(joinedload(Conversation.tags)).filter(
+        Conversation.id == cid_str,
+        Conversation.tenant_id == t_id
+    ).first()
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada.")
+
+    tag = db.query(Tag).filter(Tag.id == tid_str, Tag.tenant_id == t_id).first()
+    if tag and tag in convo.tags:
+        convo.tags.remove(tag)
+        db.commit()
+    else:
+        try:
+            db.execute(text("""
+                DELETE FROM qa_conversation_tags 
+                WHERE CAST(conversation_id AS text) = :cid AND CAST(tag_id AS text) = :tid
+            """), {"cid": cid_str, "tid": tid_str})
+            db.commit()
+        except Exception:
+            pass
     
     convo = db.query(Conversation).options(
         joinedload(Conversation.contact),
         joinedload(Conversation.tags)
     ).filter(Conversation.id == cid_str).first()
-    if not convo:
-        raise HTTPException(status_code=404, detail="Conversa não encontrada.")
     return convo
 
 

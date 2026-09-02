@@ -980,14 +980,13 @@ const appRouter = {
         const showContextBtn = document.getElementById("btn-show-context");
         if (state.isContextPanelVisible === undefined) state.isContextPanelVisible = true;
         if (state.isContextPanelVisible) {
-            guestContext.style.display = "block";
+            if (guestContext) guestContext.style.display = "block";
             if (layout) layout.classList.remove("hide-context");
-            if (showContextBtn) showContextBtn.style.display = "none";
         } else {
-            guestContext.style.display = "none";
+            if (guestContext) guestContext.style.display = "none";
             if (layout) layout.classList.add("hide-context");
-            if (showContextBtn) showContextBtn.style.display = "block";
         }
+        if (showContextBtn) showContextBtn.style.display = "inline-flex";
 
         // Se não tiver contato no state, buscar da API
         if (!convo || !convo.contact) {
