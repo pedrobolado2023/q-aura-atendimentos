@@ -60,9 +60,8 @@ def get_rates(db: Session) -> dict:
 
 def can_initiate_conversation(db: Session, tenant_id: str) -> bool:
     """
-    Verifica se a empresa possui saldo (Pré-pago) ou limite disponível (Pós-pago)
-    para iniciar uma nova conversa.
-    Tenants sem billing_mode definido (novos/trial) têm acesso liberado.
+    Verifica se a empresa possui saldo (Pré-pago) para iniciar uma nova conversa.
+    Novos tenants sem plano formal têm acesso liberado (modo trial/grace).
     """
     try:
         tenant_id_str = str(tenant_id)
@@ -70,32 +69,12 @@ def can_initiate_conversation(db: Session, tenant_id: str) -> bool:
         if not tenant:
             return False
 
-        mode = tenant.billing_mode or "prepaid"
-
         # Novos tenants sem plano formal: acesso liberado (modo trial/grace)
         if tenant.plan_id is None:
             return True
 
         balance = Decimal(str(tenant.balance if tenant.balance is not None else 0.0))
-        postpaid_limit = Decimal(str(tenant.postpaid_limit if tenant.postpaid_limit is not None else 100.0))
-
-        if mode == "prepaid":
-            return balance > Decimal("0.00")
-        else:
-            first_day_of_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            try:
-                monthly_spend = db.query(BillingTransaction).filter(
-                    BillingTransaction.tenant_id == tenant_id_str,
-                    BillingTransaction.category.in_(["marketing", "utility", "service"]),
-                    BillingTransaction.created_at >= first_day_of_month
-                ).with_entities(
-                    func.sum(BillingTransaction.amount)
-                ).scalar()
-                monthly_spend = Decimal(str(monthly_spend)) if monthly_spend is not None else Decimal("0.00")
-            except Exception:
-                monthly_spend = Decimal("0.00")
-
-            return monthly_spend < postpaid_limit
+        return balance > Decimal("0.00")
     except Exception as e:
         print(f"[can_initiate_conversation] Error: {e}")
         return True
@@ -103,7 +82,7 @@ def can_initiate_conversation(db: Session, tenant_id: str) -> bool:
 
 def charge_tenant_conversation(db: Session, tenant_id: str, conversation_id: str, category: str, custom_description: str = None) -> bool:
     """
-    Registra o débito de uma conversa no balance da empresa ou na fatura pós-paga.
+    Registra o débito de uma conversa no saldo pré-pago da empresa.
     Usa os preços definidos pelo Superadmin na tabela qa_pricing_config.
     O campo amount é o preço que o cliente vê; cost_meta é o custo real da Meta.
     Retorna True em caso de sucesso ou False se o débito falhar.
@@ -125,15 +104,13 @@ def charge_tenant_conversation(db: Session, tenant_id: str, conversation_id: str
         label     = rate.get("label", category.capitalize())
         description = custom_description or f"{label} iniciada (Meta Cloud API)"
 
-        # Valida se o cliente tem limite/saldo
+        # Valida se o cliente tem saldo disponível
         if not can_initiate_conversation(db, tenant_id_str):
             return False
 
-        # Desconta o saldo em caso de pré-pago
-        mode = tenant.billing_mode or "prepaid"
-        if mode == "prepaid":
-            current_bal = Decimal(str(tenant.balance if tenant.balance is not None else 0.0))
-            tenant.balance = current_bal - amount
+        # Desconta do saldo pré-pago
+        current_bal = Decimal(str(tenant.balance if tenant.balance is not None else 0.0))
+        tenant.balance = current_bal - amount
 
         # Registra a transação no extrato financeiro
         transaction = BillingTransaction(

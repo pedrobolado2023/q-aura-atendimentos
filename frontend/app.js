@@ -1086,15 +1086,40 @@ const appRouter = {
     },
 
     async sendReactivationMessage() {
-        if (!this.currentConversationId) {
-            this.showToast("Nenhuma conversa selecionada", "warning");
+        const convoId = state.activeConversationId;
+        if (!convoId) {
+            showToast("Nenhuma conversa selecionada", "warning");
             return;
         }
 
-        const defaultMessage = "Olá! Nosso atendimento via WhatsApp foi encerrado por inatividade. Gostaria de continuar nosso atendimento? Por favor, responda a esta mensagem para reabrir o chat!";
+        // Garante que os templates estão carregados
+        if (!state.messageTemplates || state.messageTemplates.length === 0) {
+            await this.loadTemplates();
+        }
 
-        const text = prompt("Digite a mensagem de reativação a ser enviada ao cliente:", defaultMessage);
-        if (!text || !text.trim()) return;
+        const templates = state.messageTemplates || [];
+        let chosenTemplate = "primeiro_contato";
+        let chosenLang = "pt_BR";
+
+        if (templates.length > 0) {
+            if (templates.length === 1) {
+                chosenTemplate = templates[0].name;
+                chosenLang = templates[0].language || "pt_BR";
+            } else {
+                // Monta opções para o usuário escolher o template desejado
+                const optionsStr = templates.map((t, i) => `${i + 1} - ${t.label || t.name} (${t.name})`).join("\n");
+                const resp = prompt(`Escolha o modelo de reativação digitando o número correspondente:\n\n${optionsStr}\n\nOu digite o nome exato do template na Meta:`, "1");
+                if (!resp || !resp.trim()) return;
+                
+                const num = parseInt(resp.trim(), 10);
+                if (!isNaN(num) && num >= 1 && num <= templates.length) {
+                    chosenTemplate = templates[num - 1].name;
+                    chosenLang = templates[num - 1].language || "pt_BR";
+                } else {
+                    chosenTemplate = resp.trim();
+                }
+            }
+        }
 
         const btn = document.getElementById("btn-send-reactivation-msg");
         const originalText = btn ? btn.innerHTML : "";
@@ -1102,22 +1127,22 @@ const appRouter = {
         try {
             if (btn) {
                 btn.disabled = true;
-                btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Enviando...`;
+                btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Enviando modelo...`;
             }
 
-            await api.post(`/api/inbox/conversations/${this.currentConversationId}/messages`, {
-                body: text.trim()
+            await api.post("/api/inbox/send-message", {
+                conversation_id: convoId,
+                template_name: chosenTemplate,
+                template_language: chosenLang
             });
 
-            this.showToast("Mensagem de reativação enviada com sucesso!");
+            showToast(`Mensagem de reativação enviada com sucesso (Modelo: ${chosenTemplate})!`, "success");
             
             // Reload conversation messages
-            if (this.currentConversationId) {
-                this.loadConversation(this.currentConversationId);
-            }
+            await this.loadConversation(convoId);
         } catch (err) {
             console.error("Erro ao enviar mensagem de reativação:", err);
-            this.showToast("Erro ao enviar mensagem: " + (err.message || err), "error");
+            showToast("Erro ao enviar mensagem: " + (err.message || err), "error");
         } finally {
             if (btn) {
                 btn.disabled = false;
@@ -1356,8 +1381,31 @@ const appRouter = {
             const listEl = document.getElementById("templates-list-tbody");
             const selectEl = document.getElementById("start-chat-template-select");
 
-            const templates = await api.get("/api/inbox/templates");
-            state.messageTemplates = templates || [];
+            let templates = [];
+            try {
+                templates = await api.get("/api/inbox/templates");
+            } catch (err) {
+                console.warn("[Templates Notice] Usando template padrão de fallback:", err);
+                templates = [{
+                    id: "00000000-0000-0000-0000-000000000001",
+                    name: "primeiro_contato",
+                    label: "Primeiro Contato - Boas-Vindas",
+                    language: "pt_BR",
+                    category: "UTILITY"
+                }];
+            }
+
+            if (!templates || templates.length === 0) {
+                templates = [{
+                    id: "00000000-0000-0000-0000-000000000001",
+                    name: "primeiro_contato",
+                    label: "Primeiro Contato - Boas-Vindas",
+                    language: "pt_BR",
+                    category: "UTILITY"
+                }];
+            }
+
+            state.messageTemplates = templates;
 
             // 1. Atualizar Tabela em Configuracoes
             if (listEl) {
@@ -1370,8 +1418,8 @@ const appRouter = {
                         tr.innerHTML = `
                             <td><code>${tpl.name}</code></td>
                             <td><strong>${tpl.label || tpl.name}</strong></td>
-                            <td><span style="font-size: 11px; background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">${tpl.language}</span></td>
-                            <td><span style="font-size: 11px; font-weight: 700; color: var(--color-brand);">${tpl.category}</span></td>
+                            <td><span style="font-size: 11px; background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">${tpl.language || 'pt_BR'}</span></td>
+                            <td><span style="font-size: 11px; font-weight: 700; color: var(--color-brand);">${tpl.category || 'UTILITY'}</span></td>
                             <td style="text-align: right;"><button type="button" class="btn btn-secondary btn-sm btn-delete-template" data-id="${tpl.id}" style="border-color: var(--color-danger); color: var(--color-danger); background: transparent; padding: 4px 8px; font-size: 11px;"><i class="fa-solid fa-trash"></i> Excluir</button></td>
                         `;
                         listEl.appendChild(tr);
@@ -1401,7 +1449,7 @@ const appRouter = {
                 if (templates && templates.length > 0) {
                     templates.forEach(tpl => {
                         const opt = document.createElement("option");
-                        opt.value = `${tpl.name}|${tpl.language}`;
+                        opt.value = `${tpl.name}|${tpl.language || 'pt_BR'}`;
                         opt.innerText = `${tpl.label || tpl.name} (${tpl.name})`;
                         selectEl.appendChild(opt);
                     });
@@ -1459,16 +1507,16 @@ const appRouter = {
             if (summary) {
                 if (planNameEl) planNameEl.innerText = summary.plan_name || "Pro";
                 if (modeEl) {
-                    modeEl.innerText = summary.billing_mode === "postpaid" ? "PÓS-PAGO" : "PRÉ-PAGO";
-                    modeEl.style.color = summary.billing_mode === "postpaid" ? "var(--color-info)" : "var(--color-success)";
+                    modeEl.innerText = "PRÉ-PAGO";
+                    modeEl.style.color = "var(--color-success)";
                 }
                 if (balanceEl) balanceEl.innerText = `R$ ${(summary.balance || 0).toFixed(2)}`;
                 if (spendEl) spendEl.innerText = `R$ ${(summary.monthly_spend || 0).toFixed(2)}`;
-                if (limitEl) limitEl.innerText = `R$ ${(summary.postpaid_limit || 100).toFixed(2)}`;
-                if (selectModeEl) selectModeEl.value = summary.billing_mode || "prepaid";
+                if (limitEl) limitEl.innerText = `R$ ${(summary.postpaid_limit || 0).toFixed(2)}`;
+                if (selectModeEl) selectModeEl.value = "prepaid";
 
                 if (rechargeSection) {
-                    rechargeSection.style.display = (summary.billing_mode || "prepaid") === "prepaid" ? "flex" : "none";
+                    rechargeSection.style.display = "flex";
                 }
             }
 

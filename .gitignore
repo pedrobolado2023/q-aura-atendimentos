@@ -6,3 +6,5 @@ __pycache__/
 .env
 .idea/
 .vscode/
+scratch/
+*faça_a_animação*

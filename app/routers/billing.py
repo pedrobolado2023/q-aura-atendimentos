@@ -88,9 +88,9 @@ def get_billing_summary(
         monthly_spend = Decimal("0.00")
 
     return BillingSummaryResponse(
-        billing_mode=tenant.billing_mode or "prepaid",
+        billing_mode="prepaid",
         balance=float(tenant.balance if tenant.balance is not None else 0.0),
-        postpaid_limit=float(tenant.postpaid_limit if tenant.postpaid_limit is not None else 100.0),
+        postpaid_limit=0.0,
         monthly_spend=float(monthly_spend),
         plan_name=plan_name
     )
@@ -134,16 +134,13 @@ def change_billing_mode(
     if current_user.role not in ["administrator", "manager"]:
         raise HTTPException(status_code=403, detail="Apenas administradores podem alterar o método de faturamento.")
 
-    if payload.billing_mode not in ["prepaid", "postpaid"]:
-        raise HTTPException(status_code=400, detail="Método de faturamento inválido.")
-
     tenant = get_target_tenant(db, current_user, current_tenant)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
 
-    tenant.billing_mode = payload.billing_mode
+    tenant.billing_mode = "prepaid"
     db.commit()
-    return {"status": "success", "billing_mode": tenant.billing_mode}
+    return {"status": "success", "billing_mode": "prepaid", "message": "O sistema opera exclusivamente no modelo Pré-pago (Recargas via Pix)."}
 
 
 # --- INTEGRAÇÃO REAL MERCADO PAGO ---
@@ -238,6 +235,110 @@ async def create_mp_pix_recharge(
             raise HTTPException(status_code=500, detail=f"Erro de conexão com o Mercado Pago: {str(e)}")
 
 
+@router.post("/subscribe-plan")
+async def create_plan_subscription_pix(
+    plan_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+):
+    """
+    Cria uma cobrança Pix no Mercado Pago para assinar/fazer upgrade de plano.
+    """
+    if current_user.role not in ["administrator", "manager"]:
+        raise HTTPException(status_code=403, detail="Apenas administradores podem assinar ou alterar planos.")
+
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plano não encontrado.")
+
+    tenant = db.query(Tenant).filter(Tenant.id == current_tenant.id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant não encontrado.")
+
+    amount = float(plan.price_monthly) if plan.price_monthly else 0.0
+    if amount <= 0:
+        # Plano gratuito: ativa diretamente
+        tenant.plan_id = plan.id
+        tenant.plan_type = plan.name.lower()
+        if plan.max_users:
+            tenant.max_users = plan.max_users
+        db.commit()
+        return {
+            "success": True,
+            "free": True,
+            "message": f"Plano {plan.name} ativado com sucesso!",
+            "planName": plan.name
+        }
+
+    expiration_date = (datetime.now(timezone.utc) + timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    idempotency_key = str(uuid.uuid4())
+
+    payload = {
+        "transaction_amount": float(round(amount, 2)),
+        "payment_method_id": "pix",
+        "description": f"Assinatura Plano {plan.name} - {tenant.name}",
+        "date_of_expiration": expiration_date,
+        "payer": {
+            "email": current_user.email,
+            "first_name": current_user.name.split(" ")[0] if current_user.name else "Cliente",
+            "last_name": "SaaS",
+            "identification": {
+                "type": "CPF",
+                "number": "00000000000"
+            }
+        }
+    }
+
+    headers = {
+        "Authorization": f"Bearer {settings.MP_ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+        "X-Idempotency-Key": idempotency_key
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post("https://api.mercadopago.com/v1/payments", json=payload, headers=headers)
+            mp_data = response.json()
+
+            if response.status_code != 201:
+                print(f"[MP Error Plan] Status {response.status_code}: {response.text}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=mp_data.get("message", "Erro ao criar pagamento do plano no Mercado Pago")
+                )
+
+            tx_data = mp_data.get("point_of_interaction", {}).get("transaction_data", {})
+            payment_id = str(mp_data.get("id"))
+            qr_code = tx_data.get("qr_code")
+            qr_code_base64 = tx_data.get("qr_code_base64")
+
+            tx = BillingTransaction(
+                id=payment_id,
+                tenant_id=tenant.id,
+                category="plan_pending",
+                amount=Decimal(str(amount)),
+                cost_meta=Decimal("0.00"),
+                description=f"PIX Plano: Assinatura {plan.name} (PlanID: {plan.id}|ID MP: {payment_id})"
+            )
+            db.add(tx)
+            db.commit()
+
+            return {
+                "success": True,
+                "paymentId": payment_id,
+                "qrCode": qr_code,
+                "qrCodeBase64": qr_code_base64,
+                "status": mp_data.get("status"),
+                "planId": str(plan.id),
+                "planName": plan.name,
+                "amount": amount,
+                "expiresAt": mp_data.get("date_of_expiration")
+            }
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=500, detail=f"Erro de conexão com o Mercado Pago: {str(e)}")
+
+
 @router.get("/recharge/status/{payment_id}")
 def check_recharge_status(
     payment_id: str,
@@ -246,7 +347,7 @@ def check_recharge_status(
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
     """
-    Consulta o status de um pagamento Pix de recarga.
+    Consulta o status de um pagamento Pix de recarga ou plano.
     """
     tx = db.query(BillingTransaction).filter(
         BillingTransaction.id == payment_id,
@@ -254,10 +355,10 @@ def check_recharge_status(
     ).first()
     
     if not tx:
-        raise HTTPException(status_code=404, detail="Transação de recarga não encontrada.")
+        raise HTTPException(status_code=404, detail="Transação não encontrada.")
 
     # Se já foi aprovada localmente, retorna
-    if tx.category == "recharge":
+    if tx.category in ["recharge", "plan_payment"]:
         return {"status": "approved"}
 
     # Consulta na API do Mercado Pago
@@ -274,14 +375,31 @@ def check_recharge_status(
         mp_status = mp_data.get("status")
 
         if mp_status == "approved":
-            # Atualiza o saldo e altera a categoria de recharge_pending para recharge oficial
             tenant = db.query(Tenant).filter(Tenant.id == current_tenant.id).first()
-            if tenant and tx.category == "recharge_pending":
-                tenant.balance = (tenant.balance or Decimal("0.00")) + tx.amount
-                tx.category = "recharge"
-                tx.description = f"Recarga de créditos via PIX aprovada (ID MP: {payment_id})"
-                db.commit()
-                return {"status": "approved"}
+            if tenant:
+                if tx.category == "recharge_pending":
+                    tenant.balance = (tenant.balance or Decimal("0.00")) + tx.amount
+                    tx.category = "recharge"
+                    tx.description = f"Recarga de créditos via PIX aprovada (ID MP: {payment_id})"
+                    db.commit()
+                    return {"status": "approved"}
+                elif tx.category == "plan_pending":
+                    # Extrai o plan_id da descrição se presente
+                    if "PlanID: " in (tx.description or ""):
+                        try:
+                            plan_id_extracted = tx.description.split("PlanID: ")[1].split("|")[0].strip()
+                            plan = db.query(Plan).filter(Plan.id == plan_id_extracted).first()
+                            if plan:
+                                tenant.plan_id = plan.id
+                                tenant.plan_type = plan.name.lower()
+                                if plan.max_users:
+                                    tenant.max_users = plan.max_users
+                        except Exception as p_err:
+                            print(f"[Plan Activate Error] {p_err}")
+                    tx.category = "plan_payment"
+                    tx.description = f"Pagamento de assinatura de plano aprovado (ID MP: {payment_id})"
+                    db.commit()
+                    return {"status": "approved"}
 
         return {"status": mp_status}
     except Exception:
@@ -294,7 +412,7 @@ async def mercadopago_webhook(
     db: Session = Depends(get_db)
 ):
     """
-    Webhook público para receber as notificações do Mercado Pago e liberar saldo Pix instantaneamente.
+    Webhook público para receber as notificações do Mercado Pago e liberar saldo Pix / ativar planos instantaneamente.
     """
     try:
         body = await request.json()
@@ -322,17 +440,34 @@ async def mercadopago_webhook(
                     # Busca a transação pendente correspondente no nosso BD
                     tx = db.query(BillingTransaction).filter(
                         BillingTransaction.id == str(data_id),
-                        BillingTransaction.category == "recharge_pending"
+                        BillingTransaction.category.in_(["recharge_pending", "plan_pending"])
                     ).first()
 
                     if tx:
                         tenant = db.query(Tenant).filter(Tenant.id == tx.tenant_id).first()
                         if tenant:
-                            tenant.balance = (tenant.balance or Decimal("0.00")) + tx.amount
-                            tx.category = "recharge"
-                            tx.description = f"Recarga de créditos via PIX aprovada via Webhook (ID MP: {data_id})"
-                            db.commit()
-                            print(f"[Webhook MP] Saldo de R$ {tx.amount} liberado para tenant {tenant.name}")
+                            if tx.category == "recharge_pending":
+                                tenant.balance = (tenant.balance or Decimal("0.00")) + tx.amount
+                                tx.category = "recharge"
+                                tx.description = f"Recarga de créditos via PIX aprovada via Webhook (ID MP: {data_id})"
+                                db.commit()
+                                print(f"[Webhook MP] Saldo de R$ {tx.amount} liberado para tenant {tenant.name}")
+                            elif tx.category == "plan_pending":
+                                if "PlanID: " in (tx.description or ""):
+                                    try:
+                                        plan_id_extracted = tx.description.split("PlanID: ")[1].split("|")[0].strip()
+                                        plan = db.query(Plan).filter(Plan.id == plan_id_extracted).first()
+                                        if plan:
+                                            tenant.plan_id = plan.id
+                                            tenant.plan_type = plan.name.lower()
+                                            if plan.max_users:
+                                                tenant.max_users = plan.max_users
+                                    except Exception as p_err:
+                                        print(f"[Webhook Plan Activate Error] {p_err}")
+                                tx.category = "plan_payment"
+                                tx.description = f"Pagamento de assinatura de plano aprovado via Webhook (ID MP: {data_id})"
+                                db.commit()
+                                print(f"[Webhook MP] Assinatura de plano ativada para tenant {tenant.name}")
         except Exception as e:
             print(f"[Webhook MP Error] Falha ao processar pagamento {data_id}: {e}")
 

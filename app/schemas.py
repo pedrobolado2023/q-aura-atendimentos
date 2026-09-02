@@ -322,6 +322,8 @@ class QuickMessageResponse(BaseModel):
         from_attributes = True
 
 
+from typing import Optional, List, Union, Any
+
 # Message Template Schemas
 class MessageTemplateCreate(BaseModel):
     name: str
@@ -331,13 +333,13 @@ class MessageTemplateCreate(BaseModel):
     body_text: Optional[str] = None
 
 class MessageTemplateResponse(BaseModel):
-    id: UUID
+    id: Union[UUID, str, Any]
     name: str
-    label: str
-    language: str
-    category: str
+    label: Optional[str] = None
+    language: Optional[str] = "pt_BR"
+    category: Optional[str] = "UTILITY"
     body_text: Optional[str] = None
-    is_active: bool = True
+    is_active: Optional[bool] = True
     created_at: Optional[datetime] = None
 
     class Config:

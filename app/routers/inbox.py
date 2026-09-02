@@ -201,7 +201,9 @@ def get_messages(
 
 class SendMessagePayload(BaseModel):
     conversation_id: UUID
-    body: str
+    body: Optional[str] = ""
+    template_name: Optional[str] = None
+    template_language: Optional[str] = "pt_BR"
 
 @router.post("/send-message", response_model=MessageResponse)
 async def send_message(
@@ -211,9 +213,11 @@ async def send_message(
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
     conversation_id = payload.conversation_id
-    body = payload.body.strip()
-    if not body:
-        raise HTTPException(status_code=400, detail="O conteúdo da mensagem (body) não pode estar vazio.")
+    body = (payload.body or "").strip()
+    is_template = bool(payload.template_name and payload.template_name.strip())
+    
+    if not body and not is_template:
+        raise HTTPException(status_code=400, detail="O conteúdo da mensagem ou o nome do modelo (template) deve ser informado.")
 
 
     # 1. Verify conversation
@@ -257,9 +261,6 @@ async def send_message(
     if not creds:
         raise HTTPException(status_code=400, detail="Meta credentials not configured for this tenant")
 
-    # Prepend agent's name in WhatsApp bold format
-    formatted_body = f"*Atendente {current_user.name}:* {body}"
-
     recipient_phone = format_brazilian_phone(contact.phone_number)
     # Auto-repair legacy numbers saved with 12 digits for DDD >= 31
     if len(recipient_phone) == 12 and recipient_phone.startswith("55"):
@@ -278,22 +279,43 @@ async def send_message(
         "Authorization": f"Bearer {creds.permanent_access_token}",
         "Content-Type": "application/json"
     }
-    payload = {
-        "messaging_product": "whatsapp",
-        "recipient_type": "individual",
-        "to": recipient_phone,
-        "type": "text",
-        "text": {
-            "preview_url": False,
-            "body": formatted_body
+
+    if is_template:
+        target_template = payload.template_name.strip()
+        template_lang = payload.template_language or "pt_BR"
+        meta_payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": recipient_phone,
+            "type": "template",
+            "template": {
+                "name": target_template,
+                "language": {"code": template_lang}
+            }
         }
-    }
+        msg_body_record = f"[Template: {target_template}]"
+        msg_type_record = "template"
+    else:
+        # Prepend agent's name in WhatsApp bold format
+        formatted_body = f"*Atendente {current_user.name}:* {body}"
+        meta_payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": recipient_phone,
+            "type": "text",
+            "text": {
+                "preview_url": False,
+                "body": formatted_body
+            }
+        }
+        msg_body_record = formatted_body
+        msg_type_record = "text"
 
     meta_message_id = None
     meta_error_detail = None
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(meta_url, headers=headers, json=payload, timeout=12.0)
+            response = await client.post(meta_url, headers=headers, json=meta_payload, timeout=12.0)
             if response.status_code == 200:
                 res_data = response.json()
                 meta_message_id = res_data.get("messages", [{}])[0].get("id")
@@ -304,7 +326,7 @@ async def send_message(
                     meta_error_detail = err_obj.get("message") or f"Erro Meta HTTP {response.status_code}"
                     err_code = err_obj.get("code")
                     if err_code == 131047 or "24 hours" in str(meta_error_detail).lower():
-                        meta_error_detail = "A janela de 24h para envio de mensagens ativas gratuitas expirou. O cliente precisa enviar uma mensagem primeiro ou você deve enviar um Modelo/Template."
+                        meta_error_detail = "A janela de 24h para envio de mensagens gratuitas expirou. Envie um Modelo (Template) aprovado na Meta."
                 except Exception:
                     meta_error_detail = f"Erro Meta API HTTP {response.status_code}: {response.text[:200]}"
         except Exception as e:
@@ -321,8 +343,8 @@ async def send_message(
         conversation_id=conversation_id,
         sender_type="agent",
         sender_id=current_user.id,
-        message_type="text",
-        body=formatted_body,
+        message_type=msg_type_record,
+        body=msg_body_record,
         meta_message_id=meta_message_id,
         status="sent"
     )
@@ -2099,13 +2121,17 @@ def update_contact(
 
 def ensure_templates_table_exists(db: Session):
     try:
-        db.query(MessageTemplate).first()
-    except Exception:
-        db.rollback()
+        from sqlalchemy import inspect
+        bind = db.get_bind()
+        inspector = inspect(bind)
+        if not inspector.has_table("qa_message_templates"):
+            Base.metadata.tables["qa_message_templates"].create(bind=bind, checkfirst=True)
+    except Exception as ex:
         try:
-            MessageTemplate.__table__.create(bind=db.get_bind(), checkfirst=True)
-        except Exception as ex:
-            print(f"[Database] Notice creating qa_message_templates: {ex}")
+            db.rollback()
+        except Exception:
+            pass
+        print(f"[Database] Notice creating qa_message_templates: {ex}")
 
 @router.get("/templates", response_model=List[MessageTemplateResponse])
 def get_templates(
@@ -2113,31 +2139,60 @@ def get_templates(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
-    ensure_templates_table_exists(db)
-    templates = db.query(MessageTemplate).filter(
-        MessageTemplate.tenant_id == str(current_tenant.id)
-    ).order_by(MessageTemplate.created_at.desc()).all()
+    try:
+        ensure_templates_table_exists(db)
+        templates = db.query(MessageTemplate).filter(
+            MessageTemplate.tenant_id == str(current_tenant.id)
+        ).order_by(MessageTemplate.created_at.desc()).all()
 
-    # Se nao houver nenhum template cadastrado ainda, cadastrar o "primeiro_contato" padrao
-    if not templates:
+        # Se nao houver nenhum template cadastrado ainda, cadastrar o "primeiro_contato" padrao
+        if not templates:
+            try:
+                default_tpl = MessageTemplate(
+                    tenant_id=str(current_tenant.id),
+                    name="primeiro_contato",
+                    label="Primeiro Contato - Boas-Vindas",
+                    language="pt_BR",
+                    category="UTILITY"
+                )
+                db.add(default_tpl)
+                db.commit()
+                db.refresh(default_tpl)
+                templates = [default_tpl]
+            except Exception as e:
+                db.rollback()
+                print(f"[Templates Notice] Could not seed default template: {e}")
+                templates = []
+
+        if not templates:
+            return [
+                MessageTemplateResponse(
+                    id="00000000-0000-0000-0000-000000000001",
+                    name="primeiro_contato",
+                    label="Primeiro Contato - Boas-Vindas",
+                    language="pt_BR",
+                    category="UTILITY",
+                    is_active=True
+                )
+            ]
+
+        return templates
+    except Exception as exc:
         try:
-            default_tpl = MessageTemplate(
-                tenant_id=str(current_tenant.id),
+            db.rollback()
+        except Exception:
+            pass
+        print(f"[Templates Error] Failed fetching templates: {exc}")
+        return [
+            MessageTemplateResponse(
+                id="00000000-0000-0000-0000-000000000001",
                 name="primeiro_contato",
                 label="Primeiro Contato - Boas-Vindas",
                 language="pt_BR",
-                category="UTILITY"
+                category="UTILITY",
+                is_active=True
             )
-            db.add(default_tpl)
-            db.commit()
-            db.refresh(default_tpl)
-            templates = [default_tpl]
-        except Exception as e:
-            db.rollback()
-            print(f"[Templates Notice] Could not seed default template: {e}")
-            templates = []
-
-    return templates
+        ]
 
 
 @router.post("/templates", response_model=MessageTemplateResponse)

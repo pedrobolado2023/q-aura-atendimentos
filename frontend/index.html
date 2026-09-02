@@ -432,15 +432,15 @@
                                 <h3><i class="fa-solid fa-credit-card"></i> Faturamento e Consumo (WhatsApp API)</h3>
                                 <p class="settings-desc" style="margin-bottom: 20px;">Acompanhe seu saldo, controle seu limite mensal de envio ou mude sua forma de faturamento.</p>
 
-                                <!-- Consolidado Financeiro Grid -->
-                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px;">
+                                <!-- Consolidado Financeiro Grid (100% Pré-pago) -->
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
                                     <div style="background: var(--bg-secondary); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 4px;">
                                         <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Plano Contratado</span>
                                         <strong id="billing-plan-name" style="font-size: 18px; color: var(--color-brand); font-weight: 800;">Carregando...</strong>
                                     </div>
                                     <div style="background: var(--bg-secondary); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 4px;">
-                                        <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Método de Cobrança</span>
-                                        <strong id="billing-active-mode" style="font-size: 18px; color: var(--color-info); font-weight: 700;">Carregando...</strong>
+                                        <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Modelo Operacional</span>
+                                        <strong id="billing-active-mode" style="font-size: 18px; color: var(--color-success); font-weight: 700;">PRÉ-PAGO</strong>
                                     </div>
                                     <div style="background: var(--bg-secondary); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 4px;">
                                         <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Saldo Disponível</span>
@@ -450,30 +450,20 @@
                                         <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Consumo no Mês</span>
                                         <strong id="billing-monthly-spend" style="font-size: 18px; color: var(--text-primary); font-weight: 700;">R$ 0,00</strong>
                                     </div>
-                                    <div style="background: var(--bg-secondary); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 4px;">
-                                        <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Limite Mensal (Pós)</span>
-                                        <strong id="billing-postpaid-limit" style="font-size: 18px; color: var(--text-primary); font-weight: 700;">R$ 100,00</strong>
-                                    </div>
                                 </div>
 
-                                <!-- Ações de Gerenciamento Financeiro -->
-                                <div style="display: flex; gap: 20px; align-items: flex-end; margin-bottom: 24px; flex-wrap: wrap;">
-                                    <!-- Seletor de Modo -->
-                                    <div class="input-group" style="margin-bottom: 0; min-width: 220px;">
-                                        <label for="select-billing-mode" style="font-size: 12px; font-weight: 600; margin-bottom: 6px;">Escolher Método de Cobrança</label>
-                                        <select id="select-billing-mode" style="width: 100%; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); padding: 10px; border-radius: var(--radius-sm);">
-                                            <option value="prepaid">Pré-pago (Recarga via Pix)</option>
-                                            <option value="postpaid">Pós-pago (Fatura Mensal)</option>
-                                        </select>
+                                <!-- Ações de Gerenciamento Financeiro (Recarga Pix Direta) -->
+                                <div style="display: flex; gap: 16px; align-items: flex-end; margin-bottom: 24px; flex-wrap: wrap; background: var(--bg-tertiary); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                    <div style="flex: 1; min-width: 200px;">
+                                        <h4 style="margin: 0 0 4px 0; font-size: 13px; font-weight: 700; color: var(--text-primary);"><i class="fa-brands fa-pix" style="color: #00bdae; margin-right: 6px;"></i> Adicionar Créditos via Pix</h4>
+                                        <p style="margin: 0; font-size: 11px; color: var(--text-secondary);">O saldo é creditado instantaneamente após a confirmação do pagamento no banco.</p>
                                     </div>
-
-                                    <!-- Simulação de Recarga (Exibe se for pré-pago) -->
-                                    <div id="prepaid-recharge-section" style="display: flex; align-items: flex-end; gap: 10px;">
+                                    <div style="display: flex; align-items: flex-end; gap: 10px;">
                                         <div class="input-group" style="margin-bottom: 0; width: 140px;">
-                                            <label for="billing-recharge-amount" style="font-size: 12px; font-weight: 600; margin-bottom: 6px;">Valor da Recarga (R$)</label>
-                                            <input type="number" id="billing-recharge-amount" value="50" min="10" style="padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); width: 100%;">
+                                            <label for="billing-recharge-amount" style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Valor (R$)</label>
+                                            <input type="number" id="billing-recharge-amount" value="50" min="10" style="padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); width: 100%;">
                                         </div>
-                                        <button class="btn btn-success" id="btn-billing-recharge" style="padding: 10px 16px;"><i class="fa-solid fa-wallet"></i> Recarregar Saldo</button>
+                                        <button class="btn btn-success" id="btn-billing-recharge" style="padding: 10px 18px; font-weight: 600; display: flex; align-items: center; gap: 6px;"><i class="fa-solid fa-wallet"></i> Recarregar Saldo</button>
                                     </div>
                                 </div>
 
@@ -1398,6 +1388,6 @@
     </script>
 
     <script src="config.js"></script>
-    <script src="app.js?v=1.3.3"></script>
+    <script src="app.js?v=1.3.4"></script>
 </body>
 </html>
