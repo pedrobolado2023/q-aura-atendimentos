@@ -2103,7 +2103,11 @@ def delete_quick_message(
 
 
 class ContactUpdatePayload(BaseModel):
-    name: str
+    name: Optional[str] = None
+    phone_number: Optional[str] = None
+    email: Optional[str] = None
+    sales_funnel_stage: Optional[str] = None
+    loyalty_level: Optional[str] = None
 
 @router.put("/contacts/{contact_id}", response_model=ContactResponse)
 def update_contact(
@@ -2120,7 +2124,19 @@ def update_contact(
     if not contact:
         raise HTTPException(status_code=404, detail="Contato não encontrado")
         
-    contact.name = payload.name
+    if payload.name is not None:
+        contact.name = payload.name.strip()
+    if payload.phone_number is not None:
+        cleaned = format_brazilian_phone(payload.phone_number)
+        if cleaned:
+            contact.phone_number = cleaned
+    if payload.email is not None:
+        contact.email = payload.email.strip()
+    if payload.sales_funnel_stage is not None:
+        contact.sales_funnel_stage = payload.sales_funnel_stage
+    if payload.loyalty_level is not None:
+        contact.loyalty_level = payload.loyalty_level
+
     db.commit()
     db.refresh(contact)
     return contact
