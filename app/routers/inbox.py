@@ -313,7 +313,8 @@ async def send_message(
         except Exception:
             pass
 
-        msg_body_record = f"[Template: {target_template}]"
+        msg_body_record = tpl_db.body_text if (tpl_db and tpl_db.body_text) else f"[Template: {target_template}]"
+        formatted_body = msg_body_record
         msg_type_record = "template"
     else:
         # Prepend agent's name in WhatsApp bold format
