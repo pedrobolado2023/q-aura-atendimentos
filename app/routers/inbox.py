@@ -2810,6 +2810,8 @@ def get_kanban_board(
     )
 
 @router.patch("/contacts/{contact_id}/kanban-stage")
+@router.post("/contacts/{contact_id}/kanban-stage")
+@router.put("/contacts/{contact_id}/kanban-stage")
 def update_contact_kanban_stage(
     contact_id: Union[UUID, str],
     payload: KanbanStageUpdateRequest,

@@ -469,6 +469,31 @@ const api = {
         return response.json();
     },
 
+    async patch(endpoint, data, useAuth = true) {
+        const headers = { "Content-Type": "application/json" };
+        if (useAuth && state.token) {
+            headers["Authorization"] = `Bearer ${state.token}`;
+        }
+        const response = await this.fetchWithTimeout(`${API_URL}${endpoint}`, {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify(data)
+        });
+        if (response.status === 401 && useAuth) {
+            this.handleUnauthorized();
+            throw new Error("Sessão expirada. Redirecionando...");
+        }
+        if (!response.ok) {
+            let detail = `Erro ${response.status}: ${response.statusText}`;
+            try {
+                const errData = await response.json();
+                if (errData && errData.detail) detail = errData.detail;
+            } catch (e) {}
+            throw new Error(detail);
+        }
+        return response.json();
+    },
+
     async delete(endpoint) {
         const headers = {};
         if (state.token) {
@@ -4523,7 +4548,13 @@ const uiHelpers = {
             const allTags = await api.get("/api/inbox/tags");
             state.cachedTags = allTags || [];
             
-            const convo = state.conversations.find(c => String(c.id) === String(state.activeConversationId));
+            let convo = state.conversations.find(c => String(c.id) === String(state.activeConversationId));
+            if (!convo && state.activeConversationId) {
+                try {
+                    convo = await api.get(`/api/inbox/conversations/${state.activeConversationId}/detail`);
+                    if (convo) state.conversations.push(convo);
+                } catch (e) {}
+            }
             const activeTagIds = new Set((convo?.tags || []).map(t => String(t.id)));
             
             if (!allTags || allTags.length === 0) {
@@ -4550,20 +4581,26 @@ const uiHelpers = {
     },
 
     async toggleTagInActiveConvo(tag) {
-        if (!state.activeConversationId) return;
-        const convo = state.conversations.find(c => String(c.id) === String(state.activeConversationId));
-        if (!convo) return;
-        
+        const convoId = state.activeConversationId;
+        if (!convoId) {
+            showToast("Selecione uma conversa primeiro.", "warning");
+            return;
+        }
+        let convo = state.conversations.find(c => String(c.id) === String(convoId));
+        if (!convo) {
+            convo = { id: convoId, tags: [] };
+            state.conversations.push(convo);
+        }
         if (!convo.tags) convo.tags = [];
         const exists = convo.tags.some(t => String(t.id) === String(tag.id));
         
         try {
             if (exists) {
-                await api.delete(`/api/inbox/conversations/${state.activeConversationId}/tags/${tag.id}`);
-                convo.tags = convo.tags.filter(t => String(t.id) !== String(tag.id));
+                const res = await api.delete(`/api/inbox/conversations/${convoId}/tags/${tag.id}`);
+                convo.tags = (res && res.tags) ? res.tags : convo.tags.filter(t => String(t.id) !== String(tag.id));
             } else {
-                await api.post(`/api/inbox/conversations/${state.activeConversationId}/tags/${tag.id}`, {});
-                convo.tags.push(tag);
+                const res = await api.post(`/api/inbox/conversations/${convoId}/tags/${tag.id}`, {});
+                convo.tags = (res && res.tags) ? res.tags : [...convo.tags, tag];
             }
             
             // Re-render chat header tags
@@ -4582,6 +4619,7 @@ const uiHelpers = {
                 });
             }
             
+            showToast(`Etiqueta "${tag.name}" atualizada!`, "success");
             await this.loadAndRenderTagsModal();
         } catch (err) {
             showToast("Erro ao atualizar tag: " + err.message, "error");
@@ -4589,16 +4627,18 @@ const uiHelpers = {
     },
 
     async removeTagFromActiveConvo(tagId) {
-        if (!state.activeConversationId) return;
-        const convo = state.conversations.find(c => String(c.id) === String(state.activeConversationId));
-        if (!convo) return;
+        const convoId = state.activeConversationId;
+        if (!convoId) return;
+        let convo = state.conversations.find(c => String(c.id) === String(convoId));
         
         try {
-            await api.delete(`/api/inbox/conversations/${state.activeConversationId}/tags/${tagId}`);
-            convo.tags = (convo.tags || []).filter(t => String(t.id) !== String(tagId));
+            const res = await api.delete(`/api/inbox/conversations/${convoId}/tags/${tagId}`);
+            if (convo) {
+                convo.tags = (res && res.tags) ? res.tags : (convo.tags || []).filter(t => String(t.id) !== String(tagId));
+            }
             
             const tagsListEl = document.getElementById("active-chat-tags-list");
-            if (tagsListEl) {
+            if (tagsListEl && convo) {
                 tagsListEl.innerHTML = "";
                 convo.tags.forEach(t => {
                     const tagBadge = document.createElement("span");
@@ -4612,6 +4652,7 @@ const uiHelpers = {
                 });
             }
             await this.loadAndRenderTagsModal();
+            showToast("Etiqueta removida!", "info");
         } catch (err) {
             showToast("Erro ao remover tag: " + err.message, "error");
         }
