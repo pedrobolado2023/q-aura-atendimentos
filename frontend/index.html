@@ -1038,7 +1038,7 @@
 
                 <!-- 6. INBOX VIEW (Real-time Inbox Interface) -->
                 <div id="inbox-view" class="workspace-view">
-                    <div class="inbox-layout">
+                    <div class="inbox-layout hide-context">
                         <!-- Left Sidebar: Conversations Queue -->
                         <div class="inbox-sidebar">
                             <div class="inbox-tabs">
@@ -1201,7 +1201,7 @@
                         </div>
 
                         <!-- Right: Context panel -->
-                        <div class="context-panel" id="guest-context" style="display: block; position: relative;">
+                        <div class="context-panel" id="guest-context" style="display: none; position: relative;">
                             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; margin-bottom: 12px;">
                                 <h3 style="margin: 0; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-secondary); border: none; padding: 0;">Ficha do Hóspede</h3>
                                 <button id="btn-hide-context" title="Ocultar Ficha" style="background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 4px;"><i class="fa-solid fa-chevron-right"></i></button>
@@ -1680,6 +1680,6 @@
     <!-- SheetJS for Native Excel (.xlsx, .xls) Parsing -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="config.js"></script>
-    <script src="app.js?v=1.4.4"></script>
+    <script src="app.js?v=1.4.5"></script>
 </body>
 </html>
