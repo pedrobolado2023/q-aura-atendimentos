@@ -74,9 +74,9 @@ try:
                     is_active BOOLEAN DEFAULT TRUE,
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE INDEX IF NOT EXISTS idx_qa_msg_tpl_tenant ON qa_message_templates(tenant_id);
+                )
             """))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_qa_msg_tpl_tenant ON qa_message_templates(tenant_id)"))
     except Exception as tpl_err:
         print(f"[Database] Notice creating qa_message_templates: {tpl_err}")
 

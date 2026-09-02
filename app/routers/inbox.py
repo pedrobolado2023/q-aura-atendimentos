@@ -2142,7 +2142,7 @@ def update_contact(
 def ensure_templates_table_exists(db: Session):
     try:
         from sqlalchemy import text
-        create_sql = text("""
+        db.execute(text("""
             CREATE TABLE IF NOT EXISTS qa_message_templates (
                 id VARCHAR(36) PRIMARY KEY,
                 tenant_id VARCHAR(36) NOT NULL REFERENCES qa_tenants(id) ON DELETE CASCADE,
@@ -2154,11 +2154,14 @@ def ensure_templates_table_exists(db: Session):
                 is_active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE INDEX IF NOT EXISTS idx_qa_msg_tpl_tenant ON qa_message_templates(tenant_id);
-        """)
-        db.execute(create_sql)
+            )
+        """))
         db.commit()
+        try:
+            db.execute(text("CREATE INDEX IF NOT EXISTS idx_qa_msg_tpl_tenant ON qa_message_templates(tenant_id)"))
+            db.commit()
+        except Exception:
+            db.rollback()
     except Exception as ex:
         try:
             db.rollback()
