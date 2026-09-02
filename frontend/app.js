@@ -4773,6 +4773,15 @@ appRouter.loadKanbanBoard = async function() {
         
         container.innerHTML = "";
         
+        const allStages = [
+            { stage: "lead", label: "Novo Lead 📥" },
+            { stage: "qualificacao", label: "Qualificação 💬" },
+            { stage: "prospect", label: "Orçamento Enviado 📄" },
+            { stage: "negociacao", label: "Em Negociação 🤝" },
+            { stage: "customer", label: "Fechado / Ganho 🎉" },
+            { stage: "perdido", label: "Perdido ❌" }
+        ];
+
         data.columns.forEach(col => {
             const colEl = document.createElement("div");
             colEl.className = "kanban-col";
@@ -4791,65 +4800,74 @@ appRouter.loadKanbanBoard = async function() {
                 <div class="kanban-cards-wrapper" id="kanban-cards-${col.stage}"></div>
             `;
             
-            // Drag & drop handlers on column
-            const cardsWrapper = colEl.querySelector(".kanban-cards-wrapper");
-            
-            colEl.addEventListener("dragover", (e) => {
+            // Drag & drop handlers on column and wrapper
+            const handleDragOver = (e) => {
                 e.preventDefault();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
                 colEl.classList.add("drag-over");
-            });
+            };
             
-            colEl.addEventListener("dragleave", (e) => {
+            const handleDragLeave = (e) => {
                 colEl.classList.remove("drag-over");
-            });
+            };
             
-            colEl.addEventListener("drop", async (e) => {
+            const handleDrop = async (e) => {
                 e.preventDefault();
                 colEl.classList.remove("drag-over");
-                const contactId = e.dataTransfer.getData("text/plain");
+                const contactId = e.dataTransfer ? e.dataTransfer.getData("text/plain") : null;
                 if (!contactId) return;
                 
-                try {
-                    await api.patch(`/api/inbox/contacts/${contactId}/kanban-stage`, {
-                        kanban_stage: col.stage
-                    });
-                    showToast(`Card movido para "${col.label}"!`, "success");
-                    appRouter.loadKanbanBoard();
-                } catch (err) {
-                    showToast("Erro ao mover card: " + err.message, "error");
-                }
-            });
+                await appRouter.moveContactStage(contactId, col.stage);
+            };
+
+            colEl.addEventListener("dragover", handleDragOver);
+            colEl.addEventListener("dragenter", handleDragOver);
+            colEl.addEventListener("dragleave", handleDragLeave);
+            colEl.addEventListener("drop", handleDrop);
+            
+            const cardsWrapper = colEl.querySelector(".kanban-cards-wrapper");
+            cardsWrapper.addEventListener("dragover", handleDragOver);
+            cardsWrapper.addEventListener("drop", handleDrop);
             
             // Render cards
-            col.cards.forEach(card => {
+            (col.cards || []).forEach(card => {
                 const cardEl = document.createElement("div");
                 cardEl.className = "kanban-card";
                 cardEl.draggable = true;
                 cardEl.setAttribute("data-contact-id", card.contact_id);
                 
                 cardEl.addEventListener("dragstart", (e) => {
-                    e.dataTransfer.setData("text/plain", card.contact_id);
+                    if (e.dataTransfer) {
+                        e.dataTransfer.effectAllowed = "move";
+                        e.dataTransfer.setData("text/plain", String(card.contact_id));
+                    }
                     cardEl.classList.add("dragging");
                 });
                 
                 cardEl.addEventListener("dragend", () => {
                     cardEl.classList.remove("dragging");
+                    document.querySelectorAll(".kanban-col").forEach(c => c.classList.remove("drag-over"));
                 });
                 
-                const tagsHtml = card.tags.map(t => `<span class="tag-badge" style="background:${t.color || '#6366f1'};font-size:9px;padding:1px 5px;">${escapeHTML(t.name)}</span>`).join("");
+                const tagsHtml = (card.tags || []).map(t => `<span class="tag-badge" style="background:${t.color || '#6366f1'};font-size:9px;padding:1px 5px;">${escapeHTML(t.name)}</span>`).join("");
+                
+                // Select options for 1-click stage move
+                const stageOptions = allStages.map(s => `<option value="${s.stage}" ${s.stage === col.stage ? 'selected' : ''}>${s.label}</option>`).join("");
                 
                 cardEl.innerHTML = `
                     <div class="kanban-card-name">
-                        <span>${escapeHTML(card.name)}</span>
+                        <span style="font-weight: 700;">${escapeHTML(card.name)}</span>
                         <span class="kanban-deal-badge">R$ ${card.deal_value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                     </div>
                     <div class="kanban-card-phone"><i class="fa-brands fa-whatsapp" style="color:#22c55e;margin-right:4px;"></i>${escapeHTML(card.phone_number)}</div>
                     <div class="kanban-card-snippet">${escapeHTML(card.last_message || 'Nenhuma mensagem recente')}</div>
                     ${tagsHtml ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">${tagsHtml}</div>` : ''}
-                    <div class="kanban-card-footer">
-                        <span style="color:var(--text-muted);">${card.assigned_agent_name ? `👤 ${card.assigned_agent_name}` : 'Sem atendente'}</span>
-                        <button class="btn btn-secondary btn-xs" style="padding:2px 8px;font-size:10px;" onclick="event.stopPropagation(); appRouter.openChatFromKanban('${card.id}')">
-                            <i class="fa-solid fa-comments"></i> Abrir Chat
+                    <div class="kanban-card-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 8px;">
+                        <select class="kanban-stage-select" style="font-size: 10px; padding: 2px 4px; border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); max-width: 110px;" onclick="event.stopPropagation()" onchange="appRouter.moveContactStage('${card.contact_id}', this.value)">
+                            ${stageOptions}
+                        </select>
+                        <button class="btn btn-secondary btn-xs" style="padding:3px 8px;font-size:10px;white-space:nowrap;" onclick="event.stopPropagation(); appRouter.openChatFromKanban('${card.id}')">
+                            <i class="fa-solid fa-comments"></i> Chat
                         </button>
                     </div>
                 `;
@@ -4862,6 +4880,19 @@ appRouter.loadKanbanBoard = async function() {
         });
     } catch (err) {
         container.innerHTML = `<div style="text-align:center;padding:60px;width:100%;color:#ef4444;"><p>Erro ao carregar Kanban: ${err.message}</p></div>`;
+    }
+};
+
+appRouter.moveContactStage = async function(contactId, newStage) {
+    if (!contactId || !newStage) return;
+    try {
+        await api.patch(`/api/inbox/contacts/${contactId}/kanban-stage`, {
+            kanban_stage: newStage
+        });
+        showToast("Estágio da oportunidade atualizado com sucesso!", "success");
+        await appRouter.loadKanbanBoard();
+    } catch (err) {
+        showToast("Erro ao mover lead: " + err.message, "error");
     }
 };
 

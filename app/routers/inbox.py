@@ -2673,9 +2673,9 @@ def search_messages(
 def get_kanban_board(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("crm"))
+    current_tenant: Tenant = Depends(get_current_tenant)
 ):
-    """Returns the CRM sales pipeline grouped by stages."""
+    """Returns the CRM sales pipeline grouped by stages with batch loading."""
     stages = [
         {"stage": "lead", "label": "Novo Lead 📥"},
         {"stage": "qualificacao", "label": "Qualificação 💬"},
@@ -2684,51 +2684,76 @@ def get_kanban_board(
         {"stage": "customer", "label": "Fechado / Ganho 🎉"},
         {"stage": "perdido", "label": "Perdido ❌"}
     ]
-    
-    contacts = db.query(Contact).filter(Contact.tenant_id == current_tenant.id).all()
+    t_id = str(current_tenant.id)
+    contacts = db.query(Contact).filter(Contact.tenant_id == t_id).order_by(Contact.created_at.desc()).limit(300).all()
     columns_map = {s["stage"]: [] for s in stages}
     
-    for ct in contacts:
-        stage_key = ct.kanban_stage or ct.sales_funnel_stage or "lead"
-        if stage_key not in columns_map:
-            stage_key = "lead"
-            
-        latest_cv = db.query(Conversation).filter(
-            Conversation.contact_id == ct.id,
-            Conversation.tenant_id == current_tenant.id
-        ).order_by(Conversation.last_message_at.desc()).first()
+    if contacts:
+        contact_ids = [str(c.id) for c in contacts]
         
-        assigned_name = None
-        card_tags = []
-        last_body = None
-        last_at = ct.created_at
-        cv_id = latest_cv.id if latest_cv else ct.id
+        # Batch load conversations with tags (single query O(1))
+        convos = db.query(Conversation).options(
+            joinedload(Conversation.tags)
+        ).filter(
+            Conversation.contact_id.in_(contact_ids),
+            Conversation.tenant_id == t_id
+        ).all()
         
-        if latest_cv:
-            card_tags = [TagResponse.from_orm(t) for t in latest_cv.tags]
-            last_at = latest_cv.last_message_at
-            if latest_cv.assigned_user_id:
-                u = db.query(User).filter(User.id == latest_cv.assigned_user_id).first()
-                if u:
-                    assigned_name = u.name or u.email
-            
-            last_msg = db.query(Message).filter(Message.conversation_id == latest_cv.id).order_by(Message.created_at.desc()).first()
-            if last_msg:
-                last_body = last_msg.body
+        convo_by_contact = {}
+        convo_ids = []
+        for cv in convos:
+            cid_str = str(cv.contact_id)
+            if cid_str not in convo_by_contact:
+                convo_by_contact[cid_str] = cv
+                convo_ids.append(str(cv.id))
                 
-        card = KanbanCard(
-            id=cv_id,
-            contact_id=ct.id,
-            name=ct.name or ct.phone_number,
-            phone_number=ct.phone_number,
-            deal_value=float(ct.deal_value or 0.0),
-            kanban_stage=stage_key,
-            last_message=last_body[:100] if last_body else "Nenhuma mensagem recente",
-            last_message_at=last_at,
-            tags=card_tags,
-            assigned_agent_name=assigned_name
-        )
-        columns_map[stage_key].append(card)
+        # Batch load recent messages
+        last_msg_map = {}
+        if convo_ids:
+            recent_msgs = db.query(Message).filter(
+                Message.conversation_id.in_(convo_ids)
+            ).order_by(Message.created_at.desc()).limit(500).all()
+            for m in recent_msgs:
+                m_cid = str(m.conversation_id)
+                if m_cid not in last_msg_map:
+                    last_msg_map[m_cid] = m.body
+                
+        # Batch load users for agent names
+        users = db.query(User).filter(User.tenant_id == t_id).all()
+        user_name_map = {str(u.id): (u.name or u.email) for u in users}
+        
+        for ct in contacts:
+            stage_key = ct.kanban_stage or ct.sales_funnel_stage or "lead"
+            if stage_key not in columns_map:
+                stage_key = "lead"
+                
+            latest_cv = convo_by_contact.get(str(ct.id))
+            assigned_name = None
+            card_tags = []
+            last_body = None
+            last_at = ct.created_at
+            cv_id = latest_cv.id if latest_cv else ct.id
+            
+            if latest_cv:
+                card_tags = [TagResponse.from_orm(t) for t in latest_cv.tags] if latest_cv.tags else []
+                last_at = latest_cv.last_message_at
+                if latest_cv.assigned_user_id:
+                    assigned_name = user_name_map.get(str(latest_cv.assigned_user_id))
+                last_body = last_msg_map.get(str(latest_cv.id))
+                    
+            card = KanbanCard(
+                id=cv_id,
+                contact_id=ct.id,
+                name=ct.name or ct.phone_number,
+                phone_number=ct.phone_number,
+                deal_value=float(ct.deal_value or 0.0),
+                kanban_stage=stage_key,
+                last_message=last_body or "Nenhuma mensagem recente",
+                last_message_at=last_at,
+                tags=card_tags,
+                assigned_agent_name=assigned_name
+            )
+            columns_map[stage_key].append(card)
         
     columns_out = []
     grand_total_val = 0.0
@@ -2756,14 +2781,16 @@ def get_kanban_board(
 
 @router.patch("/contacts/{contact_id}/kanban-stage")
 def update_contact_kanban_stage(
-    contact_id: UUID,
+    contact_id: Union[UUID, str],
     payload: KanbanStageUpdateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("crm"))
+    current_tenant: Tenant = Depends(get_current_tenant)
 ):
     """Moves a contact to a new Kanban stage and optionally updates deal value."""
-    contact = db.query(Contact).filter(Contact.id == contact_id, Contact.tenant_id == current_tenant.id).first()
+    cid_str = str(contact_id)
+    t_id_str = str(current_tenant.id)
+    contact = db.query(Contact).filter(Contact.id == cid_str, Contact.tenant_id == t_id_str).first()
     if not contact:
         raise HTTPException(status_code=404, detail="Contato não encontrado.")
         
