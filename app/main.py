@@ -26,22 +26,66 @@ try:
             conn.execute(text("ALTER TABLE qa_bot_configs ADD COLUMN flow_data JSON"))
             
     # Check qa_contacts columns
-    columns_contacts = [col["name"] for col in inspector.get_columns("qa_contacts")]
-    if "is_list_contact" not in columns_contacts:
-        print("[Database] Adding is_list_contact column to qa_contacts table...")
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE qa_contacts ADD COLUMN is_list_contact BOOLEAN DEFAULT FALSE"))
+    if inspector.has_table("qa_contacts"):
+        columns_contacts = [col["name"] for col in inspector.get_columns("qa_contacts")]
+        if "is_list_contact" not in columns_contacts:
+            print("[Database] Adding is_list_contact column to qa_contacts table...")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE qa_contacts ADD COLUMN is_list_contact BOOLEAN DEFAULT FALSE"))
+        if "deal_value" not in columns_contacts:
+            print("[Database] Adding deal_value column to qa_contacts table...")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE qa_contacts ADD COLUMN deal_value DOUBLE PRECISION DEFAULT 0.0"))
+        if "kanban_stage" not in columns_contacts:
+            print("[Database] Adding kanban_stage column to qa_contacts table...")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE qa_contacts ADD COLUMN kanban_stage VARCHAR(50) DEFAULT 'lead'"))
 
     # Check qa_conversations columns
-    columns_conv = [col["name"] for col in inspector.get_columns("qa_conversations")]
-    if "is_flagged" not in columns_conv:
-        print("[Database] Adding is_flagged column to qa_conversations table...")
+    if inspector.has_table("qa_conversations"):
+        columns_conv = [col["name"] for col in inspector.get_columns("qa_conversations")]
+        if "is_flagged" not in columns_conv:
+            print("[Database] Adding is_flagged column to qa_conversations table...")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE qa_conversations ADD COLUMN is_flagged BOOLEAN DEFAULT FALSE"))
+        if "flag_type" not in columns_conv:
+            print("[Database] Adding flag_type column to qa_conversations table...")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE qa_conversations ADD COLUMN flag_type TEXT DEFAULT 'none'"))
+        if "csat_score" not in columns_conv:
+            print("[Database] Adding csat_score column to qa_conversations table...")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE qa_conversations ADD COLUMN csat_score INTEGER"))
+        if "csat_sent_at" not in columns_conv:
+            print("[Database] Adding csat_sent_at column to qa_conversations table...")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE qa_conversations ADD COLUMN csat_sent_at TIMESTAMP WITH TIME ZONE"))
+
+    # Ensure qa_tags and qa_conversation_tags tables exist
+    try:
         with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE qa_conversations ADD COLUMN is_flagged BOOLEAN DEFAULT FALSE"))
-    if "flag_type" not in columns_conv:
-        print("[Database] Adding flag_type column to qa_conversations table...")
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE qa_conversations ADD COLUMN flag_type TEXT DEFAULT 'none'"))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS qa_tags (
+                    id VARCHAR(36) PRIMARY KEY,
+                    tenant_id VARCHAR(36) NOT NULL,
+                    name VARCHAR(50) NOT NULL,
+                    color VARCHAR(20) DEFAULT '#6366f1',
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS qa_conversation_tags (
+                    conversation_id VARCHAR(36) NOT NULL,
+                    tag_id VARCHAR(36) NOT NULL,
+                    PRIMARY KEY (conversation_id, tag_id)
+                )
+            """))
+            try:
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_qa_tags_tenant ON qa_tags(tenant_id)"))
+            except Exception:
+                pass
+    except Exception as tag_err:
+        print(f"[Database] Notice creating tags tables: {tag_err}")
 
     # Ensure indexes for high performance queries
     try:
@@ -53,11 +97,12 @@ try:
         print(f"[Database] Index creation notice: {idx_err}")
 
     # Check qa_messages columns
-    columns_msg = [col["name"] for col in inspector.get_columns("qa_messages")]
-    if "internal_note" not in columns_msg:
-        print("[Database] Adding internal_note column to qa_messages table...")
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE qa_messages ADD COLUMN internal_note BOOLEAN DEFAULT FALSE"))
+    if inspector.has_table("qa_messages"):
+        columns_msg = [col["name"] for col in inspector.get_columns("qa_messages")]
+        if "internal_note" not in columns_msg:
+            print("[Database] Adding internal_note column to qa_messages table...")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE qa_messages ADD COLUMN internal_note BOOLEAN DEFAULT FALSE"))
 
     # Ensure qa_message_templates table exists
     try:
