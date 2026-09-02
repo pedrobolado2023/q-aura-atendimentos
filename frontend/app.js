@@ -1107,7 +1107,7 @@ const appRouter = {
         const chatBlockedArea = document.getElementById("chat-blocked-area");
         
         if (chatInputForm && chatBlockedArea) {
-            if (convo && convo.has_active_window) {
+            if (!convo || convo.has_active_window !== false || state.chatMode === "note") {
                 chatInputForm.style.display = "flex";
                 chatBlockedArea.style.display = "none";
             } else {
@@ -4494,6 +4494,8 @@ const uiHelpers = {
         const noteTab = document.getElementById("tab-mode-note");
         const input = document.getElementById("chat-message-input");
         const sendBtn = document.querySelector(".btn-send");
+        const chatInputForm = document.getElementById("chat-input-form");
+        const chatBlockedArea = document.getElementById("chat-blocked-area");
         
         if (mode === "note") {
             if (msgTab) msgTab.classList.remove("active-mode");
@@ -4506,6 +4508,8 @@ const uiHelpers = {
                 sendBtn.innerHTML = `<i class="fa-solid fa-lock"></i>`;
                 sendBtn.style.background = "#f59e0b";
             }
+            if (chatInputForm) chatInputForm.style.display = "flex";
+            if (chatBlockedArea) chatBlockedArea.style.display = "none";
         } else {
             if (msgTab) msgTab.classList.add("active-mode");
             if (noteTab) noteTab.classList.remove("active-mode");
@@ -4516,6 +4520,11 @@ const uiHelpers = {
             if (sendBtn) {
                 sendBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i>`;
                 sendBtn.style.background = "var(--color-brand)";
+            }
+            const convo = state.conversations.find(c => c.id === state.activeConversationId);
+            if (convo && convo.has_active_window === false) {
+                if (chatInputForm) chatInputForm.style.display = "none";
+                if (chatBlockedArea) chatBlockedArea.style.display = "flex";
             }
         }
     },
