@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=block" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-    <link rel="stylesheet" href="style.css?v=1.4.7">
+    <link rel="stylesheet" href="style.css?v=1.4.8">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body class="h-full bg-slate-950 antialiased overflow-x-hidden font-sans">
@@ -1202,9 +1202,10 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- Right: Context panel -->
-                        <div class="context-panel" id="guest-context" style="display: none; position: relative;">
+                    <!-- Right: Context panel (Column 3 of inbox-layout) -->
+                    <div class="context-panel" id="guest-context" style="display: none; position: relative;">
                             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; margin-bottom: 12px;">
                                 <h3 style="margin: 0; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-secondary); border: none; padding: 0;">Ficha do Hóspede</h3>
                                 <button id="btn-hide-context" title="Ocultar Ficha" style="background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 4px;"><i class="fa-solid fa-chevron-right"></i></button>
@@ -1683,6 +1684,6 @@
     <!-- SheetJS for Native Excel (.xlsx, .xls) Parsing -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="config.js"></script>
-    <script src="app.js?v=1.4.7"></script>
+    <script src="app.js?v=1.4.8"></script>
 </body>
 </html>
