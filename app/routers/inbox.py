@@ -7,7 +7,7 @@ from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 from uuid import UUID
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Union, Any
 from sqlalchemy import func
 from app.database import get_db, SessionLocal, engine
 from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig, Department, QuickMessage, MarketingCampaign, CampaignRecipient, MessageTemplate, Tag
