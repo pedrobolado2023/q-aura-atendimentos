@@ -2340,19 +2340,19 @@ def ensure_templates_table_exists(db: Session = None):
 def get_templates(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+    current_tenant: Tenant = Depends(get_current_tenant)
 ):
     try:
         ensure_templates_table_exists(db)
         templates = db.query(MessageTemplate).filter(
-            MessageTemplate.tenant_id == str(current_tenant.id)
+            (MessageTemplate.tenant_id == current_tenant.id) | (MessageTemplate.tenant_id == str(current_tenant.id))
         ).order_by(MessageTemplate.created_at.desc()).all()
 
         # Se nao houver nenhum template cadastrado ainda, cadastrar o "primeiro_contato" padrao
         if not templates:
             try:
                 default_tpl = MessageTemplate(
-                    tenant_id=str(current_tenant.id),
+                    tenant_id=current_tenant.id,
                     name="primeiro_contato",
                     label="Primeiro Contato - Boas-Vindas",
                     language="pt_BR",
@@ -2367,35 +2367,10 @@ def get_templates(
                 print(f"[Templates Notice] Could not seed default template: {e}")
                 templates = []
 
-        if not templates:
-            return [
-                MessageTemplateResponse(
-                    id="00000000-0000-0000-0000-000000000001",
-                    name="primeiro_contato",
-                    label="Primeiro Contato - Boas-Vindas",
-                    language="pt_BR",
-                    category="UTILITY",
-                    is_active=True
-                )
-            ]
-
         return templates
-    except Exception as exc:
-        try:
-            db.rollback()
-        except Exception:
-            pass
-        print(f"[Templates Error] Failed fetching templates: {exc}")
-        return [
-            MessageTemplateResponse(
-                id="00000000-0000-0000-0000-000000000001",
-                name="primeiro_contato",
-                label="Primeiro Contato - Boas-Vindas",
-                language="pt_BR",
-                category="UTILITY",
-                is_active=True
-            )
-        ]
+    except Exception as e:
+        print(f"[Templates Error] {e}")
+        return []
 
 
 @router.post("/templates", response_model=MessageTemplateResponse)
@@ -2403,18 +2378,18 @@ def create_template(
     payload: MessageTemplateCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+    current_tenant: Tenant = Depends(get_current_tenant)
 ):
-    if current_user.role not in ["administrator", "manager"]:
+    if current_user.role not in ["administrator", "manager", "superadmin"]:
         raise HTTPException(status_code=403, detail="Apenas administradores e gestores podem cadastrar templates.")
 
     ensure_templates_table_exists(db)
     clean_name = payload.name.strip().lower().replace(" ", "_")
     if not clean_name:
-        raise HTTPException(status_code=400, detail="Nome do template invalido.")
+        raise HTTPException(status_code=400, detail="Nome do template inválido.")
 
     existing = db.query(MessageTemplate).filter(
-        MessageTemplate.tenant_id == str(current_tenant.id),
+        (MessageTemplate.tenant_id == current_tenant.id) | (MessageTemplate.tenant_id == str(current_tenant.id)),
         MessageTemplate.name == clean_name
     ).first()
 
@@ -2428,7 +2403,7 @@ def create_template(
         return existing
 
     new_tpl = MessageTemplate(
-        tenant_id=str(current_tenant.id),
+        tenant_id=current_tenant.id,
         name=clean_name,
         label=payload.label or clean_name,
         language=payload.language or "pt_BR",
@@ -2446,35 +2421,39 @@ def delete_template(
     template_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+    current_tenant: Tenant = Depends(get_current_tenant)
 ):
-    if current_user.role not in ["administrator", "manager"]:
+    if current_user.role not in ["administrator", "manager", "superadmin"]:
         raise HTTPException(status_code=403, detail="Apenas administradores e gestores podem remover templates.")
 
+    ensure_templates_table_exists(db)
     tpl = db.query(MessageTemplate).filter(
-        MessageTemplate.id == str(template_id),
-        MessageTemplate.tenant_id == str(current_tenant.id)
+        (MessageTemplate.id == template_id) | (MessageTemplate.id == str(template_id)),
+        (MessageTemplate.tenant_id == current_tenant.id) | (MessageTemplate.tenant_id == str(current_tenant.id))
     ).first()
 
     if not tpl:
-        raise HTTPException(status_code=404, detail="Template nao encontrado.")
+        raise HTTPException(status_code=404, detail="Template não encontrado.")
 
     db.delete(tpl)
     db.commit()
-    return {"message": "Template excluido com sucesso."}
+    return {"message": "Template excluído com sucesso."}
 
 
 @router.post("/templates/sync-meta")
 async def sync_meta_templates(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+    current_tenant: Tenant = Depends(get_current_tenant)
 ):
-    if current_user.role not in ["administrator", "manager"]:
+    if current_user.role not in ["administrator", "manager", "superadmin"]:
         raise HTTPException(status_code=403, detail="Apenas administradores e gestores podem sincronizar templates.")
 
     ensure_templates_table_exists(db)
     creds = db.query(MetaCredential).filter((MetaCredential.tenant_id == current_tenant.id) | (MetaCredential.tenant_id == str(current_tenant.id))).first()
+    if not creds:
+        creds = db.query(MetaCredential).first()
+
     if not creds or not creds.permanent_access_token or not (creds.waba_id or creds.phone_number_id):
         raise HTTPException(status_code=400, detail="Credenciais da Meta não configuradas. Preencha a WABA ID (ou Phone Number ID) e o Token Permanente nas Configurações.")
 
@@ -2493,11 +2472,15 @@ async def sync_meta_templates(
     async with httpx.AsyncClient(timeout=30.0) as client:
         # Tenta buscar templates para cada ID candidato
         for candidate_id in candidate_waba_ids:
-            # 1. Tentar direto no candidate_id com v21.0 e v18.0
+            # 1. Tentar direto no candidate_id com v21.0, v20.0 e versão configurada
             for version in ["v21.0", "v20.0", settings.META_API_VERSION or "v18.0"]:
                 url = f"https://graph.facebook.com/{version}/{candidate_id}/message_templates"
                 try:
                     resp = await client.get(url, headers=headers, params={"limit": 250})
+                    if resp.status_code != 200:
+                        # Fallback passando access_token como query param
+                        resp = await client.get(url, params={"access_token": token_clean, "limit": 250})
+                    
                     if resp.status_code == 200:
                         data = resp.json()
                         templates_meta = data.get("data", [])
@@ -2530,42 +2513,39 @@ async def sync_meta_templates(
                 raise HTTPException(status_code=400, detail=f"Erro na Meta API: {last_error}")
 
         for item in templates_meta:
-            status_raw = str(item.get("status", "")).upper()
-            # Aceita modelos aprovados ou ativos
-            if status_raw in ["APPROVED", "ACTIVE", "PAUSED", "IN_APPEAL"] or not status_raw:
-                tpl_name = item.get("name")
-                if not tpl_name:
-                    continue
-                tpl_lang = item.get("language", "pt_BR")
-                tpl_cat = item.get("category", "UTILITY")
+            tpl_name = item.get("name")
+            if not tpl_name:
+                continue
+            tpl_lang = item.get("language", "pt_BR")
+            tpl_cat = item.get("category", "UTILITY")
 
-                body_text = None
-                for comp in item.get("components", []):
-                    if comp.get("type", "").upper() == "BODY":
-                        body_text = comp.get("text")
-                        break
+            body_text = None
+            for comp in item.get("components", []):
+                if comp.get("type", "").upper() == "BODY":
+                    body_text = comp.get("text")
+                    break
 
-                existing = db.query(MessageTemplate).filter(
-                    (MessageTemplate.tenant_id == current_tenant.id) | (MessageTemplate.tenant_id == str(current_tenant.id)),
-                    MessageTemplate.name == tpl_name
-                ).first()
+            existing = db.query(MessageTemplate).filter(
+                (MessageTemplate.tenant_id == current_tenant.id) | (MessageTemplate.tenant_id == str(current_tenant.id)),
+                MessageTemplate.name == tpl_name
+            ).first()
 
-                if not existing:
-                    new_tpl = MessageTemplate(
-                        tenant_id=current_tenant.id,
-                        name=tpl_name,
-                        label=tpl_name.replace("_", " ").title(),
-                        language=tpl_lang,
-                        category=tpl_cat,
-                        body_text=body_text
-                    )
-                    db.add(new_tpl)
-                    synced_count += 1
-                else:
-                    existing.language = tpl_lang
-                    existing.category = tpl_cat
-                    if body_text:
-                        existing.body_text = body_text
+            if not existing:
+                new_tpl = MessageTemplate(
+                    tenant_id=current_tenant.id,
+                    name=tpl_name,
+                    label=tpl_name.replace("_", " ").title(),
+                    language=tpl_lang,
+                    category=tpl_cat,
+                    body_text=body_text
+                )
+                db.add(new_tpl)
+                synced_count += 1
+            else:
+                existing.language = tpl_lang
+                existing.category = tpl_cat
+                if body_text:
+                    existing.body_text = body_text
 
         try:
             db.commit()
@@ -2573,7 +2553,7 @@ async def sync_meta_templates(
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Erro ao salvar templates sincronizados no banco: {str(e)}")
 
-    total_in_db = db.query(MessageTemplate).filter(MessageTemplate.tenant_id == str(current_tenant.id)).count()
+    total_in_db = db.query(MessageTemplate).filter((MessageTemplate.tenant_id == current_tenant.id) | (MessageTemplate.tenant_id == str(current_tenant.id))).count()
     return {
         "message": f"Sincronização concluída! {synced_count} novos modelos adicionados ({total_in_db} modelos no total).",
         "synced_count": synced_count,
