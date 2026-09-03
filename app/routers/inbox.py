@@ -2456,68 +2456,106 @@ async def sync_meta_templates(
 
     ensure_templates_table_exists(db)
     creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == str(current_tenant.id)).first()
-    if not creds or not creds.waba_id or not creds.permanent_access_token:
-        raise HTTPException(status_code=400, detail="Credenciais WABA da Meta nao configuradas. Preencha a WABA ID e Token nas Configurações.")
+    if not creds or not creds.permanent_access_token or not (creds.waba_id or creds.phone_number_id):
+        raise HTTPException(status_code=400, detail="Credenciais da Meta não configuradas. Preencha a WABA ID (ou Phone Number ID) e o Token Permanente nas Configurações.")
 
-    waba_id_clean = creds.waba_id.strip()
     token_clean = creds.permanent_access_token.strip()
+    candidate_waba_ids = []
+    if creds.waba_id and creds.waba_id.strip():
+        candidate_waba_ids.append(creds.waba_id.strip())
+    if creds.phone_number_id and creds.phone_number_id.strip() and creds.phone_number_id.strip() not in candidate_waba_ids:
+        candidate_waba_ids.append(creds.phone_number_id.strip())
 
-    url = f"https://graph.facebook.com/{settings.META_API_VERSION}/{waba_id_clean}/message_templates"
-    params = {"access_token": token_clean, "limit": 100}
-
+    headers = {"Authorization": f"Bearer {token_clean}"}
     synced_count = 0
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.get(url, params=params)
-            if resp.status_code != 200:
-                err_text = resp.json().get("error", {}).get("message", resp.text)
-                raise HTTPException(status_code=400, detail=f"Erro ao buscar templates na Meta API: {err_text}")
-            
-            data = resp.json()
-            templates_meta = data.get("data", [])
+    templates_meta = []
+    last_error = ""
 
-            for item in templates_meta:
-                status_raw = str(item.get("status", "")).upper()
-                if status_raw in ["APPROVED", "ACTIVE"]:
-                    tpl_name = item.get("name")
-                    tpl_lang = item.get("language", "pt_BR")
-                    tpl_cat = item.get("category", "UTILITY")
-
-                    body_text = None
-                    for comp in item.get("components", []):
-                        if comp.get("type", "").upper() == "BODY":
-                            body_text = comp.get("text")
-                            break
-
-                    existing = db.query(MessageTemplate).filter(
-                        MessageTemplate.tenant_id == str(current_tenant.id),
-                        MessageTemplate.name == tpl_name
-                    ).first()
-
-                    if not existing:
-                        new_tpl = MessageTemplate(
-                            tenant_id=str(current_tenant.id),
-                            name=tpl_name,
-                            label=tpl_name.replace("_", " ").title(),
-                            language=tpl_lang,
-                            category=tpl_cat,
-                            body_text=body_text
-                        )
-                        db.add(new_tpl)
-                        synced_count += 1
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Tenta buscar templates para cada ID candidato
+        for candidate_id in candidate_waba_ids:
+            # 1. Tentar direto no candidate_id com v21.0 e v18.0
+            for version in ["v21.0", "v20.0", settings.META_API_VERSION or "v18.0"]:
+                url = f"https://graph.facebook.com/{version}/{candidate_id}/message_templates"
+                try:
+                    resp = await client.get(url, headers=headers, params={"limit": 250})
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        templates_meta = data.get("data", [])
+                        break
                     else:
-                        existing.language = tpl_lang
-                        existing.category = tpl_cat
-                        if body_text:
-                            existing.body_text = body_text
+                        err_obj = resp.json().get("error", {})
+                        last_error = err_obj.get("message", resp.text)
+                        
+                        # Se o erro indicar que o nó é um Phone Number e não WABA, tenta descobrir o WABA ID associado
+                        if "WhatsAppBusinessPhoneNumber" in last_error or "node type" in last_error:
+                            lookup_url = f"https://graph.facebook.com/{version}/{candidate_id}"
+                            lookup_resp = await client.get(lookup_url, headers=headers, params={"fields": "whatsapp_business_account"})
+                            if lookup_resp.status_code == 200:
+                                real_waba = lookup_resp.json().get("whatsapp_business_account", {}).get("id")
+                                if real_waba and real_waba not in candidate_waba_ids:
+                                    candidate_waba_ids.append(real_waba)
+                except Exception as e:
+                    last_error = str(e)
+            
+            if templates_meta:
+                break
 
-            db.commit()
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Falha ao conectar com a Meta: {str(e)}")
+        if not templates_meta and last_error:
+            # Mensagens de erro amigáveis para orientar o usuário
+            if "Error validating access token" in last_error or "Session has expired" in last_error:
+                raise HTTPException(status_code=400, detail="Token da Meta expirado ou inválido. Gere um novo Token Permanente no Meta for Developers.")
+            elif "whatsapp_business_management" in last_error or "permission" in last_error.lower():
+                raise HTTPException(status_code=400, detail="Permissão 'whatsapp_business_management' ausente no Token da Meta.")
+            else:
+                raise HTTPException(status_code=400, detail=f"Erro na Meta API: {last_error}")
 
-    return {"message": f"Sincronização concluida com sucesso. {synced_count} novos modelos adicionados.", "synced_count": synced_count}
+        for item in templates_meta:
+            status_raw = str(item.get("status", "")).upper()
+            # Aceita modelos aprovados ou ativos
+            if status_raw in ["APPROVED", "ACTIVE", "PAUSED", "IN_APPEAL"] or not status_raw:
+                tpl_name = item.get("name")
+                if not tpl_name:
+                    continue
+                tpl_lang = item.get("language", "pt_BR")
+                tpl_cat = item.get("category", "UTILITY")
+
+                body_text = None
+                for comp in item.get("components", []):
+                    if comp.get("type", "").upper() == "BODY":
+                        body_text = comp.get("text")
+                        break
+
+                existing = db.query(MessageTemplate).filter(
+                    MessageTemplate.tenant_id == str(current_tenant.id),
+                    MessageTemplate.name == tpl_name
+                ).first()
+
+                if not existing:
+                    new_tpl = MessageTemplate(
+                        tenant_id=str(current_tenant.id),
+                        name=tpl_name,
+                        label=tpl_name.replace("_", " ").title(),
+                        language=tpl_lang,
+                        category=tpl_cat,
+                        body_text=body_text
+                    )
+                    db.add(new_tpl)
+                    synced_count += 1
+                else:
+                    existing.language = tpl_lang
+                    existing.category = tpl_cat
+                    if body_text:
+                        existing.body_text = body_text
+
+        db.commit()
+
+    total_in_db = db.query(MessageTemplate).filter(MessageTemplate.tenant_id == str(current_tenant.id)).count()
+    return {
+        "message": f"Sincronização concluída! {synced_count} novos modelos adicionados ({total_in_db} modelos no total).",
+        "synced_count": synced_count,
+        "total_templates": total_in_db
+    }
 
 
 @router.get("/debug/webhook-events")
