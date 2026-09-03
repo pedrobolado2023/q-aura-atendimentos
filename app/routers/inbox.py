@@ -131,7 +131,7 @@ def get_conversation_detail(
     conversation_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+    current_tenant: Tenant = Depends(get_current_tenant)
 ):
     """Retorna detalhes completos de uma conversa incluindo contato aninhado."""
     from sqlalchemy.orm import joinedload
@@ -144,8 +144,8 @@ def get_conversation_detail(
             joinedload(Conversation.tags)
         )
         .filter(
-            Conversation.id == convo_id_str,
-            Conversation.tenant_id == tenant_id_str
+            (Conversation.id == conversation_id) | (Conversation.id == convo_id_str),
+            (Conversation.tenant_id == current_tenant.id) | (Conversation.tenant_id == tenant_id_str)
         )
         .first()
     )
@@ -156,7 +156,7 @@ def get_conversation_detail(
     # Preview da última mensagem
     lm = (
         db.query(Message)
-        .filter(Message.conversation_id == convo_id_str)
+        .filter((Message.conversation_id == conversation_id) | (Message.conversation_id == convo_id_str))
         .order_by(Message.created_at.desc())
         .first()
     )
@@ -169,7 +169,7 @@ def get_conversation_detail(
     now = datetime.now(timezone.utc)
     last_contact_msg = (
         db.query(Message)
-        .filter(Message.conversation_id == convo_id_str, Message.sender_type == "contact")
+        .filter((Message.conversation_id == conversation_id) | (Message.conversation_id == convo_id_str), Message.sender_type == "contact")
         .order_by(Message.created_at.desc())
         .first()
     )
@@ -187,22 +187,24 @@ def get_messages(
     conversation_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(ModuleRequired("inbox"))
+    current_tenant: Tenant = Depends(get_current_tenant)
 ):
     convo_id_str = str(conversation_id)
     tenant_id_str = str(current_tenant.id)
 
     # Verify conversation belongs to tenant
     convo = db.query(Conversation).filter(
-        Conversation.id == convo_id_str,
-        Conversation.tenant_id == tenant_id_str
+        (Conversation.id == conversation_id) | (Conversation.id == convo_id_str),
+        (Conversation.tenant_id == current_tenant.id) | (Conversation.tenant_id == tenant_id_str)
     ).first()
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
         
     # Mark conversation as read
     # Retorna no máximo as 150 mensagens mais recentes para resposta ultra-rápida (sub-5ms)
-    recent_messages = db.query(Message).filter(Message.conversation_id == convo_id_str).order_by(Message.created_at.desc()).limit(150).all()
+    recent_messages = db.query(Message).filter(
+        (Message.conversation_id == conversation_id) | (Message.conversation_id == convo_id_str)
+    ).order_by(Message.created_at.desc()).limit(150).all()
     return list(reversed(recent_messages))
 
 class SendMessagePayload(BaseModel):
