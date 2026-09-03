@@ -229,11 +229,15 @@ async def send_message(
 
     # 1. Verify conversation
     convo = db.query(Conversation).filter(
-        Conversation.id == str(conversation_id),
-        Conversation.tenant_id == str(current_tenant.id)
+        Conversation.id == conversation_id,
+        Conversation.tenant_id == current_tenant.id
     ).first()
     if not convo:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        convo = db.query(Conversation).filter(
+            Conversation.id == str(conversation_id)
+        ).first()
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada.")
 
     # 1.1 Se for Nota Interna Privada, grava direto no DB e envia WebSocket apenas para a equipe
     if is_internal:
@@ -2470,7 +2474,7 @@ async def sync_meta_templates(
         raise HTTPException(status_code=403, detail="Apenas administradores e gestores podem sincronizar templates.")
 
     ensure_templates_table_exists(db)
-    creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == str(current_tenant.id)).first()
+    creds = db.query(MetaCredential).filter((MetaCredential.tenant_id == current_tenant.id) | (MetaCredential.tenant_id == str(current_tenant.id))).first()
     if not creds or not creds.permanent_access_token or not (creds.waba_id or creds.phone_number_id):
         raise HTTPException(status_code=400, detail="Credenciais da Meta não configuradas. Preencha a WABA ID (ou Phone Number ID) e o Token Permanente nas Configurações.")
 
@@ -2542,13 +2546,13 @@ async def sync_meta_templates(
                         break
 
                 existing = db.query(MessageTemplate).filter(
-                    MessageTemplate.tenant_id == str(current_tenant.id),
+                    (MessageTemplate.tenant_id == current_tenant.id) | (MessageTemplate.tenant_id == str(current_tenant.id)),
                     MessageTemplate.name == tpl_name
                 ).first()
 
                 if not existing:
                     new_tpl = MessageTemplate(
-                        tenant_id=str(current_tenant.id),
+                        tenant_id=current_tenant.id,
                         name=tpl_name,
                         label=tpl_name.replace("_", " ").title(),
                         language=tpl_lang,

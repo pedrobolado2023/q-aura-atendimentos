@@ -168,12 +168,23 @@ async def add_cache_control_header(request, call_next):
         response.headers["Expires"] = "0"
     return response
 
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request, exc: StarletteHTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+
 @app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    logger.error(f"[Global Exception] Unhandled error on {request.url.path}: {exc}", exc_info=True)
+async def global_exception_handler(request, exc: Exception):
+    import traceback
+    err_str = str(exc)
+    print(f"[Global Exception] {request.method} {request.url.path}: {err_str}\n{traceback.format_exc()}")
     return JSONResponse(
         status_code=500,
-        content={"detail": "Ocorreu um erro interno no servidor. Por favor, tente novamente."}
+        content={"detail": f"Erro interno no servidor: {err_str}"}
     )
 
 @app.websocket("/ws/{tenant_id}")
