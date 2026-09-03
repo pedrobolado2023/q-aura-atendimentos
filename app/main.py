@@ -162,7 +162,7 @@ app.add_middleware(
 async def add_cache_control_header(request, call_next):
     response = await call_next(request)
     path = request.url.path
-    if path == "/" or path.endswith(".html"):
+    if path == "/" or path.endswith(".html") or path.endswith(".js") or path.endswith(".css"):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
