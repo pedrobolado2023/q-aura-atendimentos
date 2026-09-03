@@ -168,14 +168,14 @@ function renderMessageBubble(m) {
         const d = cleanStr ? new Date(cleanStr) : null;
         const timeStr = d ? `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : "";
         
-        noteCard.style.cssText = "background: rgba(245, 158, 11, 0.15) !important; border: 1px solid rgba(245, 158, 11, 0.4) !important; border-left: 4px solid #f59e0b !important; color: #fef08a !important; margin-left: auto; max-width: 80%; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;";
+        noteCard.style.cssText = "background: #fef3c7 !important; border: 1px solid #fcd34d !important; border-left: 4px solid #f59e0b !important; color: #78350f !important; margin-left: auto; max-width: 80%; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);";
         
         noteCard.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; font-size: 11px; font-weight: 700; color: #fbbf24;">
-                <span><i class="fa-solid fa-lock" style="margin-right: 4px;"></i> Nota Interna Privada</span>
-                <span style="opacity: 0.8; font-size: 10px;">${timeStr}</span>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; font-size: 11px; font-weight: 700; color: #92400e;">
+                <span><i class="fa-solid fa-lock" style="margin-right: 4px; color: #d97706;"></i> Nota Interna Privada (Equipe)</span>
+                <span style="opacity: 0.85; font-size: 10px; color: #b45309;">${timeStr}</span>
             </div>
-            <div style="font-size: 13px; color: #fff; line-height: 1.4; white-space: pre-wrap;">${escapeHTML(m.body || "")}</div>
+            <div style="font-size: 13px; font-weight: 500; color: #78350f !important; line-height: 1.45; white-space: pre-wrap;">${escapeHTML(m.body || "")}</div>
         `;
         return noteCard;
     }
