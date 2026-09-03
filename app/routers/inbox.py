@@ -11,7 +11,7 @@ from typing import List, Optional, Union, Any
 from sqlalchemy import func
 from app.database import get_db, SessionLocal, engine
 from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig, Department, QuickMessage, MarketingCampaign, CampaignRecipient, MessageTemplate, Tag
-from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, CampaignResponse, BotConfigResponse, BotConfigUpdate, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, AgentPerformanceMetric, DailyTrafficMetric, StartConversationRequest, QuickMessageCreate, QuickMessageResponse, ContactResponse, MessageTemplateCreate, MessageTemplateResponse, TagCreate, TagResponse, KanbanBoardResponse, KanbanColumn, KanbanCard, KanbanStageUpdateRequest, GlobalSearchResult, ResolveCSATRequest
+from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, CampaignResponse, BotConfigResponse, BotConfigUpdate, BotSimulateRequest, BotSimulateResponse, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, AgentPerformanceMetric, DailyTrafficMetric, StartConversationRequest, QuickMessageCreate, QuickMessageResponse, ContactResponse, MessageTemplateCreate, MessageTemplateResponse, TagCreate, TagResponse, KanbanBoardResponse, KanbanColumn, KanbanCard, KanbanStageUpdateRequest, GlobalSearchResult, ResolveCSATRequest
 from app.auth import get_current_user, get_current_tenant, ModuleRequired
 from app.config import settings
 
@@ -1950,6 +1950,43 @@ def update_bot_config(
     db.commit()
     db.refresh(config)
     return config
+
+
+@router.post("/bot-simulate", response_model=BotSimulateResponse)
+def simulate_bot_flow(
+    payload: BotSimulateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("chatbot"))
+):
+    """
+    Executa uma simulação do fluxo do bot para testes interativos no painel.
+    Permite testar o fluxo em tempo real sem precisar enviar mensagens reais no WhatsApp.
+    """
+    from app.services.bot_flow_engine import BotFlowEngine
+
+    flow_data = payload.flow_data
+    config = db.query(BotConfig).filter(BotConfig.tenant_id == current_tenant.id).first()
+    if not flow_data:
+        flow_data = config.flow_data if config else None
+
+    if not flow_data or not flow_data.get("nodes"):
+        return BotSimulateResponse(
+            replies=["Nenhum bloco configurado no fluxo visual. Desenhe blocos e clique em Salvar Fluxo primeiro."],
+            next_node_id=None,
+            action="end",
+            status="bot"
+        )
+
+    engine = BotFlowEngine(flow_data, config)
+    res = engine.process_step(payload.current_node_id, payload.message)
+
+    return BotSimulateResponse(
+        replies=res.get("replies", []),
+        next_node_id=res.get("next_step_id"),
+        action=res.get("action", "waiting_input"),
+        status=res.get("status", "bot")
+    )
 
 
 @router.get("/dashboard-metrics", response_model=DashboardMetricsResponse)

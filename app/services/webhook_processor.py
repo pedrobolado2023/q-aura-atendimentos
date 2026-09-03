@@ -5,6 +5,7 @@ from app.models import Contact, Conversation, Message, BotConfig, MetaCredential
 from app.config import settings
 from app.database import SessionLocal
 from datetime import datetime, timezone
+from app.services.bot_flow_engine import BotFlowEngine
 
 def format_brazilian_phone(phone: str) -> str:
     if not phone:
@@ -446,14 +447,27 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                             keywords = [k.strip().lower() for k in bot_config.transfer_keywords.split(",") if k.strip()] if bot_config.transfer_keywords else []
                             should_transfer = any(k in body_content.lower() for k in keywords)
 
-                            bot_reply_body = ""
+                            replies_to_send = []
+
                             if should_transfer:
                                 convo.status = "waiting" # Transfer to human queue
                                 convo.assigned_user_id = None
+                                convo.bot_step_id = None
                                 db.commit()
-                                bot_reply_body = "Certo, estou te transferindo para a fila de atendimento humano. Um momento, por favor!"
+                                replies_to_send = ["Certo, estou te transferindo para a fila de atendimento humano. Um momento, por favor!"]
+                            elif bot_config.flow_data and isinstance(bot_config.flow_data, dict) and bot_config.flow_data.get("nodes"):
+                                # Executa Motor do Construtor Visual (Typebot)
+                                engine = BotFlowEngine(bot_config.flow_data, bot_config)
+                                step_res = engine.process_step(convo.bot_step_id, body_content)
+                                replies_to_send = step_res.get("replies", [])
+                                convo.bot_step_id = step_res.get("next_step_id")
+                                if step_res.get("action") == "transfer" or step_res.get("status") == "waiting":
+                                    convo.status = "waiting"
+                                    convo.assigned_user_id = None
+                                    convo.bot_step_id = None
+                                db.commit()
                             else:
-                                # Count previous messages from contact in this conversation to decide between welcome or fallback
+                                # Modo Simples Legado (Boas-vindas / Fallback)
                                 contact_msg_count = db.query(Message).filter(
                                     Message.conversation_id == convo.id,
                                     Message.sender_type == "contact"
@@ -463,8 +477,13 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                                     bot_reply_body = bot_config.welcome_message or bot_config.fallback_message or "Olá! Como posso te ajudar hoje?"
                                 else:
                                     bot_reply_body = bot_config.fallback_message or bot_config.welcome_message or "Olá! Como posso te ajudar hoje?"
+                                if bot_reply_body:
+                                    replies_to_send = [bot_reply_body]
 
-                            if bot_reply_body:
+                            for bot_reply_body in replies_to_send:
+                                if not bot_reply_body:
+                                    continue
+
                                 # Send reply via WhatsApp API
                                 bot_meta_msg_id = await send_whatsapp_text(
                                     phone_number_id=creds.phone_number_id,

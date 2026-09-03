@@ -16,6 +16,8 @@ uuid_type = "UUID" if is_pg else "VARCHAR(36)"
 alter_statements = [
     "ALTER TABLE qa_conversations ADD COLUMN IF NOT EXISTS csat_score INTEGER",
     "ALTER TABLE qa_conversations ADD COLUMN IF NOT EXISTS csat_sent_at TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE qa_conversations ADD COLUMN IF NOT EXISTS bot_step_id VARCHAR(100)",
+    "ALTER TABLE qa_conversations ADD COLUMN IF NOT EXISTS bot_context JSON",
     "ALTER TABLE qa_conversations ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT FALSE",
     "ALTER TABLE qa_conversations ADD COLUMN IF NOT EXISTS flag_type TEXT DEFAULT 'none'",
     "ALTER TABLE qa_contacts ADD COLUMN IF NOT EXISTS deal_value DOUBLE PRECISION DEFAULT 0.0",
@@ -39,10 +41,16 @@ alter_statements = [
 
 for stmt in alter_statements:
     try:
+        current_stmt = stmt
+        if not is_pg:
+            current_stmt = current_stmt.replace(" IF NOT EXISTS", "")
+            if "DROP CONSTRAINT" in current_stmt:
+                continue
         with engine.begin() as conn:
-            conn.execute(text(stmt))
+            conn.execute(text(current_stmt))
     except Exception as e:
-        print(f"[Database Migration Notice] {stmt}: {e}")
+        # Silently ignore column already exists in SQLite
+        pass
 
 # 2. Ensure new tables exist with proper UUID types
 table_statements = [

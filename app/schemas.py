@@ -294,6 +294,17 @@ class BotConfigUpdate(BaseModel):
     n8n_webhook_url: Optional[str] = None
     flow_data: Optional[dict] = None
 
+class BotSimulateRequest(BaseModel):
+    message: str
+    current_node_id: Optional[str] = None
+    flow_data: Optional[dict] = None
+
+class BotSimulateResponse(BaseModel):
+    replies: List[str]
+    next_node_id: Optional[str] = None
+    action: str
+    status: str
+
 # Dashboard Metrics Schemas
 class DepartmentMetric(BaseModel):
     name: str

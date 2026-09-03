@@ -626,6 +626,13 @@
                                 </div>
                             </div>
                             <div style="display:flex;gap:10px;align-items:center;">
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--bg-primary);padding:5px 12px;border-radius:20px;border:1px solid var(--border-color);font-size:12px;font-weight:600;user-select:none;">
+                                    <input type="checkbox" id="bot-builder-active-toggle" onchange="botFlowBuilder.toggleBotActive(this.checked)" style="cursor:pointer;accent-color:#10b981;width:16px;height:16px;">
+                                    <span id="bot-builder-status-label" style="color:var(--text-secondary);">Robô Desativado</span>
+                                </label>
+                                <button class="btn btn-secondary btn-sm" onclick="botFlowBuilder.openSimulator()" style="border-color:#6366f1;color:#6366f1;">
+                                    <i class="fa-solid fa-play"></i> Testar Fluxo
+                                </button>
                                 <button class="btn btn-secondary btn-sm" onclick="botFlowBuilder.clearFlow()"><i class="fa-solid fa-trash-can"></i> Limpar</button>
                                 <button class="btn btn-primary btn-sm" onclick="botFlowBuilder.saveFlow()"><i class="fa-solid fa-floppy-disk"></i> Salvar Fluxo</button>
                             </div>
@@ -1681,6 +1688,45 @@
 
             <div id="global-search-results-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; max-height: 380px; padding-right: 4px;">
                 <p style="text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px;">Digite ao menos 2 caracteres para pesquisar em todo o histórico de mensagens.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: SIMULADOR INTERATIVO DO FLUXO DO BOT -->
+    <div id="bot-simulator-modal" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div class="modal-content" style="background: var(--bg-primary); width: 380px; max-width: 95vw; height: 580px; padding: 0; border-radius: 24px; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border-color);">
+            <!-- Simulator Header -->
+            <div style="background: #075e54; color: white; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 34px; height: 34px; border-radius: 50%; background: #128c7e; display: flex; align-items: center; justify-content: center; font-size: 16px;">
+                        🤖
+                    </div>
+                    <div>
+                        <div style="font-weight: 700; font-size: 13px;">Simulador do Robô</div>
+                        <div style="font-size: 11px; color: #a7f3d0;" id="sim-status-label">Online • Teste em tempo real</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <button type="button" onclick="botFlowBuilder.resetSimulator()" title="Reiniciar Simulação" style="background: rgba(255,255,255,0.15); border: none; border-radius: 6px; color: white; padding: 4px 8px; font-size: 11px; cursor: pointer;">
+                        <i class="fa-solid fa-rotate-right"></i> Reiniciar
+                    </button>
+                    <button type="button" onclick="botFlowBuilder.closeSimulator()" style="background: none; border: none; font-size: 20px; color: white; cursor: pointer; padding: 4px;">
+                        &times;
+                    </button>
+                </div>
+            </div>
+
+            <!-- Simulator Chat Messages -->
+            <div id="bot-sim-messages" style="flex: 1; padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #e5ddd5;">
+                <!-- Messages will be injected here -->
+            </div>
+
+            <!-- Simulator Input Footer -->
+            <div style="padding: 10px 14px; background: #f0f2f5; border-top: 1px solid #ddd; display: flex; gap: 8px; align-items: center;">
+                <input type="text" id="bot-sim-input" placeholder="Digite uma resposta ou número..." style="flex: 1; padding: 10px 14px; border-radius: 20px; border: 1px solid #ccc; font-size: 13px; outline: none; background: white; color: #111;" onkeydown="if(event.key==='Enter') botFlowBuilder.sendSimulatorMessage()">
+                <button type="button" onclick="botFlowBuilder.sendSimulatorMessage()" style="background: #128c7e; color: white; border: none; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                    <i class="fa-solid fa-paper-plane" style="font-size: 13px;"></i>
+                </button>
             </div>
         </div>
     </div>

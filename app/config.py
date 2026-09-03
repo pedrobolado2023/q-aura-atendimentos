@@ -5,7 +5,10 @@ load_dotenv()
 
 class Settings:
     # Use local SQLite database by default for easy testing without needing Supabase credentials
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./q_aura.db")
+    _db_url: str = os.getenv("DATABASE_URL", "sqlite:///./q_aura.db")
+    if os.name != "nt" and "C:/" in _db_url:
+        _db_url = "sqlite:///" + os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "q_aura.db")
+    DATABASE_URL: str = _db_url
     JWT_SECRET: str = os.getenv("JWT_SECRET", "super-secret-jwt-key-replace-in-production-1234567890")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
     META_APP_SECRET: str = os.getenv("META_APP_SECRET", "")

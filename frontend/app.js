@@ -4980,6 +4980,7 @@ appRouter.switchBotMode = function(mode) {
 
 const botFlowBuilder = {
     initialized: false,
+    isActive: true,
     nodes: [],
     connections: [],
     selectedNodeId: null,
@@ -4991,9 +4992,37 @@ const botFlowBuilder = {
         this.loadFlow();
     },
 
+    updateActiveToggleUI(isActive) {
+        const toggle = document.getElementById("bot-builder-active-toggle");
+        const label = document.getElementById("bot-builder-status-label");
+        if (toggle) toggle.checked = !!isActive;
+        if (label) {
+            label.innerText = isActive ? "Robô Ativo" : "Robô Desativado";
+            label.style.color = isActive ? "#10b981" : "var(--text-secondary)";
+        }
+        const simpleToggle = document.getElementById("bot-active-toggle");
+        if (simpleToggle) simpleToggle.checked = !!isActive;
+    },
+
+    async toggleBotActive(active) {
+        try {
+            this.isActive = active;
+            this.updateActiveToggleUI(active);
+            await api.post("/api/inbox/bot-config", { is_active: active });
+            showToast(active ? "Robô ativado com sucesso! Pronto para responder." : "Robô desativado.", active ? "success" : "info");
+        } catch (e) {
+            console.error("Erro ao alterar status do bot:", e);
+            showToast("Erro ao alterar status do robô.", "error");
+        }
+    },
+
     async loadFlow() {
         try {
             const config = await api.get("/api/inbox/bot-config");
+            if (config) {
+                this.isActive = config.is_active !== false;
+                this.updateActiveToggleUI(this.isActive);
+            }
             if (config && config.flow_data && config.flow_data.nodes && config.flow_data.nodes.length > 0) {
                 this.nodes = config.flow_data.nodes;
                 this.connections = config.flow_data.connections || [];
@@ -5148,17 +5177,141 @@ const botFlowBuilder = {
                 connections: this.connections
             };
             const firstTextNode = this.nodes.find(n => n.type === "text");
+            const toggle = document.getElementById("bot-builder-active-toggle");
+            const isActive = toggle ? toggle.checked : true;
             const payload = {
                 flow_data: flowData,
+                is_active: isActive,
                 welcome_message: firstTextNode ? firstTextNode.content : undefined
             };
             const res = await api.post("/api/inbox/bot-config", payload);
             if (res) {
-                showToast("Fluxo do Bot salvo com sucesso!", "success");
+                this.isActive = res.is_active;
+                this.updateActiveToggleUI(this.isActive);
+                showToast("Fluxo do Robô salvo e pronto para atender!", "success");
             }
         } catch (e) {
             console.error("Erro ao salvar fluxo:", e);
             showToast("Erro ao salvar o fluxo visual do bot.", "error");
+        }
+    },
+
+    // SIMULADOR INTERATIVO
+    simCurrentNodeId: null,
+
+    openSimulator() {
+        const modal = document.getElementById("bot-simulator-modal");
+        if (!modal) return;
+        modal.style.display = "flex";
+        this.resetSimulator();
+    },
+
+    closeSimulator() {
+        const modal = document.getElementById("bot-simulator-modal");
+        if (modal) modal.style.display = "none";
+    },
+
+    async resetSimulator() {
+        this.simCurrentNodeId = null;
+        const container = document.getElementById("bot-sim-messages");
+        if (container) container.innerHTML = "";
+        const statusLabel = document.getElementById("sim-status-label");
+        if (statusLabel) {
+            statusLabel.innerText = "Online • Teste em tempo real";
+            statusLabel.style.color = "#a7f3d0";
+        }
+
+        // Inicia a conversa simulando o primeiro contato do cliente
+        this.appendSimMessage("user", "Oi, boa tarde!");
+        await this.callSimulate("Oi, boa tarde!");
+    },
+
+    appendSimMessage(sender, text) {
+        const container = document.getElementById("bot-sim-messages");
+        if (!container) return;
+        const isUser = sender === "user";
+        const bubble = document.createElement("div");
+        bubble.style.maxWidth = "82%";
+        bubble.style.padding = "8px 12px";
+        bubble.style.borderRadius = "10px";
+        bubble.style.fontSize = "12px";
+        bubble.style.lineHeight = "1.4";
+        bubble.style.whiteSpace = "pre-wrap";
+        bubble.style.wordBreak = "break-word";
+        bubble.style.boxShadow = "0 1px 2px rgba(0,0,0,0.1)";
+
+        if (isUser) {
+            bubble.style.alignSelf = "flex-end";
+            bubble.style.background = "#d9fdd3";
+            bubble.style.color = "#111b21";
+        } else {
+            bubble.style.alignSelf = "flex-start";
+            bubble.style.background = "#ffffff";
+            bubble.style.color = "#111b21";
+        }
+
+        bubble.innerText = text;
+        container.appendChild(bubble);
+        container.scrollTop = container.scrollHeight;
+    },
+
+    async sendSimulatorMessage() {
+        const input = document.getElementById("bot-sim-input");
+        if (!input) return;
+        const text = input.value.trim();
+        if (!text) return;
+        input.value = "";
+
+        this.appendSimMessage("user", text);
+        await this.callSimulate(text);
+    },
+
+    async callSimulate(text) {
+        try {
+            const flowData = {
+                nodes: this.nodes,
+                connections: this.connections
+            };
+            const res = await api.post("/api/inbox/bot-simulate", {
+                message: text,
+                current_node_id: this.simCurrentNodeId,
+                flow_data: flowData
+            });
+
+            if (res) {
+                if (res.replies && res.replies.length > 0) {
+                    for (const rep of res.replies) {
+                        this.appendSimMessage("bot", rep);
+                    }
+                }
+                this.simCurrentNodeId = res.next_node_id;
+
+                if (res.action === "transfer") {
+                    const statusLabel = document.getElementById("sim-status-label");
+                    if (statusLabel) {
+                        statusLabel.innerText = "Encaminhado para Atendente 👤";
+                        statusLabel.style.color = "#fef08a";
+                    }
+                    const badge = document.createElement("div");
+                    badge.style.alignSelf = "center";
+                    badge.style.background = "#dcfce7";
+                    badge.style.color = "#166534";
+                    badge.style.fontSize = "11px";
+                    badge.style.fontWeight = "600";
+                    badge.style.padding = "4px 10px";
+                    badge.style.borderRadius = "12px";
+                    badge.style.margin = "6px 0";
+                    badge.innerHTML = `<i class="fa-solid fa-headset" style="margin-right:4px;"></i> Encaminhado para a fila de atendimento humano`;
+                    const container = document.getElementById("bot-sim-messages");
+                    if (container) {
+                        container.appendChild(badge);
+                        container.scrollTop = container.scrollHeight;
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Erro na simulação do bot:", e);
+            this.appendSimMessage("bot", "Erro ao processar simulação. Verifique as conexões dos blocos.");
         }
     },
 

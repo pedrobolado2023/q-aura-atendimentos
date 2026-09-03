@@ -1,6 +1,9 @@
 venv/
+.venv-linux/
 __pycache__/
 *.db
+*.db-shm
+*.db-wal
 *.db-journal
 *.log
 .env

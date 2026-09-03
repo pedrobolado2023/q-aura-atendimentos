@@ -177,6 +177,8 @@ class Conversation(Base):
     flag_type = Column(String(20), default="none")
     csat_score = Column(Integer, nullable=True) # 1 to 5
     csat_sent_at = Column(DateTime(timezone=True), nullable=True)
+    bot_step_id = Column(String(100), nullable=True)
+    bot_context = Column(JSON, nullable=True)
     last_message_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
