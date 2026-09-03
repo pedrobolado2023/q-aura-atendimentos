@@ -91,7 +91,6 @@ def get_conversations(
 
         # Enriquece cada conversa instantaneamente a partir do mapa em memória (O(1))
         result = []
-        from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
         for c in convos:
             try:
@@ -165,7 +164,6 @@ def get_conversation_detail(
         d.last_message_sender_type = lm.sender_type
 
     # Calcula janela de 24 horas
-    from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
     last_contact_msg = (
         db.query(Message)
@@ -291,7 +289,6 @@ async def send_message(
         
     # Validar saldo / limite antes de enviar nova mensagem ativa
     from app.services.charge_service import can_initiate_conversation, charge_tenant_conversation
-    from datetime import datetime, timezone
     
     # Verifica se a janela de 24h já expirou (se sim, cobramos por iniciar uma nova conversação)
     last_contact_msg = (
@@ -498,7 +495,6 @@ async def send_media(
 
     # Validar saldo / limite antes de enviar mídia em nova sessão
     from app.services.charge_service import can_initiate_conversation, charge_tenant_conversation
-    from datetime import datetime, timezone
     import re
     from uuid import uuid4
 
