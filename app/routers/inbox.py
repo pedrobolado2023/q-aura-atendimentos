@@ -1960,9 +1960,21 @@ def get_dashboard_metrics(
 ):
     """
     Calculates live dashboard metrics from the database for the current tenant.
+    Aligned with America/Sao_Paulo (UTC-3) timezone.
     """
     from datetime import datetime, timezone, timedelta
     t_id = current_tenant.id
+
+    # Configuração do Fuso Horário Brasil / São Paulo (UTC-3)
+    try:
+        import zoneinfo
+        tz_sp = zoneinfo.ZoneInfo("America/Sao_Paulo")
+    except Exception:
+        tz_sp = timezone(timedelta(hours=-3))
+
+    now_sp = datetime.now(tz_sp)
+    today_start_sp = now_sp.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start_utc = today_start_sp.astimezone(timezone.utc)
 
     # 1. Real Conversation Counts by Status
     total_convos = db.query(Conversation).filter(Conversation.tenant_id == t_id).count()
@@ -1975,18 +1987,16 @@ def get_dashboard_metrics(
     total_contacts = db.query(Contact).filter(Contact.tenant_id == t_id).count()
     total_messages = db.query(Message).join(Conversation, Message.conversation_id == Conversation.id).filter(Conversation.tenant_id == t_id).count()
 
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     messages_today = 0
     try:
         messages_today = db.query(Message).join(Conversation, Message.conversation_id == Conversation.id).filter(
             Conversation.tenant_id == t_id,
-            Message.created_at >= today_start
+            Message.created_at >= today_start_utc
         ).count()
     except Exception:
-        # Fallback for naive date comparisons
         messages_today = db.query(Message).join(Conversation, Message.conversation_id == Conversation.id).filter(
             Conversation.tenant_id == t_id,
-            Message.created_at >= today_start.replace(tzinfo=None)
+            Message.created_at >= today_start_utc.replace(tzinfo=None)
         ).count()
 
     # 3. Real Bot Resolution Rate
@@ -2029,11 +2039,12 @@ def get_dashboard_metrics(
             DepartmentMetric(name="Atendimento Geral", count=total_convos)
         ]
 
-    # 6. Real Daily Traffic (Last 7 Days) - High Performance Single Aggregation Query
-    cutoff_date = (datetime.now(timezone.utc) - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
+    # 6. Real Daily Traffic (Last 7 Days) - Alinhado a America/Sao_Paulo (UTC-3)
+    cutoff_sp = today_start_sp - timedelta(days=6)
+    cutoff_utc = cutoff_sp.astimezone(timezone.utc)
     traffic_map = {}
     for i in range(7):
-        d_str = (datetime.now(timezone.utc) - timedelta(days=6 - i)).strftime("%d/%m")
+        d_str = (cutoff_sp + timedelta(days=i)).strftime("%d/%m")
         traffic_map[d_str] = {"incoming": 0, "outgoing": 0}
 
     try:
@@ -2042,12 +2053,14 @@ def get_dashboard_metrics(
             Message.created_at
         ).join(Conversation, Message.conversation_id == Conversation.id).filter(
             Conversation.tenant_id == t_id,
-            Message.created_at >= cutoff_date
+            Message.created_at >= cutoff_utc
         ).all()
 
         for msg in recent_msgs:
             if msg.created_at:
-                d_key = msg.created_at.strftime("%d/%m")
+                msg_dt = msg.created_at if msg.created_at.tzinfo else msg.created_at.replace(tzinfo=timezone.utc)
+                msg_sp = msg_dt.astimezone(tz_sp)
+                d_key = msg_sp.strftime("%d/%m")
                 if d_key in traffic_map:
                     if msg.sender_type == "contact":
                         traffic_map[d_key]["incoming"] += 1
@@ -2060,11 +2073,13 @@ def get_dashboard_metrics(
                 Message.created_at
             ).join(Conversation, Message.conversation_id == Conversation.id).filter(
                 Conversation.tenant_id == t_id,
-                Message.created_at >= cutoff_date.replace(tzinfo=None)
+                Message.created_at >= cutoff_utc.replace(tzinfo=None)
             ).all()
             for msg in recent_msgs:
                 if msg.created_at:
-                    d_key = msg.created_at.strftime("%d/%m")
+                    msg_dt = msg.created_at if msg.created_at.tzinfo else msg.created_at.replace(tzinfo=timezone.utc)
+                    msg_sp = msg_dt.astimezone(tz_sp)
+                    d_key = msg_sp.strftime("%d/%m")
                     if d_key in traffic_map:
                         if msg.sender_type == "contact":
                             traffic_map[d_key]["incoming"] += 1
