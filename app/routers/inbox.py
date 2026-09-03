@@ -237,24 +237,33 @@ async def send_message(
 
     # 1.1 Se for Nota Interna Privada, grava direto no DB e envia WebSocket apenas para a equipe
     if is_internal:
-        note_msg = Message(
-            conversation_id=convo.id,
-            sender_type="agent",
-            sender_id=current_user.id,
-            message_type="text",
-            body=body,
-            internal_note=True,
-            status="sent"
-        )
-        db.add(note_msg)
-        convo.last_message_at = datetime.now(timezone.utc)
-        db.commit()
-        db.refresh(note_msg)
+        try:
+            db.execute(text("ALTER TABLE qa_messages ADD COLUMN IF NOT EXISTS internal_note BOOLEAN DEFAULT FALSE"))
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        try:
+            note_msg = Message(
+                conversation_id=convo.id,
+                sender_type="agent",
+                sender_id=current_user.id,
+                message_type="text",
+                body=body,
+                internal_note=True,
+                status="sent"
+            )
+            db.add(note_msg)
+            convo.last_message_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(note_msg)
+        except Exception as db_err:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Erro ao salvar nota interna no banco: {str(db_err)}")
 
         try:
             from app.services.websocket_manager import manager
-            import asyncio
-            asyncio.create_task(manager.broadcast_to_tenant(str(current_tenant.id), {
+            await manager.broadcast_to_tenant(str(current_tenant.id), {
                 "type": "NEW_MESSAGE",
                 "conversation_id": str(convo.id),
                 "message": {
@@ -268,9 +277,9 @@ async def send_message(
                     "internal_note": True,
                     "created_at": note_msg.created_at.isoformat() if note_msg.created_at else datetime.now(timezone.utc).isoformat()
                 }
-            }))
-        except Exception:
-            pass
+            })
+        except Exception as ws_err:
+            print(f"[WebSocket] Notice broadcasting internal note: {ws_err}")
 
         return note_msg
         
@@ -2295,11 +2304,14 @@ def update_contact(
 def ensure_templates_table_exists(db: Session = None):
     try:
         from sqlalchemy import text
+        from app.database import db_url
+        is_pg = not db_url.startswith("sqlite")
+        uuid_type = "UUID" if is_pg else "VARCHAR(36)"
         with engine.begin() as conn:
-            conn.execute(text("""
+            conn.execute(text(f"""
                 CREATE TABLE IF NOT EXISTS qa_message_templates (
-                    id VARCHAR(36) PRIMARY KEY,
-                    tenant_id VARCHAR(36) NOT NULL,
+                    id {uuid_type} PRIMARY KEY,
+                    tenant_id {uuid_type} NOT NULL,
                     name VARCHAR(255) NOT NULL,
                     label VARCHAR(255) NOT NULL,
                     language VARCHAR(20) DEFAULT 'pt_BR',
@@ -2310,6 +2322,9 @@ def ensure_templates_table_exists(db: Session = None):
                     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
                 )
             """))
+            conn.execute(text("ALTER TABLE qa_message_templates ADD COLUMN IF NOT EXISTS body_text TEXT"))
+            conn.execute(text("ALTER TABLE qa_message_templates ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE"))
+            conn.execute(text("ALTER TABLE qa_messages ADD COLUMN IF NOT EXISTS internal_note BOOLEAN DEFAULT FALSE"))
             try:
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_qa_msg_tpl_tenant ON qa_message_templates(tenant_id)"))
             except Exception:
@@ -2548,7 +2563,11 @@ async def sync_meta_templates(
                     if body_text:
                         existing.body_text = body_text
 
-        db.commit()
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Erro ao salvar templates sincronizados no banco: {str(e)}")
 
     total_in_db = db.query(MessageTemplate).filter(MessageTemplate.tenant_id == str(current_tenant.id)).count()
     return {
