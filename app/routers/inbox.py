@@ -2342,15 +2342,17 @@ def get_templates(
 ):
     try:
         ensure_templates_table_exists(db)
+        from sqlalchemy import cast, String
+        t_id_str = str(current_tenant.id)
         templates = db.query(MessageTemplate).filter(
-            (MessageTemplate.tenant_id == current_tenant.id) | (MessageTemplate.tenant_id == str(current_tenant.id))
+            cast(MessageTemplate.tenant_id, String) == t_id_str
         ).order_by(MessageTemplate.created_at.desc()).all()
 
         # Se nao houver nenhum template cadastrado ainda, cadastrar o "primeiro_contato" padrao
         if not templates:
             try:
                 default_tpl = MessageTemplate(
-                    tenant_id=current_tenant.id,
+                    tenant_id=t_id_str,
                     name="primeiro_contato",
                     label="Primeiro Contato - Boas-Vindas",
                     language="pt_BR",
@@ -2382,12 +2384,14 @@ def create_template(
         raise HTTPException(status_code=403, detail="Apenas administradores e gestores podem cadastrar templates.")
 
     ensure_templates_table_exists(db)
+    from sqlalchemy import cast, String
+    t_id_str = str(current_tenant.id)
     clean_name = payload.name.strip().lower().replace(" ", "_")
     if not clean_name:
         raise HTTPException(status_code=400, detail="Nome do template inválido.")
 
     existing = db.query(MessageTemplate).filter(
-        (MessageTemplate.tenant_id == current_tenant.id) | (MessageTemplate.tenant_id == str(current_tenant.id)),
+        cast(MessageTemplate.tenant_id, String) == t_id_str,
         MessageTemplate.name == clean_name
     ).first()
 
@@ -2401,9 +2405,9 @@ def create_template(
         return existing
 
     new_tpl = MessageTemplate(
-        tenant_id=current_tenant.id,
+        tenant_id=t_id_str,
         name=clean_name,
-        label=payload.label or clean_name,
+        label=payload.label or clean_name.replace("_", " ").title(),
         language=payload.language or "pt_BR",
         category=payload.category or "UTILITY",
         body_text=payload.body_text
@@ -2416,7 +2420,7 @@ def create_template(
 
 @router.delete("/templates/{template_id}")
 def delete_template(
-    template_id: UUID,
+    template_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant)
@@ -2425,9 +2429,11 @@ def delete_template(
         raise HTTPException(status_code=403, detail="Apenas administradores e gestores podem remover templates.")
 
     ensure_templates_table_exists(db)
+    from sqlalchemy import cast, String
+    t_id_str = str(current_tenant.id)
     tpl = db.query(MessageTemplate).filter(
-        (MessageTemplate.id == template_id) | (MessageTemplate.id == str(template_id)),
-        (MessageTemplate.tenant_id == current_tenant.id) | (MessageTemplate.tenant_id == str(current_tenant.id))
+        cast(MessageTemplate.id, String) == str(template_id),
+        cast(MessageTemplate.tenant_id, String) == t_id_str
     ).first()
 
     if not tpl:
@@ -2444,16 +2450,29 @@ async def sync_meta_templates(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant)
 ):
+    """
+    Sincroniza automaticamente todos os modelos de templates aprovados
+    diretamente da Meta Graph API para o banco de dados do tenant.
+    """
     if current_user.role not in ["administrator", "manager", "superadmin"]:
         raise HTTPException(status_code=403, detail="Apenas administradores e gestores podem sincronizar templates.")
 
     ensure_templates_table_exists(db)
-    creds = db.query(MetaCredential).filter((MetaCredential.tenant_id == current_tenant.id) | (MetaCredential.tenant_id == str(current_tenant.id))).first()
+    from sqlalchemy import cast, String
+    t_id_str = str(current_tenant.id)
+
+    # 1. Buscar credenciais da Meta
+    creds = db.query(MetaCredential).filter(
+        (MetaCredential.tenant_id == current_tenant.id) | (MetaCredential.tenant_id == t_id_str)
+    ).first()
     if not creds:
         creds = db.query(MetaCredential).first()
 
     if not creds or not creds.permanent_access_token or not (creds.waba_id or creds.phone_number_id):
-        raise HTTPException(status_code=400, detail="Credenciais da Meta não configuradas. Preencha a WABA ID (ou Phone Number ID) e o Token Permanente nas Configurações.")
+        raise HTTPException(
+            status_code=400,
+            detail="Credenciais da Meta (WABA ID ou Token Permanente) não configuradas. Acesse a aba Configurações > Meta para cadastrar."
+        )
 
     token_clean = creds.permanent_access_token.strip()
     candidate_waba_ids = []
@@ -2484,7 +2503,7 @@ async def sync_meta_templates(
                         templates_meta = data.get("data", [])
                         break
                     else:
-                        err_obj = resp.json().get("error", {})
+                        err_obj = resp.json().get("error", {}) if resp.headers.get("content-type", "").startswith("application/json") else {}
                         last_error = err_obj.get("message", resp.text)
                         
                         # Se o erro indicar que o nó é um Phone Number e não WABA, tenta descobrir o WABA ID associado
@@ -2524,13 +2543,13 @@ async def sync_meta_templates(
                     break
 
             existing = db.query(MessageTemplate).filter(
-                (MessageTemplate.tenant_id == current_tenant.id) | (MessageTemplate.tenant_id == str(current_tenant.id)),
+                cast(MessageTemplate.tenant_id, String) == t_id_str,
                 MessageTemplate.name == tpl_name
             ).first()
 
             if not existing:
                 new_tpl = MessageTemplate(
-                    tenant_id=current_tenant.id,
+                    tenant_id=t_id_str,
                     name=tpl_name,
                     label=tpl_name.replace("_", " ").title(),
                     language=tpl_lang,
@@ -2551,7 +2570,7 @@ async def sync_meta_templates(
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Erro ao salvar templates sincronizados no banco: {str(e)}")
 
-    total_in_db = db.query(MessageTemplate).filter((MessageTemplate.tenant_id == current_tenant.id) | (MessageTemplate.tenant_id == str(current_tenant.id))).count()
+    total_in_db = db.query(MessageTemplate).filter(cast(MessageTemplate.tenant_id, String) == t_id_str).count()
     return {
         "message": f"Sincronização concluída! {synced_count} novos modelos adicionados ({total_in_db} modelos no total).",
         "synced_count": synced_count,
