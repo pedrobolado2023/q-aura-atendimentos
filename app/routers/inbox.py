@@ -287,9 +287,16 @@ async def send_message(
 
         return note_msg
         
-    # Validar saldo / limite antes de enviar nova mensagem ativa
-    from app.services.charge_service import can_initiate_conversation, charge_tenant_conversation
+    # Validar saldo / limite antes de enviar nova mensagem ativa para o WhatsApp
+    from app.services.charge_service import tenant_has_sufficient_balance, can_initiate_conversation, charge_tenant_conversation
     
+    # Se o cliente não tiver saldo disponível para consumir durante o uso, não permite enviar mensagem
+    if not payload.internal_note and not tenant_has_sufficient_balance(db, current_tenant.id):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED, 
+            detail="Saldo insuficiente para envio de mensagens. Recarregue seus créditos para continuar atendendo seus clientes."
+        )
+
     # Verifica se a janela de 24h já expirou (se sim, cobramos por iniciar uma nova conversação)
     last_contact_msg = (
         db.query(Message)
@@ -303,12 +310,6 @@ async def send_message(
         diff_hours = (datetime.now(timezone.utc) - created_at_tz).total_seconds() / 3600
         if diff_hours <= 24.0:
             is_new_session = False
-
-    if is_new_session and not can_initiate_conversation(db, current_tenant.id):
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED, 
-            detail="Saldo insuficiente ou limite pós-pago atingido. Efetue uma recarga para continuar enviando mensagens ativas."
-        )
 
     contact = db.query(Contact).filter(Contact.id == convo.contact_id).first()
     if not contact:
@@ -493,10 +494,16 @@ async def send_media(
     if not convo:
         raise HTTPException(status_code=404, detail="Conversa não encontrada.")
 
-    # Validar saldo / limite antes de enviar mídia em nova sessão
-    from app.services.charge_service import can_initiate_conversation, charge_tenant_conversation
+    # Validar saldo / limite antes de enviar mídia
+    from app.services.charge_service import tenant_has_sufficient_balance, can_initiate_conversation, charge_tenant_conversation
     import re
     from uuid import uuid4
+
+    if not tenant_has_sufficient_balance(db, current_tenant.id):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED, 
+            detail="Saldo insuficiente para envio de mensagens e arquivos. Recarregue seus créditos para continuar atendendo seus clientes."
+        )
 
     last_contact_msg = (
         db.query(Message)
@@ -510,12 +517,6 @@ async def send_media(
         diff_hours = (datetime.now(timezone.utc) - created_at_tz).total_seconds() / 3600
         if diff_hours <= 24.0:
             is_new_session = False
-
-    if is_new_session and not can_initiate_conversation(db, current_tenant.id):
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED, 
-            detail="Saldo insuficiente ou limite pós-pago atingido. Efetue uma recarga para continuar enviando mensagens ativas."
-        )
 
     contact = db.query(Contact).filter(Contact.id == convo.contact_id).first()
     if not contact:
@@ -714,6 +715,13 @@ async def send_bot_message(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(ModuleRequired("inbox"))
 ):
+    from app.services.charge_service import tenant_has_sufficient_balance
+    if not tenant_has_sufficient_balance(db, current_tenant.id):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Saldo insuficiente para envio de mensagens."
+        )
+
     if not payload.conversation_id and not payload.phone_number:
         raise HTTPException(status_code=400, detail="Either conversation_id or phone_number must be provided.")
 

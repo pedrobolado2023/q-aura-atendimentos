@@ -328,24 +328,49 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                     else:
                         # Se a conversa estava resolvida e foi enviada pesquisa CSAT recentemente:
                         if convo.status == "resolved":
-                            clean_txt = (body_content or "").strip()
+                            import re
+                            clean_txt = (body_content or "").strip().lower()
                             csat_val = None
-                            if clean_txt in ["1", "2", "3", "4", "5"]:
-                                csat_val = int(clean_txt)
-                            elif "⭐" in clean_txt:
-                                csat_val = min(max(clean_txt.count("⭐"), 1), 5)
-                            elif clean_txt.lower() in ["excelente", "otimo", "ótimo", "muito bom", "perfeito", "10"]:
-                                csat_val = 5
-                            elif clean_txt.lower() in ["bom", "legal", "ok", "positivo"]:
-                                csat_val = 4
-                            elif clean_txt.lower() in ["regular", "médio"]:
-                                csat_val = 3
-                            elif clean_txt.lower() in ["ruim", "péssimo"]:
-                                csat_val = 1
 
-                            if csat_val and convo.csat_sent_at and convo.csat_score is None:
+                            # 1. Identifica nota por estrelas ou texto
+                            if "⭐" in clean_txt or "★" in clean_txt:
+                                count = clean_txt.count("⭐") + clean_txt.count("★")
+                                csat_val = min(max(count, 1), 5)
+                            else:
+                                lead_match = re.search(r"\b(10|[1-5])\b", clean_txt)
+                                if lead_match:
+                                    num = int(lead_match.group(1))
+                                    csat_val = 5 if num == 10 else num
+                                elif any(w in clean_txt for w in ["excelente", "otimo", "ótimo", "muito bom", "perfeito", "maravilhoso", "top", "show"]):
+                                    csat_val = 5
+                                elif any(w in clean_txt for w in ["bom", "legal", "positivo", "gostei"]):
+                                    csat_val = 4
+                                elif any(w in clean_txt for w in ["regular", "médio", "medio", "razoável", "razoavel"]):
+                                    csat_val = 3
+                                elif any(w in clean_txt for w in ["ruim", "péssimo", "pessimo", "horrível", "horrivel", "fraco"]):
+                                    csat_val = 1
+
+                            # Se o cliente enviou uma nota e a avaliação ainda não foi gravada:
+                            if csat_val and convo.csat_score is None:
                                 convo.csat_score = csat_val
                                 stars_str = "⭐" * csat_val
+
+                                # Grava a mensagem do contato com a nota
+                                contact_msg = Message(
+                                    conversation_id=convo.id,
+                                    sender_type="contact",
+                                    sender_id=contact.id,
+                                    message_type=msg_type,
+                                    body=body_content,
+                                    media_url=media_url,
+                                    media_mime_type=media_mime,
+                                    meta_message_id=meta_msg_id,
+                                    status="delivered",
+                                    created_at=msg_created_at
+                                )
+                                db.add(contact_msg)
+
+                                # Grava a nota de sistema CSAT
                                 sys_msg = Message(
                                     conversation_id=convo.id,
                                     sender_type="system",
@@ -359,10 +384,74 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
 
                                 # Responde com agradecimento automático via WhatsApp
                                 thanks_msg = f"Obrigado pela sua avaliação com nota {csat_val} estrelas! Sua opinião nos ajuda a evoluir sempre. Tenha um excelente dia! ✨"
-                                send_whatsapp_text(tenant_id, contact.phone_number, thanks_msg, db, convo.id)
+                                creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == tenant_id).first()
+                                if creds and creds.phone_number_id and creds.permanent_access_token:
+                                    try:
+                                        thanks_meta_id = await send_whatsapp_text(
+                                            creds.phone_number_id,
+                                            creds.permanent_access_token,
+                                            contact.phone_number,
+                                            thanks_msg
+                                        )
+                                        thanks_db_msg = Message(
+                                            conversation_id=convo.id,
+                                            sender_type="bot",
+                                            message_type="text",
+                                            body=thanks_msg,
+                                            meta_message_id=thanks_meta_id,
+                                            status="sent" if thanks_meta_id else "failed",
+                                            created_at=datetime.now(timezone.utc)
+                                        )
+                                        db.add(thanks_db_msg)
+                                        db.commit()
+                                    except Exception as send_err:
+                                        print(f"[CSAT Thanks Send Error] {send_err}")
+
+                                # Broadcast via WebSocket para atualizar a tela do operador
+                                await websocket_broadcast_fn(tenant_id, {
+                                    "type": "new_message",
+                                    "id": contact_msg.id,
+                                    "conversation_id": convo.id,
+                                    "sender_type": "contact",
+                                    "body": body_content,
+                                    "message_type": msg_type,
+                                    "unread": False,
+                                    "contact_name": contact.name or contact.phone_number,
+                                    "contact_phone": contact.phone_number,
+                                    "csat_score": csat_val,
+                                    "status": "resolved"
+                                })
+
+                                # A conversa permanece resolvida - NÃO reabre e NÃO executa robô
                                 continue
 
-                            # Caso não seja nota de CSAT, reabre a conversa normalmente
+                            # Se o cliente já avaliou e mandou uma mensagem de despedida / cortesia:
+                            courtesy_words = ["obrigado", "obrigada", "valeu", "por nada", "de nada", "tchau", "amém", "amem", "bom dia", "boa tarde", "boa noite", "tmj", "ok", "👍", "🙏", "grato", "grata"]
+                            if convo.csat_score is not None and any(w in clean_txt for w in courtesy_words):
+                                contact_msg = Message(
+                                    conversation_id=convo.id,
+                                    sender_type="contact",
+                                    sender_id=contact.id,
+                                    message_type=msg_type,
+                                    body=body_content,
+                                    meta_message_id=meta_msg_id,
+                                    status="delivered",
+                                    created_at=msg_created_at
+                                )
+                                db.add(contact_msg)
+                                db.commit()
+                                await websocket_broadcast_fn(tenant_id, {
+                                    "type": "new_message",
+                                    "id": contact_msg.id,
+                                    "conversation_id": convo.id,
+                                    "sender_type": "contact",
+                                    "body": body_content,
+                                    "message_type": msg_type,
+                                    "status": "resolved"
+                                })
+                                continue
+
+                            # Caso não seja nota de CSAT nem cortesia, reabre a conversa normalmente
                             convo.status = "bot" if is_any_bot_enabled else "waiting"
                             convo.assigned_user_id = None # Reinicia atendimento se foi resolvida
                             sys_text = "🤖 Conversa reaberta e enviada ao Robô Chatbot" if is_any_bot_enabled else "⏳ Conversa reaberta e enviada para a fila de atendimento"

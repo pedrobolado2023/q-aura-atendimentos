@@ -58,10 +58,12 @@ def get_rates(db: Session) -> dict:
         return _DEFAULT_RATES
 
 
-def can_initiate_conversation(db: Session, tenant_id: str) -> bool:
+def tenant_has_sufficient_balance(db: Session, tenant_id: str) -> bool:
     """
-    Verifica se a empresa possui saldo (Pré-pago) para iniciar uma nova conversa.
-    Novos tenants sem plano formal têm acesso liberado (modo trial/grace).
+    Verifica se a empresa possui saldo disponível para envio de mensagens pelos atendentes/vendedores.
+    - Se o tenant for pré-pago (padrão): saldo precisa ser estritamente positivo (> 0.00).
+    - Se o tenant for pós-pago: saldo + limite pós-pago precisa ser > 0.00.
+    - Bloqueia envio se o saldo estiver esgotado ou zerado.
     """
     try:
         tenant_id_str = str(tenant_id)
@@ -69,15 +71,25 @@ def can_initiate_conversation(db: Session, tenant_id: str) -> bool:
         if not tenant:
             return False
 
-        # Novos tenants sem plano formal: acesso liberado (modo trial/grace)
-        if tenant.plan_id is None:
-            return True
-
         balance = Decimal(str(tenant.balance if tenant.balance is not None else 0.0))
+        billing_mode = getattr(tenant, "billing_mode", "prepaid") or "prepaid"
+
+        if billing_mode == "postpaid":
+            limit = Decimal(str(tenant.postpaid_limit if tenant.postpaid_limit is not None else 100.0))
+            return (balance + limit) > Decimal("0.00")
+
+        # Modo pré-pago: exige saldo estritamente positivo
         return balance > Decimal("0.00")
     except Exception as e:
-        print(f"[can_initiate_conversation] Error: {e}")
-        return True
+        print(f"[tenant_has_sufficient_balance] Error: {e}")
+        return False
+
+
+def can_initiate_conversation(db: Session, tenant_id: str) -> bool:
+    """
+    Verifica se a empresa possui saldo para iniciar uma nova conversa ou mensagem ativa.
+    """
+    return tenant_has_sufficient_balance(db, tenant_id)
 
 
 def charge_tenant_conversation(db: Session, tenant_id: str, conversation_id: str, category: str, custom_description: str = None) -> bool:
