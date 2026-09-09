@@ -786,127 +786,285 @@ class SuperadminRouter {
         if (!previewEl) return;
 
         previewEl.innerHTML = `
-            <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 18px; margin-bottom: 22px;">
-                <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 6px;">
-                    <img src="favicon.png" alt="Q-Aura Logo" style="width: 28px; height: 28px; border-radius: 6px; object-fit: cover;">
-                    <span style="font-size: 15pt; font-weight: 800; letter-spacing: -0.5px; color: #0f172a;">Q-AURA ATENDIMENTOS OMNICHANNEL</span>
+            <!-- ══════════════════════ PÁGINA 1 DE 3 ══════════════════════ -->
+            <div class="contract-page">
+                <div>
+                    <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 14px; margin-bottom: 20px;">
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 6px;">
+                            <img src="favicon.png" alt="Q-Aura Logo" style="width: 28px; height: 28px; border-radius: 6px; object-fit: cover;">
+                            <span style="font-size: 15pt; font-weight: 800; letter-spacing: -0.5px; color: #0f172a;">Q-AURA ATENDIMENTOS OMNICHANNEL</span>
+                        </div>
+                        <h1 style="font-size: 12.5pt; margin: 4px 0; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; line-height: 1.3;">
+                            CONTRATO DE LICENÇA DE USO DE SOFTWARE (SAAS) E PRESTAÇÃO DE SERVIÇOS TÉCNICOS
+                        </h1>
+                        <p style="margin: 3px 0 0; font-size: 9pt; color: #64748b; font-style: italic;">
+                            Instrumento Particular de Prestação de Serviços Digitais e Cessão Temporária de Uso de Plataforma
+                        </p>
+                    </div>
+
+                    <p style="text-align: justify; margin-bottom: 12px; font-size: 11pt;">
+                        Pelo presente instrumento particular, as partes a seguir qualificadas:
+                    </p>
+
+                    <div style="background: #f8fafc; border-left: 3px solid #6366f1; padding: 10px 14px; margin-bottom: 12px; font-size: 10.5pt; line-height: 1.45;">
+                        <strong>CONTRATADA (LICENCIANTE):</strong> <strong>${licensorName}</strong>, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº <strong>${licensorCnpj}</strong>, com sede em <strong>${licensorAddress}</strong>, doravante denominada simplesmente <strong>CONTRATADA</strong>; e, de outro lado,
+                    </div>
+
+                    <div style="background: #f8fafc; border-left: 3px solid #10b981; padding: 10px 14px; margin-bottom: 18px; font-size: 10.5pt; line-height: 1.45;">
+                        <strong>CONTRATANTE (LICENCIADA):</strong> <strong>${clientName}</strong>, inscrita no CNPJ/CPF sob o nº <strong>${clientCnpj}</strong>, com sede/endereço em <strong>${clientAddress}</strong>, representada neste ato por <strong>${clientRep}</strong> (e-mail: <em>${clientEmail}</em>), doravante denominada simplesmente <strong>CONTRATANTE</strong>;
+                    </div>
+
+                    <p style="text-align: justify; margin-bottom: 14px; font-size: 11pt;">
+                        Têm, entre si, justo e acordado o presente Contrato de Licença de Uso e Prestação de Serviços, que se regerá mediante as seguintes cláusulas e condições:
+                    </p>
+
+                    <h3 style="font-size: 11pt; font-weight: 700; color: #0f172a; margin: 16px 0 6px; text-transform: uppercase;">
+                        CLÁUSULA PRIMEIRA – DO OBJETO E ESPECIFICAÇÕES
+                    </h3>
+                    <p style="text-align: justify; margin-bottom: 8px; font-size: 10.5pt;">
+                        <strong>1.1.</strong> O presente contrato tem por objeto a cessão de direito de uso temporário, em caráter não exclusivo e intransferível, do software em nuvem (SaaS) denominado <strong>Q-AURA ATENDIMENTOS & CRM OMNICHANNEL</strong>, compreendendo os módulos de painel multi-atendente em tempo real, filas de distribuição por departamentos, robô chatbot automatizado, central de relatórios de métricas e integração oficial com a API do WhatsApp (Meta Cloud API).
+                    </p>
+                    <p style="text-align: justify; margin-bottom: 12px; font-size: 10.5pt;">
+                        <strong>1.2.</strong> A contratação dá direito estritamente ao acesso e fruição da plataforma hospedada em nuvem, não conferindo à CONTRATANTE qualquer direito sobre o código-fonte, marcas, propriedade industrial ou direitos autorais da CONTRATADA.
+                    </p>
+
+                    <h3 style="font-size: 11pt; font-weight: 700; color: #0f172a; margin: 16px 0 6px; text-transform: uppercase;">
+                        CLÁUSULA SEGUNDA – DOS RECURSOS, USUÁRIOS E DISPONIBILIDADE (SLA)
+                    </h3>
+                    <p style="text-align: justify; margin-bottom: 8px; font-size: 10.5pt;">
+                        <strong>2.1.</strong> A CONTRATANTE terá acesso aos recursos compreendidos no plano <strong>${planName}</strong>, com direito à criação e operação simultânea de até <strong>${maxUsers} usuário(s)/atendente(s)</strong> no painel operacional.
+                    </p>
+                    <p style="text-align: justify; margin-bottom: 8px; font-size: 10.5pt;">
+                        <strong>2.2.</strong> A CONTRATADA compromete-se a envidar os melhores esforços técnicos para manter a plataforma acessível com uma meta de disponibilidade mensal (SLA) de <strong>99,5% (noventa e nove vírgula cinco por cento)</strong>, excetuando-se indisponibilidades causadas por falhas na infraestrutura global da internet, interrupções ou bloqueios unilaterais dos serviços da Meta Platforms Inc. (WhatsApp Cloud API) ou manutenções preventivas comunicadas previamente.
+                    </p>
+                    <p style="text-align: justify; margin-bottom: 8px; font-size: 10.5pt;">
+                        <strong>2.3.</strong> O suporte técnico aos usuários administradores será prestado em dias úteis, através dos canais de atendimento e chamados disponibilizados no próprio painel da ferramenta.
+                    </p>
                 </div>
-                <h1 style="font-size: 13pt; margin: 4px 0; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; line-height: 1.3;">
-                    CONTRATO DE LICENÇA DE USO DE SOFTWARE (SAAS) E PRESTAÇÃO DE SERVIÇOS TÉCNICOS
-                </h1>
-                <p style="margin: 4px 0 0; font-size: 9.5pt; color: #64748b; font-style: italic;">
-                    Instrumento Particular de Prestação de Serviços Digitais e Cessão Temporária de Uso de Plataforma
-                </p>
-            </div>
 
-            <p style="text-align: justify; margin-bottom: 14px;">
-                Pelo presente instrumento particular, de um lado:
-            </p>
-
-            <div style="background: #f8fafc; border-left: 3px solid #6366f1; padding: 10px 14px; margin-bottom: 14px; font-size: 11pt; line-height: 1.5;">
-                <strong>CONTRATADA (LICENCIANTE):</strong> <strong>${licensorName}</strong>, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº <strong>${licensorCnpj}</strong>, com sede em <strong>${licensorAddress}</strong>, doravante denominada simplesmente <strong>CONTRATADA</strong>; e, de outro lado,
-            </div>
-
-            <div style="background: #f8fafc; border-left: 3px solid #10b981; padding: 10px 14px; margin-bottom: 18px; font-size: 11pt; line-height: 1.5;">
-                <strong>CONTRATANTE (LICENCIADA):</strong> <strong>${clientName}</strong>, inscrita no CNPJ/CPF sob o nº <strong>${clientCnpj}</strong>, com sede/endereço em <strong>${clientAddress}</strong>, representada neste ato por <strong>${clientRep}</strong> (e-mail cadastrado: <em>${clientEmail}</em>), doravante denominada simplesmente <strong>CONTRATANTE</strong>;
-            </div>
-
-            <p style="text-align: justify; margin-bottom: 16px;">
-                Têm, entre si, justo e acordado o presente Contrato de Licença de Uso e Prestação de Serviços, que se regerá mediante as seguintes cláusulas e condições:
-            </p>
-
-            <h3 style="font-size: 11.5pt; font-weight: 700; color: #0f172a; margin: 18px 0 8px; text-transform: uppercase;">
-                CLÁUSULA PRIMEIRA – DO OBJETO
-            </h3>
-            <p style="text-align: justify; margin-bottom: 10px;">
-                <strong>1.1.</strong> O presente contrato tem por objeto a cessão de direito de uso temporário, não exclusivo e intransferível, do software em nuvem (SaaS) denominado <strong>Q-AURA ATENDIMENTOS & CRM OMNICHANNEL</strong>, compreendendo os módulos de painel multi-atendente em tempo real, filas de distribuição por departamentos, robô chatbot automatizado, central de relatórios de métricas e integração oficial com a API do WhatsApp (Meta Cloud API).
-            </p>
-            <p style="text-align: justify; margin-bottom: 10px;">
-                <strong>1.2.</strong> A contratação dá direito estritamente ao acesso e fruição da plataforma hospedada em nuvem, não conferindo à CONTRATANTE qualquer direito sobre o código-fonte, propriedade industrial ou direitos autorais da CONTRATADA.
-            </p>
-
-            <h3 style="font-size: 11.5pt; font-weight: 700; color: #0f172a; margin: 18px 0 8px; text-transform: uppercase;">
-                CLÁUSULA SEGUNDA – DOS RECURSOS, USUÁRIOS E DISPONIBILIDADE (SLA)
-            </h3>
-            <p style="text-align: justify; margin-bottom: 10px;">
-                <strong>2.1.</strong> A CONTRATANTE terá acesso aos recursos compreendidos no plano <strong>${planName}</strong>, com direito à criação e operação de até <strong>${maxUsers} usuário(s)/operador(es)</strong> no painel de atendimento simultaneamente.
-            </p>
-            <p style="text-align: justify; margin-bottom: 10px;">
-                <strong>2.2.</strong> A CONTRATADA compromete-se a manter uma meta de disponibilidade mensal da plataforma de <strong>99,5% (noventa e nove vírgula cinco por cento)</strong>, excetuando-se indisponibilidades causadas por falhas na infraestrutura global da internet, interrupções ou bloqueios dos serviços da Meta Platforms Inc. (WhatsApp Cloud API) ou manutenções programadas comunicadas previamente.
-            </p>
-
-            <h3 style="font-size: 11.5pt; font-weight: 700; color: #0f172a; margin: 18px 0 8px; text-transform: uppercase;">
-                CLÁUSULA TERCEIRA – DO PREÇO, FATURAMENTO E CONSUMO META
-            </h3>
-            <p style="text-align: justify; margin-bottom: 10px;">
-                <strong>3.1.</strong> Pelo licenciamento do software e suporte operacional, a CONTRATANTE pagará à CONTRATADA a mensalidade no valor fixo de <strong>R$ ${planPrice}</strong>, com vencimento programado para todo <strong>${dueDay}</strong>.
-            </p>
-            <p style="text-align: justify; margin-bottom: 10px;">
-                <strong>3.2.</strong> Os custos de tarifação oficial por conversas ativas cobradas pela Meta Platforms Inc. (Marketing, Utilidade e Serviço) serão debitados do saldo de créditos pré-pago recarregado pela CONTRATANTE no painel, garantindo total previsibilidade orçamentária.
-            </p>
-            <p style="text-align: justify; margin-bottom: 10px;">
-                <strong>3.3.</strong> O inadimplemento da mensalidade por prazo superior a 10 (dez) dias autoriza a CONTRATADA a suspender preventivamente o envio e recebimento de novas mensagens até a efetiva quitação dos valores em aberto.
-            </p>
-
-            <h3 style="font-size: 11.5pt; font-weight: 700; color: #0f172a; margin: 18px 0 8px; text-transform: uppercase;">
-                CLÁUSULA QUARTA – DA VIGÊNCIA E RESCISÃO
-            </h3>
-            <p style="text-align: justify; margin-bottom: 10px;">
-                <strong>4.1.</strong> O presente contrato entra em vigor a partir de <strong>${startDate}</strong> e vigerá pelo prazo determinado de <strong>${validity}</strong>.
-            </p>
-            <p style="text-align: justify; margin-bottom: 10px;">
-                <strong>4.2.</strong> Qualquer das partes poderá rescindir a contratação a qualquer tempo mediante aviso prévio por escrito com antecedência mínima de 30 (trinta) dias, não incidindo multas rescisórias abusivas ou cláusulas de fidelidade sobre mensalidades futuras, mantendo-se devidas apenas as obrigações do ciclo corrente.
-            </p>
-
-            <h3 style="font-size: 11.5pt; font-weight: 700; color: #0f172a; margin: 18px 0 8px; text-transform: uppercase;">
-                CLÁUSULA QUINTA – DA CONFIDENCIALIDADE E PROTEÇÃO DE DADOS (LGPD)
-            </h3>
-            <p style="text-align: justify; margin-bottom: 10px;">
-                <strong>5.1.</strong> As partes obrigam-se a guardar absoluto sigilo sobre quaisquer dados comerciais e estratégicos, bem como atuar em estrita conformidade com a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 - LGPD).
-            </p>
-            <p style="text-align: justify; margin-bottom: 10px;">
-                <strong>5.2.</strong> A CONTRATADA atuará na qualidade de operadora, tratando dados pessoais unicamente sob as orientações e finalidades determinadas pela CONTRATANTE (controladora), garantindo isolamento lógico de instâncias e criptografia em trânsito e em repouso.
-            </p>
-
-            <h3 style="font-size: 11.5pt; font-weight: 700; color: #0f172a; margin: 18px 0 8px; text-transform: uppercase;">
-                CLÁUSULA SEXTA – DO FORO
-            </h3>
-            <p style="text-align: justify; margin-bottom: 24px;">
-                <strong>6.1.</strong> Para dirimir quaisquer litígios oriundos do presente contrato, as partes elegem expressamente o Foro da Comarca de <strong>${forum}</strong>, com renúncia irrevogável a qualquer outro foro, por mais privilegiado que seja.
-            </p>
-
-            <div style="margin-top: 24px; text-align: center; margin-bottom: 30px;">
-                <p style="margin: 0; font-weight: 600;">E, por estarem assim justas e contratadas, as partes firmam o presente instrumento para que produza todos os efeitos jurídicos e legais.</p>
-                <p style="margin-top: 8px; color: #475569;">${forum}, ${startDate}.</p>
-            </div>
-
-            <!-- Bloco de Assinaturas -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 50px; page-break-inside: avoid;">
-                <div style="text-align: center;">
-                    <div style="border-top: 1px solid #0f172a; padding-top: 8px; font-weight: 700; font-size: 11pt;">${licensorName}</div>
-                    <div style="font-size: 9.5pt; color: #475569;">CONTRATADA (Licenciante)</div>
-                    <div style="font-size: 9pt; color: #64748b;">CNPJ: ${licensorCnpj}</div>
-                </div>
-                <div style="text-align: center;">
-                    <div style="border-top: 1px solid #0f172a; padding-top: 8px; font-weight: 700; font-size: 11pt;">${clientName}</div>
-                    <div style="font-size: 9.5pt; color: #475569;">CONTRATANTE: ${clientRep}</div>
-                    <div style="font-size: 9pt; color: #64748b;">CNPJ/CPF: ${clientCnpj}</div>
+                <div class="contract-page-footer">
+                    <span>Rubrica CONTRATADA: ______________ | Rubrica CONTRATANTE: ______________</span>
+                    <span><strong>Página 1 de 3</strong></span>
                 </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; page-break-inside: avoid;">
-                <div style="text-align: center;">
-                    <div style="border-top: 1px dashed #94a3b8; padding-top: 6px; font-size: 9.5pt; color: #475569;">Testemunha 1 (Nome e CPF)</div>
+            <!-- ══════════════════════ PÁGINA 2 DE 3 ══════════════════════ -->
+            <div class="contract-page">
+                <div>
+                    <div class="contract-page-header">
+                        <span>Q-AURA OMNICHANNEL - CONTRATO DE LICENÇA DE SOFTWARE E SERVIÇOS</span>
+                        <span>ADESÃO: ${startDate}</span>
+                    </div>
+
+                    <h3 style="font-size: 11pt; font-weight: 700; color: #0f172a; margin: 16px 0 6px; text-transform: uppercase;">
+                        CLÁUSULA TERCEIRA – DO PREÇO, FATURAMENTO E CONSUMO META
+                    </h3>
+                    <p style="text-align: justify; margin-bottom: 8px; font-size: 10.5pt;">
+                        <strong>3.1.</strong> Pelo licenciamento do software e suporte operacional, a CONTRATANTE pagará à CONTRATADA a mensalidade no valor fixo de <strong>R$ ${planPrice}</strong>, com vencimento estipulado para todo <strong>${dueDay}</strong>.
+                    </p>
+                    <p style="text-align: justify; margin-bottom: 8px; font-size: 10.5pt;">
+                        <strong>3.2.</strong> Os custos e tarifas oficiais por conversas ativas cobradas pela Meta Platforms Inc. (Marketing, Utilidade e Serviço) serão consumidos do saldo pré-pago recarregado pela CONTRATANTE na plataforma, garantindo transparência, previsibilidade e ausência de cobranças surpresa.
+                    </p>
+                    <p style="text-align: justify; margin-bottom: 8px; font-size: 10.5pt;">
+                        <strong>3.3.</strong> O inadimplemento da mensalidade por prazo superior a 10 (dez) dias corridos autoriza a CONTRATADA a suspender preventivamente o envio e recebimento de mensagens e o acesso ao painel até a integral quitação dos valores pendentes.
+                    </p>
+                    <p style="text-align: justify; margin-bottom: 12px; font-size: 10.5pt;">
+                        <strong>3.4.</strong> O valor da mensalidade poderá ser reajustado anualmente com base na variação acumulada do IPCA/IBGE ou, na sua ausência, pelo IGP-M/FGV, mediante comunicação prévia de 30 (trinta) dias.
+                    </p>
+
+                    <h3 style="font-size: 11pt; font-weight: 700; color: #0f172a; margin: 16px 0 6px; text-transform: uppercase;">
+                        CLÁUSULA QUARTA – DA VIGÊNCIA E RESCISÃO
+                    </h3>
+                    <p style="text-align: justify; margin-bottom: 8px; font-size: 10.5pt;">
+                        <strong>4.1.</strong> O presente contrato entra em vigor a partir de <strong>${startDate}</strong> e vigerá pelo prazo de <strong>${validity}</strong>.
+                    </p>
+                    <p style="text-align: justify; margin-bottom: 8px; font-size: 10.5pt;">
+                        <strong>4.2.</strong> Qualquer das partes poderá rescindir a contratação a qualquer tempo mediante aviso prévio por escrito com antecedência mínima de 30 (trinta) dias, não incidindo multas rescisórias punitivas ou cláusulas de fidelidade sobre mensalidades futuras, permanecendo devidas unicamente as obrigações e valores do ciclo corrente.
+                    </p>
+                    <p style="text-align: justify; margin-bottom: 12px; font-size: 10.5pt;">
+                        <strong>4.3.</strong> O descumprimento grave de qualquer das cláusulas deste instrumento por qualquer das partes ensejará a rescisão imediata e motivada, sem prejuízo da cobrança de eventuais perdas e danos comprovados.
+                    </p>
+
+                    <h3 style="font-size: 11pt; font-weight: 700; color: #0f172a; margin: 16px 0 6px; text-transform: uppercase;">
+                        CLÁUSULA QUINTA – DA CONFIDENCIALIDADE E PROTEÇÃO DE DADOS (LGPD)
+                    </h3>
+                    <p style="text-align: justify; margin-bottom: 8px; font-size: 10.5pt;">
+                        <strong>5.1.</strong> As partes obrigam-se a guardar absoluto sigilo sobre quaisquer dados comerciais, técnicos e estratégicos, bem como atuar em estrita conformidade com a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 - LGPD).
+                    </p>
+                    <p style="text-align: justify; margin-bottom: 8px; font-size: 10.5pt;">
+                        <strong>5.2.</strong> A CONTRATADA atuará na condição exclusiva de operadora, tratando dados pessoais unicamente sob as orientações e finalidades legítimas determinadas pela CONTRATANTE (controladora), assegurando isolamento lógico de banco de dados (multi-tenant) e criptografia em trânsito e em repouso.
+                    </p>
+                    <p style="text-align: justify; margin-bottom: 8px; font-size: 10.5pt;">
+                        <strong>5.3.</strong> Ao término do contrato, a CONTRATADA manterá os dados da CONTRATANTE disponíveis para exportação por um período de até 30 (trinta) dias, após o qual poderá proceder à exclusão segura e definitiva dos mesmos.
+                    </p>
                 </div>
-                <div style="text-align: center;">
-                    <div style="border-top: 1px dashed #94a3b8; padding-top: 6px; font-size: 9.5pt; color: #475569;">Testemunha 2 (Nome e CPF)</div>
+
+                <div class="contract-page-footer">
+                    <span>Rubrica CONTRATADA: ______________ | Rubrica CONTRATANTE: ______________</span>
+                    <span><strong>Página 2 de 3</strong></span>
+                </div>
+            </div>
+
+            <!-- ══════════════════════ PÁGINA 3 DE 3 ══════════════════════ -->
+            <div class="contract-page">
+                <div>
+                    <div class="contract-page-header">
+                        <span>Q-AURA OMNICHANNEL - CONTRATO DE LICENÇA DE SOFTWARE E SERVIÇOS</span>
+                        <span>ADESÃO: ${startDate}</span>
+                    </div>
+
+                    <h3 style="font-size: 11pt; font-weight: 700; color: #0f172a; margin: 16px 0 6px; text-transform: uppercase;">
+                        CLÁUSULA SEXTA – DAS DISPOSIÇÕES GERAIS E CASO FORTUITO
+                    </h3>
+                    <p style="text-align: justify; margin-bottom: 8px; font-size: 10.5pt;">
+                        <strong>6.1.</strong> Nenhuma das partes será responsabilizada pelo descumprimento de suas obrigações se decorrente de caso fortuito ou força maior, nos termos do artigo 393 do Código Civil Brasileiro.
+                    </p>
+                    <p style="text-align: justify; margin-bottom: 8px; font-size: 10.5pt;">
+                        <strong>6.2.</strong> A tolerância de qualquer das partes quanto ao eventual descumprimento de qualquer cláusula ou condição deste instrumento será considerada mera liberalidade, não constituindo novação, renúncia ou precedente invocável.
+                    </p>
+                    <p style="text-align: justify; margin-bottom: 12px; font-size: 10.5pt;">
+                        <strong>6.3.</strong> Se qualquer disposição deste contrato for declarada inválida ou inexequível, as demais disposições permanecerão em pleno vigor e efeito.
+                    </p>
+
+                    <h3 style="font-size: 11pt; font-weight: 700; color: #0f172a; margin: 16px 0 6px; text-transform: uppercase;">
+                        CLÁUSULA SÉTIMA – DO FORO DE ELEIÇÃO
+                    </h3>
+                    <p style="text-align: justify; margin-bottom: 24px; font-size: 10.5pt;">
+                        <strong>7.1.</strong> Para dirimir quaisquer dúvidas, controvérsias ou litígios oriundos do presente contrato, as partes elegem expressamente o Foro da Comarca de <strong>${forum}</strong>, com renúncia irrevogável a qualquer outro foro, por mais privilegiado que seja.
+                    </p>
+
+                    <div style="margin-top: 24px; text-align: center; margin-bottom: 30px;">
+                        <p style="margin: 0; font-weight: 600; font-size: 11pt;">E, por estarem assim justas e contratadas, as partes firmam o presente instrumento para que produza todos os seus jurídicos e legais efeitos.</p>
+                        <p style="margin-top: 10px; color: #334155; font-size: 11pt; font-weight: 600;">${forum}, ${startDate}.</p>
+                    </div>
+
+                    <!-- Bloco de Assinaturas -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 45px; page-break-inside: avoid;">
+                        <div style="text-align: center;">
+                            <div style="border-top: 1px solid #0f172a; padding-top: 8px; font-weight: 700; font-size: 11pt;">${licensorName}</div>
+                            <div style="font-size: 9.5pt; color: #475569;">CONTRATADA (Licenciante)</div>
+                            <div style="font-size: 9pt; color: #64748b;">CNPJ: ${licensorCnpj}</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="border-top: 1px solid #0f172a; padding-top: 8px; font-weight: 700; font-size: 11pt;">${clientName}</div>
+                            <div style="font-size: 9.5pt; color: #475569;">CONTRATANTE: ${clientRep}</div>
+                            <div style="font-size: 9pt; color: #64748b;">CNPJ/CPF: ${clientCnpj}</div>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; page-break-inside: avoid;">
+                        <div style="text-align: center;">
+                            <div style="border-top: 1px dashed #94a3b8; padding-top: 6px; font-size: 9.5pt; color: #475569;">Testemunha 1 (Nome e CPF)</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="border-top: 1px dashed #94a3b8; padding-top: 6px; font-size: 9.5pt; color: #475569;">Testemunha 2 (Nome e CPF)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="contract-page-footer">
+                    <span>Q-Aura Atendimentos Omnichannel</span>
+                    <span><strong>Página 3 de 3</strong></span>
                 </div>
             </div>
         `;
     }
 
     printContract() {
-        window.print();
+        const previewEl = document.getElementById("contract-paper-preview");
+        if (!previewEl) return;
+
+        const clientName = document.getElementById("contract-client-name")?.value || "Cliente";
+
+        // Abre janela de impressão dedicada para garantir 100% de quebra de páginas A4 limpas sem corte de layout
+        const printWin = window.open("", "_blank", "width=920,height=1000");
+        if (!printWin) {
+            window.print();
+            return;
+        }
+
+        const htmlContent = `
+            <!DOCTYPE html>
+            <html lang="pt-BR">
+            <head>
+                <meta charset="UTF-8">
+                <title>Contrato Q-Aura - ${clientName}</title>
+                <style>
+                    @page {
+                        size: A4 portrait;
+                        margin: 10mm 15mm;
+                    }
+                    * {
+                        box-sizing: border-box;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                    }
+                    body {
+                        margin: 0;
+                        padding: 0;
+                        background: #ffffff;
+                        font-family: 'Times New Roman', Times, serif, Georgia;
+                        font-size: 11pt;
+                        line-height: 1.5;
+                        color: #0f172a;
+                    }
+                    .contract-page {
+                        width: 100%;
+                        min-height: 265mm;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: space-between;
+                        page-break-after: always;
+                        break-after: page;
+                        page-break-inside: avoid;
+                        padding: 6mm 0;
+                        background: #ffffff;
+                    }
+                    .contract-page:last-child {
+                        page-break-after: auto;
+                        break-after: auto;
+                    }
+                    .contract-page-header {
+                        border-bottom: 1px solid #cbd5e1;
+                        padding-bottom: 8px;
+                        margin-bottom: 16px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        font-size: 8.5pt;
+                        color: #64748b;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                    }
+                    .contract-page-footer {
+                        border-top: 1px solid #cbd5e1;
+                        padding-top: 10px;
+                        margin-top: 20px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        font-size: 8.5pt;
+                        color: #64748b;
+                    }
+                    h1, h2, h3, p { margin-top: 0; }
+                </style>
+            </head>
+            <body>
+                ${previewEl.innerHTML}
+                <script>
+                    window.onload = function() {
+                        window.focus();
+                        window.print();
+                        setTimeout(function() { window.close(); }, 1200);
+                    };
+                <\/script>
+            </body>
+            </html>
+        `;
+
+        printWin.document.open();
+        printWin.document.write(htmlContent);
+        printWin.document.close();
     }
 
     copyContractText() {
