@@ -214,6 +214,7 @@ class SuperadminRouter {
                     <td style="padding: 16px 24px; color: #64748b;">R$ ${limitVal}</td>
                     <td style="padding: 16px 24px;">${statusBadge}</td>
                     <td style="padding: 16px 24px;" class="actions-cell">
+                        <button class="btn btn-primary btn-xs" data-action="contract" data-id="${tenant.id}" title="Gerar Contrato Pré-preenchido"><i class="fa-solid fa-file-contract"></i></button>
                         <button class="btn btn-success btn-xs" data-action="billing" data-id="${tenant.id}" title="Gerenciar Faturamento"><i class="fa-solid fa-credit-card"></i></button>
                         <button class="btn btn-secondary btn-xs" data-action="edit" data-id="${tenant.id}"><i class="fa-solid fa-pen"></i></button>
                         <button class="btn btn-danger btn-xs" data-action="delete" data-id="${tenant.id}"><i class="fa-solid fa-trash"></i></button>
@@ -223,6 +224,9 @@ class SuperadminRouter {
             });
 
             // Attach dynamic listeners for action buttons
+            tableBody.querySelectorAll("button[data-action='contract']").forEach(btn => {
+                btn.addEventListener("click", () => this.openContractModal(btn.dataset.id));
+            });
             tableBody.querySelectorAll("button[data-action='billing']").forEach(btn => {
                 btn.addEventListener("click", () => this.openBillingModal(btn.dataset.id));
             });
@@ -713,6 +717,213 @@ class SuperadminRouter {
             this.showToast("Tabela de precificação salva com sucesso!");
             this.loadPricing();
         }
+    }
+
+    // ─── 📄 Gerador de Contrato SaaS Pré-preenchido ─────────────────────────────
+
+    async openContractModal(tenantId) {
+        this.activeContractTenantId = tenantId;
+        const modal = document.getElementById("tenant-contract-modal");
+        if (modal) modal.style.display = "flex";
+
+        const data = await this.request(`/api/superadmin/tenants/${tenantId}/contract-data`);
+        if (!data) return;
+
+        const tenantTitle = document.getElementById("contract-modal-tenant-name");
+        if (tenantTitle) tenantTitle.innerText = data.tenant_name || "Empresa";
+
+        // Preenche campos do formulário com dados automáticos do banco
+        const setVal = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.value = val !== undefined && val !== null ? val : "";
+        };
+
+        setVal("contract-client-name", data.tenant_name || "");
+        setVal("contract-client-cnpj", data.cnpj || "");
+        setVal("contract-client-rep", data.admin_name || "");
+        setVal("contract-client-email", data.admin_email || "");
+        setVal("contract-client-address", "");
+        setVal("contract-plan-name", data.plan_name || "Plano Pro");
+        setVal("contract-plan-price", data.price_monthly || 0);
+        setVal("contract-max-users", data.max_users || 5);
+        setVal("contract-start-date", data.created_at || new Date().toLocaleDateString("pt-BR"));
+        setVal("contract-validity", "12 (doze) meses, renovável automaticamente");
+        setVal("contract-due-day", "Dia 10 de cada mês");
+        setVal("contract-forum", data.default_city || "São Paulo / SP");
+        setVal("contract-licensor-name", data.licensor_name || "Q-AURA TECNOLOGIA E SOFTWARES LTDA");
+        setVal("contract-licensor-cnpj", data.licensor_cnpj || "55.123.456/0001-89");
+        setVal("contract-licensor-address", data.licensor_address || "Av. Paulista, 1000 - Bela Vista, São Paulo - SP, CEP 01310-100");
+
+        this.renderContractPreview();
+    }
+
+    renderContractPreview() {
+        const getVal = (id, fallback = "") => {
+            const el = document.getElementById(id);
+            return (el && el.value.trim()) ? el.value.trim() : fallback;
+        };
+
+        const clientName = getVal("contract-client-name", "[RAZÃO SOCIAL DO CLIENTE]");
+        const clientCnpj = getVal("contract-client-cnpj", "[CNPJ / CPF DO CLIENTE]");
+        const clientRep = getVal("contract-client-rep", "[NOME DO REPRESENTANTE LEGAL]");
+        const clientEmail = getVal("contract-client-email", "[E-MAIL DO ADMINISTRADOR]");
+        const clientAddress = getVal("contract-client-address", "[ENDEREÇO COMPLETO DO CLIENTE]");
+
+        const planName = getVal("contract-plan-name", "Plano Pro");
+        const planPriceNum = parseFloat(getVal("contract-plan-price", "0")) || 0;
+        const planPrice = planPriceNum.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const maxUsers = getVal("contract-max-users", "5");
+        const startDate = getVal("contract-start-date", new Date().toLocaleDateString("pt-BR"));
+        const validity = getVal("contract-validity", "12 (doze) meses, renovável automaticamente");
+        const dueDay = getVal("contract-due-day", "Dia 10 de cada mês");
+        const forum = getVal("contract-forum", "São Paulo / SP");
+
+        const licensorName = getVal("contract-licensor-name", "Q-AURA TECNOLOGIA E SOFTWARES LTDA");
+        const licensorCnpj = getVal("contract-licensor-cnpj", "55.123.456/0001-89");
+        const licensorAddress = getVal("contract-licensor-address", "Av. Paulista, 1000 - Bela Vista, São Paulo - SP, CEP 01310-100");
+
+        const previewEl = document.getElementById("contract-paper-preview");
+        if (!previewEl) return;
+
+        previewEl.innerHTML = `
+            <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 18px; margin-bottom: 22px;">
+                <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 6px;">
+                    <img src="favicon.png" alt="Q-Aura Logo" style="width: 28px; height: 28px; border-radius: 6px; object-fit: cover;">
+                    <span style="font-size: 15pt; font-weight: 800; letter-spacing: -0.5px; color: #0f172a;">Q-AURA ATENDIMENTOS OMNICHANNEL</span>
+                </div>
+                <h1 style="font-size: 13pt; margin: 4px 0; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; line-height: 1.3;">
+                    CONTRATO DE LICENÇA DE USO DE SOFTWARE (SAAS) E PRESTAÇÃO DE SERVIÇOS TÉCNICOS
+                </h1>
+                <p style="margin: 4px 0 0; font-size: 9.5pt; color: #64748b; font-style: italic;">
+                    Instrumento Particular de Prestação de Serviços Digitais e Cessão Temporária de Uso de Plataforma
+                </p>
+            </div>
+
+            <p style="text-align: justify; margin-bottom: 14px;">
+                Pelo presente instrumento particular, de um lado:
+            </p>
+
+            <div style="background: #f8fafc; border-left: 3px solid #6366f1; padding: 10px 14px; margin-bottom: 14px; font-size: 11pt; line-height: 1.5;">
+                <strong>CONTRATADA (LICENCIANTE):</strong> <strong>${licensorName}</strong>, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº <strong>${licensorCnpj}</strong>, com sede em <strong>${licensorAddress}</strong>, doravante denominada simplesmente <strong>CONTRATADA</strong>; e, de outro lado,
+            </div>
+
+            <div style="background: #f8fafc; border-left: 3px solid #10b981; padding: 10px 14px; margin-bottom: 18px; font-size: 11pt; line-height: 1.5;">
+                <strong>CONTRATANTE (LICENCIADA):</strong> <strong>${clientName}</strong>, inscrita no CNPJ/CPF sob o nº <strong>${clientCnpj}</strong>, com sede/endereço em <strong>${clientAddress}</strong>, representada neste ato por <strong>${clientRep}</strong> (e-mail cadastrado: <em>${clientEmail}</em>), doravante denominada simplesmente <strong>CONTRATANTE</strong>;
+            </div>
+
+            <p style="text-align: justify; margin-bottom: 16px;">
+                Têm, entre si, justo e acordado o presente Contrato de Licença de Uso e Prestação de Serviços, que se regerá mediante as seguintes cláusulas e condições:
+            </p>
+
+            <h3 style="font-size: 11.5pt; font-weight: 700; color: #0f172a; margin: 18px 0 8px; text-transform: uppercase;">
+                CLÁUSULA PRIMEIRA – DO OBJETO
+            </h3>
+            <p style="text-align: justify; margin-bottom: 10px;">
+                <strong>1.1.</strong> O presente contrato tem por objeto a cessão de direito de uso temporário, não exclusivo e intransferível, do software em nuvem (SaaS) denominado <strong>Q-AURA ATENDIMENTOS & CRM OMNICHANNEL</strong>, compreendendo os módulos de painel multi-atendente em tempo real, filas de distribuição por departamentos, robô chatbot automatizado, central de relatórios de métricas e integração oficial com a API do WhatsApp (Meta Cloud API).
+            </p>
+            <p style="text-align: justify; margin-bottom: 10px;">
+                <strong>1.2.</strong> A contratação dá direito estritamente ao acesso e fruição da plataforma hospedada em nuvem, não conferindo à CONTRATANTE qualquer direito sobre o código-fonte, propriedade industrial ou direitos autorais da CONTRATADA.
+            </p>
+
+            <h3 style="font-size: 11.5pt; font-weight: 700; color: #0f172a; margin: 18px 0 8px; text-transform: uppercase;">
+                CLÁUSULA SEGUNDA – DOS RECURSOS, USUÁRIOS E DISPONIBILIDADE (SLA)
+            </h3>
+            <p style="text-align: justify; margin-bottom: 10px;">
+                <strong>2.1.</strong> A CONTRATANTE terá acesso aos recursos compreendidos no plano <strong>${planName}</strong>, com direito à criação e operação de até <strong>${maxUsers} usuário(s)/operador(es)</strong> no painel de atendimento simultaneamente.
+            </p>
+            <p style="text-align: justify; margin-bottom: 10px;">
+                <strong>2.2.</strong> A CONTRATADA compromete-se a manter uma meta de disponibilidade mensal da plataforma de <strong>99,5% (noventa e nove vírgula cinco por cento)</strong>, excetuando-se indisponibilidades causadas por falhas na infraestrutura global da internet, interrupções ou bloqueios dos serviços da Meta Platforms Inc. (WhatsApp Cloud API) ou manutenções programadas comunicadas previamente.
+            </p>
+
+            <h3 style="font-size: 11.5pt; font-weight: 700; color: #0f172a; margin: 18px 0 8px; text-transform: uppercase;">
+                CLÁUSULA TERCEIRA – DO PREÇO, FATURAMENTO E CONSUMO META
+            </h3>
+            <p style="text-align: justify; margin-bottom: 10px;">
+                <strong>3.1.</strong> Pelo licenciamento do software e suporte operacional, a CONTRATANTE pagará à CONTRATADA a mensalidade no valor fixo de <strong>R$ ${planPrice}</strong>, com vencimento programado para todo <strong>${dueDay}</strong>.
+            </p>
+            <p style="text-align: justify; margin-bottom: 10px;">
+                <strong>3.2.</strong> Os custos de tarifação oficial por conversas ativas cobradas pela Meta Platforms Inc. (Marketing, Utilidade e Serviço) serão debitados do saldo de créditos pré-pago recarregado pela CONTRATANTE no painel, garantindo total previsibilidade orçamentária.
+            </p>
+            <p style="text-align: justify; margin-bottom: 10px;">
+                <strong>3.3.</strong> O inadimplemento da mensalidade por prazo superior a 10 (dez) dias autoriza a CONTRATADA a suspender preventivamente o envio e recebimento de novas mensagens até a efetiva quitação dos valores em aberto.
+            </p>
+
+            <h3 style="font-size: 11.5pt; font-weight: 700; color: #0f172a; margin: 18px 0 8px; text-transform: uppercase;">
+                CLÁUSULA QUARTA – DA VIGÊNCIA E RESCISÃO
+            </h3>
+            <p style="text-align: justify; margin-bottom: 10px;">
+                <strong>4.1.</strong> O presente contrato entra em vigor a partir de <strong>${startDate}</strong> e vigerá pelo prazo determinado de <strong>${validity}</strong>.
+            </p>
+            <p style="text-align: justify; margin-bottom: 10px;">
+                <strong>4.2.</strong> Qualquer das partes poderá rescindir a contratação a qualquer tempo mediante aviso prévio por escrito com antecedência mínima de 30 (trinta) dias, não incidindo multas rescisórias abusivas ou cláusulas de fidelidade sobre mensalidades futuras, mantendo-se devidas apenas as obrigações do ciclo corrente.
+            </p>
+
+            <h3 style="font-size: 11.5pt; font-weight: 700; color: #0f172a; margin: 18px 0 8px; text-transform: uppercase;">
+                CLÁUSULA QUINTA – DA CONFIDENCIALIDADE E PROTEÇÃO DE DADOS (LGPD)
+            </h3>
+            <p style="text-align: justify; margin-bottom: 10px;">
+                <strong>5.1.</strong> As partes obrigam-se a guardar absoluto sigilo sobre quaisquer dados comerciais e estratégicos, bem como atuar em estrita conformidade com a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 - LGPD).
+            </p>
+            <p style="text-align: justify; margin-bottom: 10px;">
+                <strong>5.2.</strong> A CONTRATADA atuará na qualidade de operadora, tratando dados pessoais unicamente sob as orientações e finalidades determinadas pela CONTRATANTE (controladora), garantindo isolamento lógico de instâncias e criptografia em trânsito e em repouso.
+            </p>
+
+            <h3 style="font-size: 11.5pt; font-weight: 700; color: #0f172a; margin: 18px 0 8px; text-transform: uppercase;">
+                CLÁUSULA SEXTA – DO FORO
+            </h3>
+            <p style="text-align: justify; margin-bottom: 24px;">
+                <strong>6.1.</strong> Para dirimir quaisquer litígios oriundos do presente contrato, as partes elegem expressamente o Foro da Comarca de <strong>${forum}</strong>, com renúncia irrevogável a qualquer outro foro, por mais privilegiado que seja.
+            </p>
+
+            <div style="margin-top: 24px; text-align: center; margin-bottom: 30px;">
+                <p style="margin: 0; font-weight: 600;">E, por estarem assim justas e contratadas, as partes firmam o presente instrumento para que produza todos os efeitos jurídicos e legais.</p>
+                <p style="margin-top: 8px; color: #475569;">${forum}, ${startDate}.</p>
+            </div>
+
+            <!-- Bloco de Assinaturas -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 50px; page-break-inside: avoid;">
+                <div style="text-align: center;">
+                    <div style="border-top: 1px solid #0f172a; padding-top: 8px; font-weight: 700; font-size: 11pt;">${licensorName}</div>
+                    <div style="font-size: 9.5pt; color: #475569;">CONTRATADA (Licenciante)</div>
+                    <div style="font-size: 9pt; color: #64748b;">CNPJ: ${licensorCnpj}</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="border-top: 1px solid #0f172a; padding-top: 8px; font-weight: 700; font-size: 11pt;">${clientName}</div>
+                    <div style="font-size: 9.5pt; color: #475569;">CONTRATANTE: ${clientRep}</div>
+                    <div style="font-size: 9pt; color: #64748b;">CNPJ/CPF: ${clientCnpj}</div>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; page-break-inside: avoid;">
+                <div style="text-align: center;">
+                    <div style="border-top: 1px dashed #94a3b8; padding-top: 6px; font-size: 9.5pt; color: #475569;">Testemunha 1 (Nome e CPF)</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="border-top: 1px dashed #94a3b8; padding-top: 6px; font-size: 9.5pt; color: #475569;">Testemunha 2 (Nome e CPF)</div>
+                </div>
+            </div>
+        `;
+    }
+
+    printContract() {
+        window.print();
+    }
+
+    copyContractText() {
+        const preview = document.getElementById("contract-paper-preview");
+        if (!preview) return;
+
+        const plainText = preview.innerText || preview.textContent;
+        navigator.clipboard.writeText(plainText).then(() => {
+            this.showToast("Contrato copiado com sucesso para a área de transferência!");
+        }).catch(err => {
+            this.showToast("Erro ao copiar contrato: " + err.message, "error");
+        });
+    }
+
+    closeContractModal() {
+        const modal = document.getElementById("tenant-contract-modal");
+        if (modal) modal.style.display = "none";
     }
 }
 

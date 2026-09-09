@@ -658,3 +658,58 @@ def update_pricing(
 
     db.commit()
     return {"message": f"Preços atualizados com sucesso para: {', '.join(updated)}.", "updated": updated}
+
+
+# ─── Gerador de Contrato Pré-preenchido ────────────────────────────────────────
+
+@router.get("/tenants/{tenant_id}/contract-data")
+def get_tenant_contract_data(
+    tenant_id: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """Retorna os dados consolidados do cliente/tenant para emissão de contrato pré-preenchido."""
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada.")
+
+    # Busca o usuário administrador principal
+    admin_user = (
+        db.query(User)
+        .filter(User.tenant_id == tenant.id)
+        .order_by(User.created_at.asc())
+        .first()
+    )
+
+    plan_name = tenant.plan.name if tenant.plan else (tenant.plan_type or "Plano Pro")
+    price_monthly = float(tenant.plan.price_monthly if tenant.plan and tenant.plan.price_monthly else 0.0)
+
+    # Lista de módulos habilitados
+    enabled_mods = _get_enabled_modules(tenant)
+
+    now_date = datetime.now()
+    created_str = tenant.created_at.strftime("%d/%m/%Y") if tenant.created_at else now_date.strftime("%d/%m/%Y")
+
+    return {
+        "tenant_id": str(tenant.id),
+        "tenant_name": tenant.name or "",
+        "cnpj": tenant.cnpj or "",
+        "subdomain": tenant.subdomain or "",
+        "segment": tenant.segment or "Comércio e Serviços",
+        "status": tenant.status or "active",
+        "billing_mode": tenant.billing_mode or "prepaid",
+        "created_at": created_str,
+        "plan_name": plan_name,
+        "price_monthly": price_monthly,
+        "max_users": tenant.max_users or 5,
+        "enabled_modules": enabled_mods,
+        "admin_name": admin_user.name if admin_user else "",
+        "admin_email": admin_user.email if admin_user else "",
+        # Dados padrão da Licenciante (Q-Aura)
+        "licensor_name": "Q-AURA TECNOLOGIA E SOFTWARES LTDA",
+        "licensor_cnpj": "55.123.456/0001-89",
+        "licensor_address": "Av. Paulista, 1000 - Bela Vista, São Paulo - SP, CEP 01310-100",
+        "licensor_rep": "Diretoria de Operações Q-Aura",
+        "default_city": "São Paulo - SP"
+    }
+
