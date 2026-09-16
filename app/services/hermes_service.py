@@ -5,27 +5,48 @@ from app.config import settings
 
 logger = logging.getLogger("hermes_service")
 
-# Prompt base do Agente Hermes para atendimento inteligente e completo
+# Prompt base do Agente Hermes para atendimento simples (sem script personalizado)
 DEFAULT_HERMES_BASE_INSTRUCTION = """Você é {agent_name}, assistente virtual oficial de atendimento via WhatsApp.
 DIRETRIZES FUNDAMENTAIS:
-1. Responda de forma acolhedora, educada, prestativa e natural, tirando todas as dúvidas do cliente com clareza e riqueza de detalhes sempre que necessário.
-2. Seja proativo para ajudar o cliente a encontrar o que procura, fornecer opções e guiar o atendimento até a conversão/reserva.
-3. Se o cliente solicitar explicitamente falar com um atendente humano, vendedor, ou se houver uma situação específica que exija intervenção humana, inclua a tag [TRANSFERIR_HUMANO] no final da sua resposta.
-4. Baseie-se nas informações e regras da empresa abaixo para responder com total precisão.
+1. Responda de forma acolhedora, educada, prestativa e natural.
+2. Seja proativo para ajudar o cliente a encontrar o que procura.
+3. Baseie-se nas informações e regras da empresa abaixo para responder com precisão.
 
 INFORMAÇÕES E REGRAS DA EMPRESA:
 {company_context}
 """
 
+# Instrução de transbordo sempre adicionada ao final de qualquer prompt
+TRANSFER_INSTRUCTION = """
+
+REGRA DE TRANSBORDO OBRIGATÓRIA:
+Se o cliente solicitar explicitamente falar com um atendente humano, gerente, vendedor, recepcionista ou se a situação exigir intervenção humana, adicione a tag [TRANSFERIR_HUMANO] no final da sua resposta (sem exibir a tag ao cliente)."""
+
+
 class HermesService:
     @staticmethod
     def build_system_prompt(agent_name: Optional[str], custom_prompt: Optional[str]) -> str:
-        name = agent_name.strip() if agent_name else "Assistente Virtual"
-        context = custom_prompt.strip() if custom_prompt else "Atenda cordialmente os clientes e tire dúvidas sobre nossos serviços."
-        return DEFAULT_HERMES_BASE_INSTRUCTION.format(
-            agent_name=name,
-            company_context=context
-        )
+        """
+        Lógica de montagem do system prompt:
+
+        - Se o usuário forneceu um script completo do agente (como o da Flora do Hotel Nacional),
+          esse script é usado DIRETAMENTE como system prompt, sem ser embrulhado
+          em nenhum template genérico. Apenas a instrução de transbordo é adicionada ao final.
+
+        - Se não há prompt personalizado, usa o template padrão simples com o nome do agente.
+        """
+        cleaned = custom_prompt.strip() if custom_prompt else ""
+
+        if cleaned:
+            # Script completo fornecido pelo usuário → usa diretamente + transbordo
+            return cleaned + TRANSFER_INSTRUCTION
+        else:
+            # Sem script personalizado → usa template padrão
+            name = agent_name.strip() if agent_name else "Assistente Virtual"
+            return DEFAULT_HERMES_BASE_INSTRUCTION.format(
+                agent_name=name,
+                company_context="Atenda cordialmente os clientes e tire dúvidas sobre nossos serviços."
+            ) + TRANSFER_INSTRUCTION
 
     @staticmethod
     async def generate_response(
@@ -35,10 +56,10 @@ class HermesService:
         contact_name: Optional[str] = None
     ) -> Tuple[str, bool]:
         """
-        Envia a mensagem e o contexto completo para o Agente Hermes via HTTP.
+        Envia a mensagem e o contexto completo para o Agente via HTTP.
         Retorna uma tupla (resposta_texto, deve_transferir_para_humano).
         """
-        # 1. Obter endpoint e chave da API do Hermes
+        # 1. Obter endpoint e chave da API
         api_url = getattr(bot_config, "hermes_api_url", None) or getattr(settings, "HERMES_API_URL", None) or "https://agentesia-9router.4nvzqw.easypanel.host/v1/chat/completions"
         api_key = getattr(bot_config, "hermes_api_key", None) or getattr(settings, "HERMES_API_KEY", None) or "sk-10f2e981397deaea-xsefur-f0def252"
         model = getattr(bot_config, "hermes_model", None) or getattr(settings, "HERMES_MODEL", None) or "cf/@cf/meta/llama-3.3-70b-instruct-fp8-fast"
@@ -47,10 +68,10 @@ class HermesService:
         agent_name = getattr(bot_config, "hermes_agent_name", None) or "Assistente"
         system_prompt = getattr(bot_config, "hermes_system_prompt", None) or ""
 
-        # Monta prompt de sistema
+        # 2. Monta o system prompt
         formatted_system = HermesService.build_system_prompt(agent_name, system_prompt)
 
-        # 2. Histórico amplo de conversa (até 40 mensagens para contexto profundo)
+        # 3. Histórico amplo de conversa (até 40 mensagens para contexto profundo)
         trimmed_history = history[-40:] if len(history) > 40 else history
 
         messages_payload = [{"role": "system", "content": formatted_system}]
@@ -61,11 +82,11 @@ class HermesService:
                 "content": msg.get("content", "")
             })
 
-        # Adiciona a mensagem atual
+        # 4. Adiciona a mensagem atual
         user_msg = f"{contact_name}: {incoming_text}" if contact_name else incoming_text
         messages_payload.append({"role": "user", "content": user_msg})
 
-        # Prepara payload compatível com padrão OpenAI / vLLM / Ollama / Hermes API
+        # 5. Prepara payload compatível com padrão OpenAI / vLLM / Ollama
         request_body = {
             "model": model,
             "messages": messages_payload,
@@ -90,7 +111,7 @@ class HermesService:
                     else:
                         raw_reply = data.get("response", "").strip()
 
-                    # Verifica se o Hermes acionou o transbordo para atendente humano
+                    # Verifica se o agente acionou o transbordo
                     should_transfer = "[TRANSFERIR_HUMANO]" in raw_reply
                     clean_reply = raw_reply.replace("[TRANSFERIR_HUMANO]", "").strip()
 
