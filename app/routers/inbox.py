@@ -1900,6 +1900,29 @@ def upload_media(
     return {"url": f"/uploads/{unique_filename}"}
 
 
+def ensure_bot_config_columns(db: Session):
+    from app.database import db_url
+    from sqlalchemy import text
+    is_pg = not db_url.startswith("sqlite")
+    stmts = [
+        "ALTER TABLE qa_bot_configs ADD COLUMN IF NOT EXISTS bot_mode VARCHAR(20) DEFAULT 'flow'",
+        "ALTER TABLE qa_bot_configs ADD COLUMN IF NOT EXISTS hermes_agent_name VARCHAR(100) DEFAULT 'Assistente Virtual'",
+        "ALTER TABLE qa_bot_configs ADD COLUMN IF NOT EXISTS hermes_system_prompt TEXT",
+        "ALTER TABLE qa_bot_configs ADD COLUMN IF NOT EXISTS hermes_model VARCHAR(100) DEFAULT 'cf/@cf/meta/llama-3.3-70b-instruct-fp8-fast'",
+        "ALTER TABLE qa_bot_configs ADD COLUMN IF NOT EXISTS hermes_max_tokens INTEGER DEFAULT 1000",
+        "ALTER TABLE qa_bot_configs ADD COLUMN IF NOT EXISTS hermes_temperature DOUBLE PRECISION DEFAULT 0.7",
+        "ALTER TABLE qa_bot_configs ADD COLUMN IF NOT EXISTS hermes_api_url TEXT",
+        "ALTER TABLE qa_bot_configs ADD COLUMN IF NOT EXISTS hermes_api_key TEXT",
+    ]
+    for s in stmts:
+        try:
+            cur = s if is_pg else s.replace(" IF NOT EXISTS", "")
+            db.execute(text(cur))
+            db.commit()
+        except Exception:
+            db.rollback()
+
+
 @router.get("/bot-config", response_model=BotConfigResponse)
 def get_bot_config(
     db: Session = Depends(get_db),
@@ -1913,7 +1936,13 @@ def get_bot_config(
     if current_user.role not in ["administrator", "manager"]:
         raise HTTPException(status_code=403, detail="Apenas administradores e supervisores podem acessar as configurações do Bot.")
         
-    config = db.query(BotConfig).filter(BotConfig.tenant_id == current_tenant.id).first()
+    try:
+        config = db.query(BotConfig).filter(BotConfig.tenant_id == current_tenant.id).first()
+    except Exception:
+        db.rollback()
+        ensure_bot_config_columns(db)
+        config = db.query(BotConfig).filter(BotConfig.tenant_id == current_tenant.id).first()
+
     if not config:
         config = BotConfig(tenant_id=current_tenant.id)
         db.add(config)
@@ -1935,7 +1964,13 @@ def update_bot_config(
     if current_user.role not in ["administrator", "manager"]:
         raise HTTPException(status_code=403, detail="Apenas administradores e supervisores podem alterar as configurações do Bot.")
         
-    config = db.query(BotConfig).filter(BotConfig.tenant_id == current_tenant.id).first()
+    try:
+        config = db.query(BotConfig).filter(BotConfig.tenant_id == current_tenant.id).first()
+    except Exception:
+        db.rollback()
+        ensure_bot_config_columns(db)
+        config = db.query(BotConfig).filter(BotConfig.tenant_id == current_tenant.id).first()
+
     if not config:
         config = BotConfig(tenant_id=current_tenant.id)
         db.add(config)
@@ -1988,7 +2023,12 @@ async def test_hermes_reply(
     """
     from app.services.hermes_service import HermesService
     
-    config = db.query(BotConfig).filter(BotConfig.tenant_id == current_tenant.id).first()
+    try:
+        config = db.query(BotConfig).filter(BotConfig.tenant_id == current_tenant.id).first()
+    except Exception:
+        db.rollback()
+        ensure_bot_config_columns(db)
+        config = db.query(BotConfig).filter(BotConfig.tenant_id == current_tenant.id).first()
     
     # Monta config temporária para teste caso o usuário tenha passado novos valores
     test_conf = config or BotConfig(tenant_id=current_tenant.id)

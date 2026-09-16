@@ -294,7 +294,13 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                                 db.rollback()
 
                     # Check if chatbot or n8n is configured
-                    bot_config = db.query(BotConfig).filter(BotConfig.tenant_id == tenant_id).first()
+                    try:
+                        bot_config = db.query(BotConfig).filter(BotConfig.tenant_id == tenant_id).first()
+                    except Exception:
+                        db.rollback()
+                        from app.routers.inbox import ensure_bot_config_columns
+                        ensure_bot_config_columns(db)
+                        bot_config = db.query(BotConfig).filter(BotConfig.tenant_id == tenant_id).first()
                     is_bot_active = bool(bot_config and bot_config.is_active)
                     n8n_url = None
                     if bot_config and bot_config.n8n_webhook_url:
@@ -660,7 +666,11 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
         # 6. Forward/Relay to n8n webhook (Only if NOT handled by human agent)
         if 'convo' in locals() and convo:
             is_human_handled = (convo.status == "active" or convo.assigned_user_id is not None)
-            bot_config = db.query(BotConfig).filter(BotConfig.tenant_id == tenant_id).first()
+            try:
+                bot_config = db.query(BotConfig).filter(BotConfig.tenant_id == tenant_id).first()
+            except Exception:
+                db.rollback()
+                bot_config = None
             n8n_url = None
             if bot_config and bot_config.n8n_webhook_url:
                 n8n_url = bot_config.n8n_webhook_url

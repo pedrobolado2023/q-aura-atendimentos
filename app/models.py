@@ -110,8 +110,8 @@ class BotConfig(Base):
     bot_mode = Column(String(20), default="flow") # 'human', 'flow', 'hermes'
     hermes_agent_name = Column(String(100), default="Assistente Virtual")
     hermes_system_prompt = Column(Text, nullable=True)
-    hermes_model = Column(String(50), default="hermes-3-llama-3.1-8b")
-    hermes_max_tokens = Column(Integer, default=250)
+    hermes_model = Column(String(100), default="cf/@cf/meta/llama-3.3-70b-instruct-fp8-fast")
+    hermes_max_tokens = Column(Integer, default=1000)
     hermes_temperature = Column(Float, default=0.7)
     hermes_api_url = Column(Text, nullable=True)
     hermes_api_key = Column(Text, nullable=True)
