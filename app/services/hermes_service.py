@@ -32,15 +32,25 @@ class HermesService:
     def build_system_prompt(agent_name: Optional[str], custom_prompt: Optional[str]) -> str:
         """
         Lógica de montagem do system prompt:
-        - Se o usuário forneceu um script completo do agente, usa diretamente + instrução de transbordo.
-        - Se não há prompt personalizado, usa o template padrão simples com o nome do agente.
+        - Incorpora as diretrizes de diálogo contínuo (anti-repetição de saudações e apresentações)
+          junto com as instruções e base de conhecimento personalizadas salvas pelo usuário.
         """
+        name = agent_name.strip() if agent_name else "Assistente Virtual"
         cleaned = custom_prompt.strip() if custom_prompt else ""
 
         if cleaned:
-            return cleaned + TRANSFER_INSTRUCTION
+            return f"""Você é {name}, assistente virtual oficial de atendimento via WhatsApp e Site.
+
+DIRETRIZES DE ATENDIMENTO E CONTINUIDADE:
+1. DIÁLOGO CONTÍNUO EM TEMPO REAL: Mantenha sempre a memória da conversa ativa. Responda diretamente ao que o cliente acabou de falar baseando-se no histórico anterior.
+2. REGRA DE SAUDAÇÃO E APRESENTAÇÃO: NUNCA se apresente novamente, NUNCA diga seu nome de novo e NUNCA repita "Como posso te ajudar hoje?" se a conversa já estiver em andamento. Vá direto ao ponto com a resposta.
+3. Seja acolhedor, prestativo, humanizado e fale em português do Brasil com naturalidade.
+4. Baseie-se estritamente nas informações e regras da empresa abaixo para responder com máxima precisão.
+
+INFORMAÇÕES, REGRAS E BASE DE CONHECIMENTO DA EMPRESA:
+{cleaned}
+{TRANSFER_INSTRUCTION}"""
         else:
-            name = agent_name.strip() if agent_name else "Assistente Virtual"
             return DEFAULT_HERMES_BASE_INSTRUCTION.format(
                 agent_name=name,
                 company_context="Atenda cordialmente os clientes e tire dúvidas sobre nossos serviços com clareza e brevidade."
