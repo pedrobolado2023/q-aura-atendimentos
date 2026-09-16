@@ -536,7 +536,7 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                     is_human_handled = (convo.status == "active" or convo.assigned_user_id is not None)
 
                     # 5. Site Chatbot Autoreply Logic (Only if NOT handled by human agent)
-                    if not is_human_handled and convo.status == "bot" and is_bot_active and bot_config:
+                    if not is_human_handled and is_bot_active and bot_config:
                         creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == tenant_id).first()
                         if creds:
                             # Parse keywords to check for transfer to human agent
@@ -552,20 +552,48 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                                 convo.assigned_user_id = None
                                 convo.bot_step_id = None
                                 db.commit()
+                            elif should_transfer:
+                                # Interceptação direta por palavras-chave (economiza tokens da IA)
+                                convo.status = "waiting" # Transfer to human queue
+                                convo.assigned_user_id = None
+                                convo.bot_step_id = None
+                                db.commit()
+                                replies_to_send = ["Certo, estou te transferindo para a nossa equipe de atendimento. Um momento, por favor!"]
+                                transf_note = Message(
+                                    conversation_id=convo.id,
+                                    sender_type="system",
+                                    message_type="system",
+                                    body="👤 Cliente solicitou atendimento humano via palavra-chave e foi enviado para a fila de espera.",
+                                    internal_note=True,
+                                    created_at=datetime.now(timezone.utc)
+                                )
+                                db.add(transf_note)
+                                db.commit()
                             elif current_bot_mode == "hermes":
-                                # MODO 3: AGENTE HERMES (IA) - Processamento inteligente com contexto amplo
+                                # MODO 3: AGENTE HERMES (IA) - Processamento inteligente com contexto limpo
+                                # Garante status 'bot' na conversa se não há atendente humano
+                                if convo.status != "bot":
+                                    convo.status = "bot"
+                                    db.commit()
+
+                                # Busca histórico completo da conversa real (sem notas internas ou mensagens de sistema)
                                 recent_msgs = db.query(Message).filter(
-                                    Message.conversation_id == convo.id
-                                ).order_by(Message.created_at.desc()).limit(30).all()
+                                    Message.conversation_id == convo.id,
+                                    Message.internal_note == False,
+                                    Message.sender_type.in_(["contact", "bot", "agent"])
+                                ).order_by(Message.created_at.desc()).limit(80).all()
                                 recent_msgs.reverse()
 
                                 history_payload = []
                                 for m in recent_msgs:
                                     if m.id == new_msg.id:
                                         continue
+                                    b_txt = (m.body or "").strip()
+                                    if not b_txt:
+                                        continue
                                     history_payload.append({
                                         "role": "assistant" if m.sender_type in ["bot", "agent"] else "user",
-                                        "content": m.body or ""
+                                        "content": b_txt
                                     })
 
                                 reply_text, must_transfer = await HermesService.generate_response(
@@ -580,16 +608,19 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                                     convo.assigned_user_id = None
                                     convo.bot_step_id = None
                                     db.commit()
+                                    transf_note = Message(
+                                        conversation_id=convo.id,
+                                        sender_type="system",
+                                        message_type="system",
+                                        body="👤 Agente Hermes transferiu a conversa para a fila de atendimento humano.",
+                                        internal_note=True,
+                                        created_at=datetime.now(timezone.utc)
+                                    )
+                                    db.add(transf_note)
+                                    db.commit()
 
                                 if reply_text:
                                     replies_to_send = [reply_text]
-                            elif should_transfer:
-                                # Interceptação para modo Flow/Regras
-                                convo.status = "waiting" # Transfer to human queue
-                                convo.assigned_user_id = None
-                                convo.bot_step_id = None
-                                db.commit()
-                                replies_to_send = ["Certo, estou te transferindo para a fila de atendimento humano. Um momento, por favor!"]
                             elif bot_config.flow_data and isinstance(bot_config.flow_data, dict) and bot_config.flow_data.get("nodes"):
                                 # MODO 2: Motor do Construtor Visual (Typebot)
                                 engine = BotFlowEngine(bot_config.flow_data, bot_config)
