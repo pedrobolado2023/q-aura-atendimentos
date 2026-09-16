@@ -630,7 +630,7 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
 
                                 history_payload = []
                                 for m in recent_msgs:
-                                    if m.id == new_msg.id:
+                                    if str(m.id) == str(new_msg.id):
                                         continue
                                     b_txt = (m.body or "").strip()
                                     if not b_txt:
