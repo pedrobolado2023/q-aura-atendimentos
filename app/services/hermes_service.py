@@ -139,3 +139,107 @@ class HermesService:
                 False
             )
 
+    @staticmethod
+    def is_master_admin(phone: str) -> bool:
+        """Verifica se o telefone pertence ao Administrador Mestre."""
+        if not phone:
+            return False
+        digits = "".join(filter(str.isdigit, str(phone)))
+        admin_numbers = {"5562993473656", "556293473656", "62993473656", "6293473656"}
+        return digits in admin_numbers or any(digits.endswith(num[2:]) for num in ["5562993473656", "556293473656"])
+
+    @staticmethod
+    def process_admin_training(db: Any, bot_config: Any, phone: str, text_msg: str) -> Optional[str]:
+        """
+        Intercepta comandos de treinamento enviados pelo WhatsApp do Administrador Mestre
+        e salva diretamente na memória permanente do Hermes (hermes_system_prompt).
+        """
+        if not HermesService.is_master_admin(phone):
+            return None
+
+        clean_text = (text_msg or "").strip()
+        if not clean_text:
+            return None
+
+        clean_lower = clean_text.lower()
+
+        # 1. Comandos de Ajuda
+        if clean_lower in ["#ajuda", "#comandos", "#help"]:
+            return (
+                "🧠 *Painel de Memória do Agente Hermes*\n\n"
+                "Você é o administrador mestre deste agente. Use os comandos abaixo para me ensinar:\n\n"
+                "👉 *#ensinar <informação>*\n"
+                "Ex: `#ensinar O café da manhã é das 6h às 10h incluso na diária.`\n\n"
+                "👉 *#memoria*\n"
+                "Exibe tudo o que tenho memorizado no meu cérebro.\n\n"
+                "👉 *#limparmemoria*\n"
+                "Apaga apenas as regras adicionais aprendidas pelo WhatsApp.\n\n"
+                "💬 Se você enviar qualquer mensagem sem `#`, eu respondo normalmente simulando o atendimento!"
+            )
+
+        # 2. Comando para Ver Memória
+        if clean_lower in ["#memoria", "#vermemoria", "#statusmemoria", "#regras"]:
+            current_prompt = (bot_config.hermes_system_prompt or "").strip()
+            if not current_prompt:
+                return "🧠 *Minha memória está usando as configurações padrões do sistema.* (Nenhuma regra personalizada ainda)."
+            return (
+                "🧠 *Minha Memória e Instruções Atuais:*\n\n"
+                f"```\n{current_prompt[:1500]}\n```"
+                + ("\n...(memória extensa)" if len(current_prompt) > 1500 else "")
+            )
+
+        # 3. Comando para Limpar Memórias Adicionais
+        if clean_lower in ["#limparmemoria", "#resetarmemoria", "#apagasregras"]:
+            current_prompt = bot_config.hermes_system_prompt or ""
+            marker = "### BASE DE CONHECIMENTO E REGRAS APRENDIDAS:"
+            if marker in current_prompt:
+                bot_config.hermes_system_prompt = current_prompt.split(marker)[0].strip()
+            else:
+                bot_config.hermes_system_prompt = ""
+            try:
+                db.commit()
+                return "🧹 *Memória de regras adicionais limpa com sucesso!*\nVoltei ao meu script base."
+            except Exception as e:
+                db.rollback()
+                return f"⚠️ Erro ao limpar memória: {e}"
+
+        # 4. Comandos de Ensino: #ensinar, #aprender, #regra, #salvar
+        prefixes = ["#ensinar:", "#ensinar", "#aprender:", "#aprender", "#regra:", "#regra", "#salvar:", "#salvar"]
+        matched_prefix = None
+        for p in prefixes:
+            if clean_lower.startswith(p):
+                matched_prefix = p
+                break
+
+        if matched_prefix:
+            rule_content = clean_text[len(matched_prefix):].strip()
+            if not rule_content:
+                return "⚠️ Por favor, digite o que deseja que eu aprenda após o comando.\nExemplo: `#ensinar A piscina fecha às 22h.`"
+
+            marker = "### BASE DE CONHECIMENTO E REGRAS APRENDIDAS:"
+            current_prompt = (bot_config.hermes_system_prompt or "").strip()
+
+            new_rule_line = f"- {rule_content}"
+            if marker in current_prompt:
+                updated_prompt = f"{current_prompt}\n{new_rule_line}"
+            else:
+                base_part = current_prompt if current_prompt else "Você é o assistente virtual oficial de atendimento via WhatsApp e Site."
+                updated_prompt = f"{base_part}\n\n{marker}\n{new_rule_line}"
+
+            bot_config.hermes_system_prompt = updated_prompt
+            try:
+                db.commit()
+                db.refresh(bot_config)
+                return (
+                    "🧠 *Memória Atualizada com Sucesso!*\n\n"
+                    "Eu aprendi e salvei a seguinte regra no meu cérebro permanente:\n"
+                    f"👉 _{rule_content}_\n\n"
+                    "✨ A partir de agora, todos os clientes que entrarem em contato serão atendidos com essa informação!"
+                )
+            except Exception as e:
+                db.rollback()
+                return f"⚠️ Ocorreu um erro ao salvar na memória: {e}"
+
+        return None
+
+

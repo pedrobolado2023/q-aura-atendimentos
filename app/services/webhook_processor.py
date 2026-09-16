@@ -532,6 +532,48 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                     }
                     await websocket_broadcast_fn(tenant_id, broadcast_data)
 
+                    # 4.1 Interceptação de Ensino/Comandos pelo WhatsApp do Administrador Mestre (5562993473656)
+                    if bot_config:
+                        admin_train_reply = HermesService.process_admin_training(
+                            db=db,
+                            bot_config=bot_config,
+                            phone=contact.phone_number,
+                            text_msg=body_content
+                        )
+                        if admin_train_reply:
+                            creds = db.query(MetaCredential).filter(MetaCredential.tenant_id == tenant_id).first()
+                            if creds and creds.phone_number_id and creds.permanent_access_token:
+                                admin_meta_msg_id = await send_whatsapp_text(
+                                    phone_number_id=creds.phone_number_id,
+                                    token=creds.permanent_access_token,
+                                    to_phone=contact.phone_number,
+                                    body=admin_train_reply
+                                )
+                                admin_bot_msg = Message(
+                                    conversation_id=convo.id,
+                                    sender_type="bot",
+                                    body=admin_train_reply,
+                                    meta_message_id=admin_meta_msg_id,
+                                    status="sent" if admin_meta_msg_id else "failed",
+                                    created_at=datetime.now(timezone.utc)
+                                )
+                                db.add(admin_bot_msg)
+                                convo.last_message_at = datetime.now(timezone.utc)
+                                db.commit()
+                                db.refresh(admin_bot_msg)
+
+                                await websocket_broadcast_fn(tenant_id, {
+                                    "type": "new_message",
+                                    "id": admin_bot_msg.id,
+                                    "conversation_id": convo.id,
+                                    "sender_type": "bot",
+                                    "body": admin_train_reply,
+                                    "message_type": "text",
+                                    "unread": False,
+                                    "created_at": admin_bot_msg.created_at.isoformat() if admin_bot_msg.created_at else None
+                                })
+                            continue
+
                     # Check if conversation has been taken over by human agent
                     is_human_handled = (convo.status == "active" or convo.assigned_user_id is not None)
 
