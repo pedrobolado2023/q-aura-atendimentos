@@ -1304,30 +1304,7 @@ const appRouter = {
         this.loadBillingSummary();
     },
 
-    switchBotMode(mode) {
-        document.querySelectorAll(".bot-mode-tab-btn").forEach(btn => {
-            btn.classList.remove("active");
-            btn.style.borderBottom = "2px solid transparent";
-            btn.style.color = "var(--text-muted)";
-            btn.style.fontWeight = "600";
-        });
 
-        const activeBtn = document.getElementById(`bot-mode-${mode}`);
-        if (activeBtn) {
-            activeBtn.classList.add("active");
-            activeBtn.style.borderBottom = mode === 'hermes' ? "2px solid #a855f7" : "2px solid var(--color-brand)";
-            activeBtn.style.color = mode === 'hermes' ? "#a855f7" : "var(--color-brand)";
-            activeBtn.style.fontWeight = "700";
-        }
-
-        const panelBuilder = document.getElementById("bot-panel-builder");
-        const panelSimple = document.getElementById("bot-panel-simple");
-        const panelHermes = document.getElementById("bot-panel-hermes");
-
-        if (panelBuilder) panelBuilder.style.display = mode === "builder" ? "flex" : "none";
-        if (panelSimple) panelSimple.style.display = mode === "simple" ? "block" : "none";
-        if (panelHermes) panelHermes.style.display = mode === "hermes" ? "block" : "none";
-    },
 
     async selectBotMode(mode) {
         const badge = document.getElementById("active-bot-mode-badge");
@@ -1544,6 +1521,9 @@ POLÍTICA DE RESERVAS:
                 if (previewText) {
                     previewText.innerHTML = formatMessageBody(config.welcome_message || "Olá! Bem-vindo ao nosso hotel...");
                 }
+
+                // Switch to the current bot mode tab to show the correct panel
+                this.switchBotMode(currentMode);
             }
         } catch (e) {
             console.error("Erro ao carregar configurações do chatbot:", e);
@@ -5233,12 +5213,14 @@ appRouter.switchBotMode = function(mode) {
     const activeBtn = document.getElementById(`bot-mode-${mode}`);
     if (activeBtn) {
         activeBtn.classList.add("active");
-        activeBtn.style.color = "var(--color-brand)";
-        activeBtn.style.borderBottomColor = "var(--color-brand)";
+        activeBtn.style.color = mode === 'hermes' ? "#a855f7" : "var(--color-brand)";
+        activeBtn.style.borderBottomColor = mode === 'hermes' ? "#a855f7" : "var(--color-brand)";
     }
 
     document.getElementById("bot-panel-builder").style.display = mode === "builder" ? "flex" : "none";
     document.getElementById("bot-panel-simple").style.display = mode === "simple" ? "block" : "none";
+    const panelHermes = document.getElementById("bot-panel-hermes");
+    if (panelHermes) panelHermes.style.display = mode === "hermes" ? "block" : "none";
 
     if (mode === "builder" && !window.botFlowBuilder.initialized) {
         window.botFlowBuilder.init();
