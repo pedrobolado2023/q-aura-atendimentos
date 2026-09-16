@@ -1,5 +1,6 @@
 import httpx
 from typing import Optional
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.models import Contact, Conversation, Message, BotConfig, MetaCredential, CampaignRecipient
 from app.config import settings
@@ -500,6 +501,7 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                         media_mime_type=media_mime,
                         meta_message_id=meta_msg_id,
                         status="delivered",
+                        internal_note=False,
                         created_at=msg_created_at
                     )
                     db.add(new_msg)
@@ -621,7 +623,7 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                                 # Busca histórico completo da conversa real (sem notas internas ou mensagens de sistema)
                                 recent_msgs = db.query(Message).filter(
                                     Message.conversation_id == convo.id,
-                                    Message.internal_note == False,
+                                    or_(Message.internal_note == False, Message.internal_note.is_(None)),
                                     Message.sender_type.in_(["contact", "bot", "agent"])
                                 ).order_by(Message.created_at.desc()).limit(80).all()
                                 recent_msgs.reverse()
@@ -706,7 +708,8 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                                     sender_type="bot",
                                     body=bot_reply_body,
                                     meta_message_id=bot_meta_msg_id,
-                                    status="sent" if bot_meta_msg_id else "failed"
+                                    status="sent" if bot_meta_msg_id else "failed",
+                                    internal_note=False
                                 )
                                 db.add(bot_msg)
                                 
