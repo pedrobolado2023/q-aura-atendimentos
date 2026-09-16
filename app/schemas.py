@@ -281,6 +281,14 @@ class BotConfigResponse(BaseModel):
     transfer_keywords: str
     n8n_webhook_url: Optional[str] = None
     flow_data: Optional[dict] = None
+    bot_mode: Optional[str] = "flow"
+    hermes_agent_name: Optional[str] = "Assistente Virtual"
+    hermes_system_prompt: Optional[str] = None
+    hermes_model: Optional[str] = "hermes-3-llama-3.1-8b"
+    hermes_max_tokens: Optional[int] = 250
+    hermes_temperature: Optional[float] = 0.7
+    hermes_api_url: Optional[str] = None
+    hermes_api_key: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -293,6 +301,24 @@ class BotConfigUpdate(BaseModel):
     transfer_keywords: Optional[str] = None
     n8n_webhook_url: Optional[str] = None
     flow_data: Optional[dict] = None
+    bot_mode: Optional[str] = None
+    hermes_agent_name: Optional[str] = None
+    hermes_system_prompt: Optional[str] = None
+    hermes_model: Optional[str] = None
+    hermes_max_tokens: Optional[int] = None
+    hermes_temperature: Optional[float] = None
+    hermes_api_url: Optional[str] = None
+    hermes_api_key: Optional[str] = None
+
+class HermesTestRequest(BaseModel):
+    message: str
+    agent_name: Optional[str] = "Sofia"
+    system_prompt: Optional[str] = None
+    model: Optional[str] = None
+
+class HermesTestResponse(BaseModel):
+    reply: str
+    transferred_to_human: bool
 
 class BotSimulateRequest(BaseModel):
     message: str

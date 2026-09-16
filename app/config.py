@@ -18,5 +18,8 @@ class Settings:
     MP_PUBLIC_KEY: str = os.getenv("MP_PUBLIC_KEY", "APP_USR-f2d1d76a-b328-4d97-8de9-82fdefddcd0b")
     MP_CLIENT_ID: str = os.getenv("MP_CLIENT_ID", "4192080643307351")
     MP_CLIENT_SECRET: str = os.getenv("MP_CLIENT_SECRET", "4PlkiNQX1kFxbZ1sQpJq0yNXaJd2qYVM")
+    HERMES_API_URL: str = os.getenv("HERMES_API_URL", "https://agentesia-9router.4nvzqw.easypanel.host/v1/chat/completions")
+    HERMES_API_KEY: str = os.getenv("HERMES_API_KEY", "sk-10f2e981397deaea-xsefur-f0def252")
+    HERMES_MODEL: str = os.getenv("HERMES_MODEL", "cf/@cf/meta/llama-3.3-70b-instruct-fp8-fast")
 
 settings = Settings()

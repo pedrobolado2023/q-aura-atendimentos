@@ -106,6 +106,15 @@ class BotConfig(Base):
     transfer_keywords = Column(Text, default="atendente,humano,falar,suporte,ajuda")
     n8n_webhook_url = Column(Text, nullable=True)
     flow_data = Column(JSON, nullable=True)
+    # Suporte aos 3 modos de atendimento e Agente Hermes
+    bot_mode = Column(String(20), default="flow") # 'human', 'flow', 'hermes'
+    hermes_agent_name = Column(String(100), default="Assistente Virtual")
+    hermes_system_prompt = Column(Text, nullable=True)
+    hermes_model = Column(String(50), default="hermes-3-llama-3.1-8b")
+    hermes_max_tokens = Column(Integer, default=250)
+    hermes_temperature = Column(Float, default=0.7)
+    hermes_api_url = Column(Text, nullable=True)
+    hermes_api_key = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

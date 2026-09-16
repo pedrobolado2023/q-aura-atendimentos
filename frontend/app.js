@@ -1304,6 +1304,166 @@ const appRouter = {
         this.loadBillingSummary();
     },
 
+    switchBotMode(mode) {
+        document.querySelectorAll(".bot-mode-tab-btn").forEach(btn => {
+            btn.classList.remove("active");
+            btn.style.borderBottom = "2px solid transparent";
+            btn.style.color = "var(--text-muted)";
+            btn.style.fontWeight = "600";
+        });
+
+        const activeBtn = document.getElementById(`bot-mode-${mode}`);
+        if (activeBtn) {
+            activeBtn.classList.add("active");
+            activeBtn.style.borderBottom = mode === 'hermes' ? "2px solid #a855f7" : "2px solid var(--color-brand)";
+            activeBtn.style.color = mode === 'hermes' ? "#a855f7" : "var(--color-brand)";
+            activeBtn.style.fontWeight = "700";
+        }
+
+        const panelBuilder = document.getElementById("bot-panel-builder");
+        const panelSimple = document.getElementById("bot-panel-simple");
+        const panelHermes = document.getElementById("bot-panel-hermes");
+
+        if (panelBuilder) panelBuilder.style.display = mode === "builder" ? "flex" : "none";
+        if (panelSimple) panelSimple.style.display = mode === "simple" ? "block" : "none";
+        if (panelHermes) panelHermes.style.display = mode === "hermes" ? "block" : "none";
+    },
+
+    async selectBotMode(mode) {
+        const badge = document.getElementById("active-bot-mode-badge");
+        const humanRadio = document.getElementById("radio-mode-human");
+        const flowRadio = document.getElementById("radio-mode-flow");
+        const hermesRadio = document.getElementById("radio-mode-hermes");
+
+        if (humanRadio) humanRadio.checked = mode === "human";
+        if (flowRadio) flowRadio.checked = mode === "flow";
+        if (hermesRadio) hermesRadio.checked = mode === "hermes";
+
+        const labelHuman = document.getElementById("label-mode-human");
+        const labelFlow = document.getElementById("label-mode-flow");
+        const labelHermes = document.getElementById("label-mode-hermes");
+
+        if (labelHuman) labelHuman.style.borderColor = mode === "human" ? "var(--color-brand)" : "var(--border-color)";
+        if (labelFlow) labelFlow.style.borderColor = mode === "flow" ? "var(--color-brand)" : "var(--border-color)";
+        if (labelHermes) labelHermes.style.borderColor = mode === "hermes" ? "#a855f7" : "var(--border-color)";
+
+        if (badge) {
+            if (mode === "human") {
+                badge.innerText = "Apenas Humano";
+                badge.style.background = "rgba(100,116,139,0.15)";
+                badge.style.color = "#94a3b8";
+            } else if (mode === "hermes") {
+                badge.innerText = "Agente Hermes (IA)";
+                badge.style.background = "rgba(168,85,247,0.15)";
+                badge.style.color = "#c084fc";
+            } else {
+                badge.innerText = "Chatbot de Fluxo";
+                badge.style.background = "rgba(99,102,241,0.15)";
+                badge.style.color = "#818cf8";
+            }
+        }
+
+        try {
+            await api.post("/api/inbox/bot-config", { bot_mode: mode });
+            showToast(`Modo alterado com sucesso: ${mode === 'hermes' ? 'Agente IA Hermes' : mode === 'human' ? 'Apenas Humano' : 'Chatbot de Fluxo'}`, "success");
+        } catch (e) {
+            console.error("Erro ao salvar modo do bot:", e);
+        }
+    },
+
+    loadHotelTemplatePrompt() {
+        const promptEl = document.getElementById("hermes-system-prompt");
+        if (!promptEl) return;
+        promptEl.value = `HOTEL: Copacabana Royal Hotel & Suites (Rio de Janeiro - RJ)
+LOCALIZAÇÃO: Av. Atlântica, 1200 - Copacabana (a 50 metros da praia)
+
+HORÁRIOS:
+- Check-in: a partir das 14:00
+- Check-out: até as 11:00
+- Café da manhã: incluso na diária, servido das 06:30 às 10:30 no restaurante térreo.
+
+ACOMODAÇÕES & VALORES ESTIMADOS:
+1. Suíte Standard (Cama Queen, vista lateral): R$ 380/diária
+2. Suíte Luxo Vista Mar (Cama King, varanda frontal): R$ 560/diária
+3. Suíte Família (Até 4 pessoas): R$ 720/diária
+
+COMODIDADES:
+- Wi-Fi gratuito de alta velocidade em todos os quartos e áreas comuns.
+- Piscina aquecida na cobertura com bar e vista panorâmica para a orla de Copacabana.
+- Estacionamento rotativo: R$ 40/dia (mediante disponibilidade).
+- Aceitamos pets de pequeno porte (até 10kg, taxa única de higienização R$ 120).
+
+POLÍTICA DE RESERVAS:
+- Pagamento via PIX com 5% de desconto ou Cartão de Crédito em até 6x sem juros.
+- Cancelamento gratuito até 48h antes do check-in.
+- Se o cliente quiser efetuar a reserva, negociar desconto ou fechar pacote, informe cordialmente que vai transferir para nossa equipe de reservas.`;
+        showToast("Modelo de Hotel no RJ inserido!", "info");
+    },
+
+    async testHermesMessage() {
+        const input = document.getElementById("hermes-sim-input");
+        const container = document.getElementById("hermes-sim-messages");
+        const sendBtn = document.getElementById("btn-hermes-sim-send");
+        if (!input || !container) return;
+
+        const text = input.value.trim();
+        if (!text) return;
+
+        // Adiciona balão do usuário
+        const userBubble = document.createElement("div");
+        userBubble.style.cssText = "background: #005c4b; color: white; padding: 8px 12px; border-radius: 8px 8px 2px 8px; align-self: flex-end; max-width: 80%; line-height: 1.4;";
+        userBubble.innerText = text;
+        container.appendChild(userBubble);
+        input.value = "";
+        container.scrollTop = container.scrollHeight;
+
+        // Balão de digitando
+        const typingBubble = document.createElement("div");
+        typingBubble.style.cssText = "background: #202c33; color: #a855f7; padding: 6px 10px; border-radius: 8px 8px 8px 2px; align-self: flex-start; font-size: 11px; font-style: italic;";
+        typingBubble.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Hermes digitando...`;
+        container.appendChild(typingBubble);
+        container.scrollTop = container.scrollHeight;
+
+        if (sendBtn) sendBtn.disabled = true;
+
+        try {
+            const agentName = document.getElementById("hermes-agent-name")?.value || "Sofia";
+            const systemPrompt = document.getElementById("hermes-system-prompt")?.value || "";
+            const model = document.getElementById("hermes-model-select")?.value || "hermes-3-llama-3.1-8b";
+
+            const res = await api.post("/api/inbox/hermes-test", {
+                message: text,
+                agent_name: agentName,
+                system_prompt: systemPrompt,
+                model: model
+            });
+
+            container.removeChild(typingBubble);
+
+            const botBubble = document.createElement("div");
+            botBubble.style.cssText = "background: #202c33; color: #e9edef; padding: 8px 12px; border-radius: 8px 8px 8px 2px; align-self: flex-start; max-width: 85%; line-height: 1.4;";
+            
+            let extraBadge = "";
+            if (res.transferred_to_human) {
+                extraBadge = `<div style="margin-top: 6px; padding: 4px 8px; background: rgba(239,68,68,0.2); color: #f87171; border-radius: 4px; font-size: 10px; font-weight: 700; display: flex; align-items: center; gap: 4px;">
+                    <i class="fa-solid fa-headset"></i> [Transbordo Acionado: Passado para Atendente Humano]
+                </div>`;
+            }
+
+            botBubble.innerHTML = `<div>${res.reply}</div>${extraBadge}`;
+            container.appendChild(botBubble);
+            container.scrollTop = container.scrollHeight;
+        } catch (err) {
+            container.removeChild(typingBubble);
+            const errBubble = document.createElement("div");
+            errBubble.style.cssText = "background: rgba(239,68,68,0.2); color: #f87171; padding: 8px 10px; border-radius: 6px; font-size: 11px;";
+            errBubble.innerText = "Erro ao testar Hermes: " + err.message;
+            container.appendChild(errBubble);
+        } finally {
+            if (sendBtn) sendBtn.disabled = false;
+        }
+    },
+
     async loadBotConfig() {
         try {
             const config = await api.get("/api/inbox/bot-config");
@@ -1314,6 +1474,71 @@ const appRouter = {
                 document.getElementById("bot-out-hours-msg").value = config.out_of_hours_message || "";
                 document.getElementById("bot-transfer-keywords").value = config.transfer_keywords || "";
                 
+                // Hermes config fields
+                const agentNameEl = document.getElementById("hermes-agent-name");
+                if (agentNameEl) agentNameEl.value = config.hermes_agent_name || "Sofia (Concierge Virtual)";
+                
+                const modelEl = document.getElementById("hermes-model-select");
+                if (modelEl) modelEl.value = config.hermes_model || "cf/@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+
+                const promptEl = document.getElementById("hermes-system-prompt");
+                if (promptEl) {
+                    promptEl.value = config.hermes_system_prompt || "";
+                    if (!config.hermes_system_prompt) {
+                        this.loadHotelTemplatePrompt();
+                    }
+                }
+
+                const tokensEl = document.getElementById("hermes-max-tokens");
+                if (tokensEl) {
+                    tokensEl.value = config.hermes_max_tokens || 1000;
+                    const lbl = document.getElementById("hermes-tokens-label");
+                    if (lbl) lbl.innerText = `${config.hermes_max_tokens || 1000} tokens`;
+                }
+
+                const tempEl = document.getElementById("hermes-temperature");
+                if (tempEl) {
+                    tempEl.value = config.hermes_temperature !== undefined ? config.hermes_temperature : 0.7;
+                    const lblTemp = document.getElementById("hermes-temp-label");
+                    if (lblTemp) lblTemp.innerText = `${tempEl.value}`;
+                }
+
+                const hermesKwEl = document.getElementById("hermes-transfer-keywords");
+                if (hermesKwEl) hermesKwEl.value = config.transfer_keywords || "atendente,humano,falar,suporte,ajuda,recepcionista,vendedor";
+
+                // Bot Mode Radio & Badge sync
+                const currentMode = config.bot_mode || "flow";
+                const humanRadio = document.getElementById("radio-mode-human");
+                const flowRadio = document.getElementById("radio-mode-flow");
+                const hermesRadio = document.getElementById("radio-mode-hermes");
+                if (humanRadio) humanRadio.checked = currentMode === "human";
+                if (flowRadio) flowRadio.checked = currentMode === "flow";
+                if (hermesRadio) hermesRadio.checked = currentMode === "hermes";
+
+                const labelHuman = document.getElementById("label-mode-human");
+                const labelFlow = document.getElementById("label-mode-flow");
+                const labelHermes = document.getElementById("label-mode-hermes");
+                if (labelHuman) labelHuman.style.borderColor = currentMode === "human" ? "var(--color-brand)" : "var(--border-color)";
+                if (labelFlow) labelFlow.style.borderColor = currentMode === "flow" ? "var(--color-brand)" : "var(--border-color)";
+                if (labelHermes) labelHermes.style.borderColor = currentMode === "hermes" ? "#a855f7" : "var(--border-color)";
+
+                const badge = document.getElementById("active-bot-mode-badge");
+                if (badge) {
+                    if (currentMode === "human") {
+                        badge.innerText = "Apenas Humano";
+                        badge.style.background = "rgba(100,116,139,0.15)";
+                        badge.style.color = "#94a3b8";
+                    } else if (currentMode === "hermes") {
+                        badge.innerText = "Agente Hermes (IA)";
+                        badge.style.background = "rgba(168,85,247,0.15)";
+                        badge.style.color = "#c084fc";
+                    } else {
+                        badge.innerText = "Chatbot de Fluxo";
+                        badge.style.background = "rgba(99,102,241,0.15)";
+                        badge.style.color = "#818cf8";
+                    }
+                }
+
                 // Sync preview text
                 const previewText = document.getElementById("preview-bot-welcome-text");
                 if (previewText) {
@@ -3615,6 +3840,48 @@ if (chatbotForm) {
         } finally {
             btn.disabled = false;
             btn.innerText = "Salvar Configurações";
+        }
+    });
+}
+
+// Hermes Config Submit
+const hermesForm = document.getElementById("hermes-config-form");
+if (hermesForm) {
+    hermesForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        
+        const hermes_agent_name = document.getElementById("hermes-agent-name")?.value.trim() || "Sofia";
+        const hermes_model = document.getElementById("hermes-model-select")?.value.trim() || "cf/@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+        const hermes_system_prompt = document.getElementById("hermes-system-prompt")?.value.trim() || "";
+        const hermes_max_tokens = parseInt(document.getElementById("hermes-max-tokens")?.value || "1000");
+        const hermes_temperature = parseFloat(document.getElementById("hermes-temperature")?.value || "0.7");
+        const transfer_keywords = document.getElementById("hermes-transfer-keywords")?.value.trim();
+        
+        const btn = document.getElementById("btn-save-hermes-config");
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Salvando...`;
+        }
+        
+        try {
+            await api.post("/api/inbox/bot-config", {
+                bot_mode: "hermes",
+                hermes_agent_name,
+                hermes_model,
+                hermes_system_prompt,
+                hermes_max_tokens,
+                hermes_temperature,
+                transfer_keywords
+            });
+            showToast("Configurações do Agente Hermes salvas com sucesso!", "success");
+            appRouter.selectBotMode("hermes");
+        } catch (err) {
+            showToast("Erro ao salvar configurações do Hermes: " + err.message, "error");
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Salvar Configurações do Hermes`;
+            }
         }
     });
 }

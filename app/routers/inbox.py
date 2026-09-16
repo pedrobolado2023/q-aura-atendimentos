@@ -11,7 +11,7 @@ from typing import List, Optional, Union, Any
 from sqlalchemy import func
 from app.database import get_db, SessionLocal, engine
 from app.models import User, Tenant, Conversation, Message, Contact, MetaCredential, BotConfig, Department, QuickMessage, MarketingCampaign, CampaignRecipient, MessageTemplate, Tag
-from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, CampaignResponse, BotConfigResponse, BotConfigUpdate, BotSimulateRequest, BotSimulateResponse, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, AgentPerformanceMetric, DailyTrafficMetric, StartConversationRequest, QuickMessageCreate, QuickMessageResponse, ContactResponse, MessageTemplateCreate, MessageTemplateResponse, TagCreate, TagResponse, KanbanBoardResponse, KanbanColumn, KanbanCard, KanbanStageUpdateRequest, GlobalSearchResult, ResolveCSATRequest
+from app.schemas import ConversationResponse, MessageResponse, BulkContactUploadRequest, CampaignSendRequest, CampaignResponse, BotConfigResponse, BotConfigUpdate, BotSimulateRequest, BotSimulateResponse, DashboardMetricsResponse, DepartmentMetric, FunnelStageMetric, AgentPerformanceMetric, DailyTrafficMetric, StartConversationRequest, QuickMessageCreate, QuickMessageResponse, ContactResponse, MessageTemplateCreate, MessageTemplateResponse, TagCreate, TagResponse, KanbanBoardResponse, KanbanColumn, KanbanCard, KanbanStageUpdateRequest, GlobalSearchResult, ResolveCSATRequest, HermesTestRequest, HermesTestResponse
 from app.auth import get_current_user, get_current_tenant, ModuleRequired
 from app.config import settings
 
@@ -1954,10 +1954,62 @@ def update_bot_config(
         config.n8n_webhook_url = payload.n8n_webhook_url
     if payload.flow_data is not None:
         config.flow_data = payload.flow_data
+    if payload.bot_mode is not None:
+        config.bot_mode = payload.bot_mode
+    if payload.hermes_agent_name is not None:
+        config.hermes_agent_name = payload.hermes_agent_name
+    if payload.hermes_system_prompt is not None:
+        config.hermes_system_prompt = payload.hermes_system_prompt
+    if payload.hermes_model is not None:
+        config.hermes_model = payload.hermes_model
+    if payload.hermes_max_tokens is not None:
+        config.hermes_max_tokens = payload.hermes_max_tokens
+    if payload.hermes_temperature is not None:
+        config.hermes_temperature = payload.hermes_temperature
+    if payload.hermes_api_url is not None:
+        config.hermes_api_url = payload.hermes_api_url
+    if payload.hermes_api_key is not None:
+        config.hermes_api_key = payload.hermes_api_key
         
     db.commit()
     db.refresh(config)
     return config
+
+
+@router.post("/hermes-test", response_model=HermesTestResponse)
+async def test_hermes_reply(
+    payload: HermesTestRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(ModuleRequired("chatbot"))
+):
+    """
+    Testa a resposta do Agente Hermes interativamente no painel do Q-Aura.
+    """
+    from app.services.hermes_service import HermesService
+    
+    config = db.query(BotConfig).filter(BotConfig.tenant_id == current_tenant.id).first()
+    
+    # Monta config temporária para teste caso o usuário tenha passado novos valores
+    test_conf = config or BotConfig(tenant_id=current_tenant.id)
+    if payload.agent_name:
+        test_conf.hermes_agent_name = payload.agent_name
+    if payload.system_prompt:
+        test_conf.hermes_system_prompt = payload.system_prompt
+    if payload.model:
+        test_conf.hermes_model = payload.model
+        
+    reply, should_transfer = await HermesService.generate_response(
+        bot_config=test_conf,
+        incoming_text=payload.message,
+        history=[],
+        contact_name="Visitante Teste"
+    )
+    
+    return HermesTestResponse(
+        reply=reply,
+        transferred_to_human=should_transfer
+    )
 
 
 @router.post("/bot-simulate", response_model=BotSimulateResponse)

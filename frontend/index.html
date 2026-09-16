@@ -601,13 +601,57 @@
                         <h1>Robô de Atendimento & Auto-respostas</h1>
                     </header>
 
-                    <!-- Sub-tabs: Configuração Simples vs Construtor Visual (Typebot) -->
+                    <!-- Seletor do Modo Geral de Operação -->
+                    <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px 18px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <span style="font-size: 14px; font-weight: 700; color: var(--text-primary);">Modo de Atendimento Ativo da Empresa</span>
+                                <p style="font-size: 12px; color: var(--text-muted); margin: 2px 0 0 0;">Escolha como as mensagens que chegam no WhatsApp serão tratadas.</p>
+                            </div>
+                            <span id="active-bot-mode-badge" style="font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; background: rgba(99,102,241,0.15); color: #818cf8; text-transform: uppercase;">
+                                Chatbot de Fluxo
+                            </span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 4px;">
+                            <label style="display: flex; align-items: flex-start; gap: 10px; background: var(--bg-primary); border: 2px solid var(--border-color); border-radius: 8px; padding: 12px; cursor: pointer; transition: all 0.2s;" id="label-mode-human" onclick="appRouter.selectBotMode('human')">
+                                <input type="radio" name="global_bot_mode" id="radio-mode-human" value="human" style="margin-top: 3px;">
+                                <div>
+                                    <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);"><i class="fa-solid fa-user-shield" style="color: #64748b; margin-right: 4px;"></i> Apenas Humano</div>
+                                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Sem robô. Mensagens vão direto para a fila dos atendentes.</div>
+                                </div>
+                            </label>
+
+                            <label style="display: flex; align-items: flex-start; gap: 10px; background: var(--bg-primary); border: 2px solid var(--border-color); border-radius: 8px; padding: 12px; cursor: pointer; transition: all 0.2s;" id="label-mode-flow" onclick="appRouter.selectBotMode('flow')">
+                                <input type="radio" name="global_bot_mode" id="radio-mode-flow" value="flow" checked style="margin-top: 3px;">
+                                <div>
+                                    <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);"><i class="fa-solid fa-diagram-project" style="color: #3b82f6; margin-right: 4px;"></i> Chatbot de Fluxo</div>
+                                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Fluxo visual de regras e menus (Typebot configurado).</div>
+                                </div>
+                            </label>
+
+                            <label style="display: flex; align-items: flex-start; gap: 10px; background: var(--bg-primary); border: 2px solid var(--color-brand); border-radius: 8px; padding: 12px; cursor: pointer; transition: all 0.2s;" id="label-mode-hermes" onclick="appRouter.selectBotMode('hermes')">
+                                <input type="radio" name="global_bot_mode" id="radio-mode-hermes" value="hermes" style="margin-top: 3px;">
+                                <div>
+                                    <div style="font-size: 13px; font-weight: 700; color: #a855f7; display: flex; align-items: center; gap: 6px;">
+                                        <i class="fa-solid fa-brain"></i> Agente Hermes (IA)
+                                        <span style="font-size: 9px; background: #9333ea; color: white; padding: 1px 6px; border-radius: 10px;">PREMIUM</span>
+                                    </div>
+                                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Atendimento inteligente 24h, vendas e transbordo humano.</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Sub-tabs: Construtor Visual vs Configuração Simples vs Agente Hermes -->
                     <div style="display:flex;gap:16px;margin:0 0 20px 0;border-bottom:1px solid var(--border-color);padding-bottom:8px;">
                         <button class="bot-mode-tab-btn active" id="bot-mode-builder" onclick="appRouter.switchBotMode('builder')" style="background:none;border:none;font-size:14px;font-weight:700;color:var(--color-brand);cursor:pointer;padding:6px 12px;border-bottom:2px solid var(--color-brand);outline:none;">
                             <i class="fa-solid fa-diagram-project" style="margin-right:6px;"></i>Construtor Visual de Fluxo (Typebot)
                         </button>
                         <button class="bot-mode-tab-btn" id="bot-mode-simple" onclick="appRouter.switchBotMode('simple')" style="background:none;border:none;font-size:14px;font-weight:600;color:var(--text-muted);cursor:pointer;padding:6px 12px;border-bottom:2px solid transparent;outline:none;">
                             <i class="fa-solid fa-sliders" style="margin-right:6px;"></i>Configuração Simples
+                        </button>
+                        <button class="bot-mode-tab-btn" id="bot-mode-hermes" onclick="appRouter.switchBotMode('hermes')" style="background:none;border:none;font-size:14px;font-weight:600;color:var(--text-muted);cursor:pointer;padding:6px 12px;border-bottom:2px solid transparent;outline:none;">
+                            <i class="fa-solid fa-brain" style="margin-right:6px;color:#a855f7;"></i>Agente IA Hermes <span style="font-size: 10px; background: rgba(168,85,247,0.2); color: #c084fc; padding: 2px 6px; border-radius: 8px; margin-left: 4px;">24h</span>
                         </button>
                     </div>
 
@@ -721,6 +765,119 @@
                                             <p id="preview-bot-welcome-text" style="margin: 0; white-space: pre-wrap; word-break: break-word;"></p>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mode 3: AGENTE INTELIGENTE HERMES (IA) -->
+                    <div id="bot-panel-hermes" style="display:none;">
+                        <div class="settings-container">
+                            <form id="hermes-config-form" class="settings-card" style="display: flex; flex-direction: column; gap: 18px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+                                    <div>
+                                        <h3 style="margin: 0; display: flex; align-items: center; gap: 8px; font-size: 16px;">
+                                            <i class="fa-solid fa-brain" style="color: #a855f7;"></i> Agente IA Hermes (Vendas & 24h)
+                                        </h3>
+                                        <p class="settings-desc" style="margin: 4px 0 0 0;">Inteligência artificial generativa com raciocínio contextual, atendimento humanizado e transbordo.</p>
+                                    </div>
+                                    <span style="font-size: 11px; background: rgba(168,85,247,0.15); color: #c084fc; padding: 4px 10px; border-radius: 12px; font-weight: 700;">
+                                        MODO PREMIUM
+                                    </span>
+                                </div>
+
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                                    <div class="input-group">
+                                        <label for="hermes-agent-name" style="font-weight: 600;">Nome do Agente Virtual</label>
+                                        <input type="text" id="hermes-agent-name" placeholder="Ex: Sofia (Concierge Virtual)">
+                                    </div>
+
+                                    <div class="input-group">
+                                        <label for="hermes-model-select" style="font-weight: 600;">Modelo de IA</label>
+                                        <select id="hermes-model-select" style="background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px;">
+                                            <option value="cf/@cf/meta/llama-3.3-70b-instruct-fp8-fast" selected>Llama 3.3 70B (Ultra Rápido & Alta Precisão) [Recomendado]</option>
+                                            <option value="cf/@cf/meta/llama-3.1-8b-instruct-fp8-fast">Llama 3.1 8B (Máxima Economia de Tokens)</option>
+                                            <option value="kr/deepseek-3.2">DeepSeek 3.2 (Raciocínio Avançado)</option>
+                                            <option value="comboant">Hermes Comboant</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="input-group">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                        <label for="hermes-system-prompt" style="margin: 0; font-weight: 600;">Instruções da Empresa & Base de Conhecimento</label>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="appRouter.loadHotelTemplatePrompt()" style="font-size: 11px; padding: 3px 8px; border-color: #a855f7; color: #c084fc;">
+                                            <i class="fa-solid fa-wand-magic-sparkles"></i> Inserir Modelo Hotel RJ
+                                        </button>
+                                    </div>
+                                    <p class="settings-desc" style="margin-bottom: 8px;">Forneça preços, horários de check-in/out, regras de café da manhã, tipos de quartos, Wi-Fi e políticas.</p>
+                                    <textarea id="hermes-system-prompt" rows="8" style="font-family: monospace; font-size: 12px; line-height: 1.5;" placeholder="Você é a concierge virtual de um hotel boutique no Rio de Janeiro..."></textarea>
+                                </div>
+
+                                <!-- Parâmetros de Resposta da IA -->
+                                <div style="background: var(--bg-primary); border: 1px solid rgba(168,85,247,0.3); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 12px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <i class="fa-solid fa-sliders" style="color: #a855f7;"></i>
+                                            <span style="font-size: 13px; font-weight: 700; color: var(--text-primary);">Parâmetros de Geração do Agente</span>
+                                        </div>
+                                        <span id="hermes-tokens-label" style="font-size: 12px; font-weight: 700; color: #a855f7; background: rgba(168,85,247,0.15); padding: 2px 8px; border-radius: 10px;">
+                                            1000 tokens (Respostas completas e detalhadas)
+                                        </span>
+                                    </div>
+                                    
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                                        <div>
+                                            <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">Limite Máximo de Tokens por Resposta</label>
+                                            <input type="range" id="hermes-max-tokens" min="200" max="2000" step="50" value="1000" style="width: 100%; margin-top: 6px;" oninput="document.getElementById('hermes-tokens-label').innerText = `${this.value} tokens`">
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">Temperatura (Criatividade)</label>
+                                            <input type="range" id="hermes-temperature" min="0.1" max="1.0" step="0.1" value="0.7" style="width: 100%; margin-top: 6px;" oninput="document.getElementById('hermes-temp-label').innerText = `${this.value}`">
+                                            <span id="hermes-temp-label" style="font-size: 11px; color: var(--text-muted); float: right;">0.7</span>
+                                        </div>
+                                    </div>
+
+                                    <div style="font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 6px;">
+                                        <i class="fa-solid fa-circle-check" style="color: #a855f7;"></i>
+                                        <span>Memória de Contexto Ativa: O Hermes analisa o histórico completo da conversa para manter coerência total.</span>
+                                    </div>
+                                </div>
+
+                                <div class="input-group">
+                                    <label for="hermes-transfer-keywords" style="font-weight: 600;">Palavras de Transbordo Imediato</label>
+                                    <p class="settings-desc" style="margin-bottom: 6px;">Palavras-chave opcionais para transferir diretamente para a equipe de atendentes humanos.</p>
+                                    <input type="text" id="hermes-transfer-keywords" value="atendente,humano,falar com atendente,suporte,recepcionista,vendedor">
+                                </div>
+
+                                <div style="display: flex; gap: 12px; align-items: center; margin-top: 6px;">
+                                    <button type="submit" class="btn btn-primary" id="btn-save-hermes-config" style="background: #9333ea; border-color: #9333ea;">
+                                        <i class="fa-solid fa-floppy-disk"></i> Salvar Configurações do Hermes
+                                    </button>
+                                </div>
+                            </form>
+
+                            <!-- Simulador Interativo ao Vivo do Hermes -->
+                            <div class="settings-card" style="display: flex; flex-direction: column; background: var(--bg-secondary); border: 1px solid var(--border-color);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                                    <h3 style="margin: 0; font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+                                        <i class="fa-solid fa-comments" style="color: #a855f7;"></i> Testar Agente Hermes
+                                    </h3>
+                                    <span style="font-size: 11px; color: var(--text-muted);">Simulação Instantânea</span>
+                                </div>
+                                
+                                <!-- Janela de Chat do Simulador -->
+                                <div id="hermes-sim-messages" style="flex: 1; min-height: 260px; max-height: 320px; overflow-y: auto; background: #0b141a; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
+                                    <div style="background: rgba(168,85,247,0.15); color: #c084fc; padding: 8px 12px; border-radius: 6px; text-align: center; font-size: 11px;">
+                                        Envie uma dúvida (ex: "Qual o horário do café?", "Tem vaga pra sábado?" ou "Quero falar com recepcionista") para testar a resposta e o transbordo.
+                                    </div>
+                                </div>
+
+                                <div style="display: flex; gap: 8px; margin-top: 10px;">
+                                    <input type="text" id="hermes-sim-input" placeholder="Digite uma mensagem de teste..." style="flex: 1; padding: 8px 12px; font-size: 13px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);" onkeydown="if(event.key==='Enter'){event.preventDefault();appRouter.testHermesMessage();}">
+                                    <button type="button" class="btn btn-primary" id="btn-hermes-sim-send" onclick="appRouter.testHermesMessage()" style="padding: 8px 14px; background: #9333ea; border-color: #9333ea;">
+                                        <i class="fa-solid fa-paper-plane"></i>
+                                    </button>
                                 </div>
                             </div>
                         </div>

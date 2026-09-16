@@ -6,6 +6,7 @@ from app.config import settings
 from app.database import SessionLocal
 from datetime import datetime, timezone
 from app.services.bot_flow_engine import BotFlowEngine
+from app.services.hermes_service import HermesService
 
 def format_brazilian_phone(phone: str) -> str:
     if not phone:
@@ -537,15 +538,54 @@ async def process_webhook_payload(tenant_id: str, payload: dict, websocket_broad
                             should_transfer = any(k in body_content.lower() for k in keywords)
 
                             replies_to_send = []
+                            current_bot_mode = getattr(bot_config, "bot_mode", "flow") or "flow"
 
-                            if should_transfer:
+                            if current_bot_mode == "human":
+                                # MODO 1: Apenas Atendimento Humano (Sem respostas automáticas)
+                                convo.status = "waiting"
+                                convo.assigned_user_id = None
+                                convo.bot_step_id = None
+                                db.commit()
+                            elif current_bot_mode == "hermes":
+                                # MODO 3: AGENTE HERMES (IA) - Processamento inteligente com contexto amplo
+                                recent_msgs = db.query(Message).filter(
+                                    Message.conversation_id == convo.id
+                                ).order_by(Message.created_at.desc()).limit(30).all()
+                                recent_msgs.reverse()
+
+                                history_payload = []
+                                for m in recent_msgs:
+                                    if m.id == new_msg.id:
+                                        continue
+                                    history_payload.append({
+                                        "role": "assistant" if m.sender_type in ["bot", "agent"] else "user",
+                                        "content": m.body or ""
+                                    })
+
+                                reply_text, must_transfer = await HermesService.generate_response(
+                                    bot_config=bot_config,
+                                    incoming_text=body_content,
+                                    history=history_payload,
+                                    contact_name=contact.name or contact.phone_number
+                                )
+
+                                if must_transfer:
+                                    convo.status = "waiting"
+                                    convo.assigned_user_id = None
+                                    convo.bot_step_id = None
+                                    db.commit()
+
+                                if reply_text:
+                                    replies_to_send = [reply_text]
+                            elif should_transfer:
+                                # Interceptação para modo Flow/Regras
                                 convo.status = "waiting" # Transfer to human queue
                                 convo.assigned_user_id = None
                                 convo.bot_step_id = None
                                 db.commit()
                                 replies_to_send = ["Certo, estou te transferindo para a fila de atendimento humano. Um momento, por favor!"]
                             elif bot_config.flow_data and isinstance(bot_config.flow_data, dict) and bot_config.flow_data.get("nodes"):
-                                # Executa Motor do Construtor Visual (Typebot)
+                                # MODO 2: Motor do Construtor Visual (Typebot)
                                 engine = BotFlowEngine(bot_config.flow_data, bot_config)
                                 step_res = engine.process_step(convo.bot_step_id, body_content)
                                 replies_to_send = step_res.get("replies", [])
